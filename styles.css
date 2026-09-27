@@ -267,9 +267,14 @@ a { color: inherit; }
 .citation { text-decoration-color:#777; text-underline-offset:3px; }
 .research-prose .citation { font-size:12px; margin-inline:2px; }
 
-/* Progressive disclosure keeps research depth out of the primary reading path. */
-.depth-select { max-width:155px; border:0; background:transparent; color:var(--ink-2); font-size:12px; padding:5px; }
-.depth-select option { background:var(--surface); }
+/* Native select retains reliable keyboard and touch behavior. */
+.mode-select-wrap { position:relative; display:inline-flex; align-items:center; min-width:128px; }
+.mode-select-wrap svg { position:absolute; right:9px; width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.6; pointer-events:none; color:var(--muted); }
+.depth-select { appearance:none; width:100%; min-height:34px; border:1px solid #ffffff20; border-radius:10px; background:#ffffff08; color:var(--ink-2); font-size:12px; padding:7px 29px 7px 11px; cursor:pointer; }
+.depth-select:hover { border-color:#ffffff45; background:#ffffff10; }
+.depth-select:focus-visible { outline:2px solid #ffffff88; outline-offset:2px; }
+.depth-select:disabled { cursor:default; opacity:.55; }
+.depth-select option { background:#2b2b2b; color:#f4f4f4; }
 .knowledge-toggle { display:flex; align-items:center; gap:5px; color:var(--muted); font-size:12px; }
 .knowledge-toggle input { accent-color:#aaa; }
 .research-prose h2,.research-prose h3,.research-prose h4 { font-size:17px; margin:1.3em 0 .5em; }

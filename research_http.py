@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -61,13 +62,18 @@ def get(handler):
     params = parse_qs(urlsplit(handler.path).query)
     rid = params.get("id", [None])[0]
     if not rid:
-        available = research.ready()
+        missing = research.configuration()
+        available = not missing
+        if missing:
+            # Names only. Never log credentials or connection strings.
+            logging.warning('Zearch missing research settings: %s', ', '.join(sorted(set(missing))))
         if available:
             try:
                 db.ensure_schema()
                 with db.connection() as (conn, _):
                     conn.execute("SELECT run_id FROM research_options LIMIT 1")
-            except Exception:
+            except Exception as exc:
+                logging.warning('Zearch research database check failed: %s', type(exc).__name__)
                 available = False
         return send_json(handler, 200, {"available": available, "tagline": "A space for discovery.",
                                       "mode": "live" if available else "setup_required"})

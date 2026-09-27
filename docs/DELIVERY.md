@@ -7,7 +7,7 @@ Brand invariant: monochrome, approved connected-loop mark, **A space for discove
 | Milestone | Shipped slice | Remaining acceptance gate |
 |---|---|---|
 | M1 · Research | Web evidence, Jev typed choice/sufficiency/conflict judgment, exact cited excerpt or abstention; durable private runs, spend reservations, and automatic PostgreSQL schema initialization | Live Railway/Jev/Tavily canaries, human-supported citation and cost review |
-| M2 · Depth | Bounded one/three-query retrieval, lexical ranking, source deduplication, typed Jev evidence selection, evaluation harness | Calibration on real questions, contradiction review, semantic ranking, live enrichment quality and provider calibration |
+| M2 · Depth | Bounded Search/Deep research/Compare retrieval, lexical ranking, source deduplication, typed Jev evidence selection, evaluation harness | Calibration on real questions, contradiction review, semantic ranking, live enrichment quality and provider calibration |
 | M3 · Knowledge | Private text notes/imports with explicit opt-in, owner-scoped history/deletion, quota meter | Accounts and cross-device identity, ACLs, document extraction, retention and deletion propagation |
 | M4 · Adaptive UI | Familiar conversation layout, source cards, safe basic Markdown, tables and expandable details | Real-answer mobile, keyboard and screen-reader review; concise evidence hierarchy validated with users |
 | M5 · Discovery | Saved investigations, manual/daily/weekly queue, leases, pause/expiry, stale-run reconciliation, source-text diffs | Provisioned worker, live restart/retry canaries, meaningful change review, opted-in notifications |
