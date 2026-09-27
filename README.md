@@ -19,13 +19,13 @@ Open http://localhost:8765. SQLite is for local development. The application doe
 
 ## Hosted activation
 
-Vercel Python Functions serve `/api/research`. Add a pooled PostgreSQL `DATABASE_URL`, a random `ZEARCH_SESSION_SECRET` of at least 32 characters, `TAVILY_API_KEY`, `TYPESAFE_API_KEY`, `OPENAI_API_KEY`, `ZEARCH_WRITER_MODEL`, `JEV_MODEL` (defaults to `jev-latest`), and current pricing inputs in `.env.example`. Configure Preview and Production separately. Apply `python research_store.py` from a trusted environment with that database URL. Set `ZEARCH_ENRICHMENT_ENABLED=1` only with a server-side `CONTEXT_DEV_API_KEY` and scrape price. Then enable `ZEARCH_RESEARCH_ENABLED=1` and redeploy.
+Vercel Python Functions serve `/api/research`. Railway Postgres is supported through its external `DATABASE_PUBLIC_URL`; put its value in Vercel's server-side `DATABASE_URL`. See [Railway database setup](docs/RAILWAY_DATABASE.md) for the exact environment variables, schema migration, and activation order. The application currently opens short-lived direct Postgres connections; no pooler is bundled.
 
 GET `/api/research` reports configuration/database readiness, not provider health. Apply provider spending caps too. A live canary must ask factual, ambiguous and unsupported questions, open citations, follow up, reload a saved answer and verify another browser cannot read it. Human review should check whether Jev's chosen excerpt actually supports the query. Provider calls, PostgreSQL behavior and live quality have not yet been verified.
 
 ## Features in the current release
 
-Search uses one web query; Deep research makes up to three bounded query variations. Code ranks and deduplicates sources. Optional Context.dev extraction enriches up to three pages when configured. Jev selects passages and judges sufficiency/conflict, the writer drafts up to three cited paragraphs, and Jev checks each paragraph. A failed check returns the exact selected excerpt. Follow-ups use previous questions for retrieval; private notes are sent to Jev only when “Use my notes” is selected.
+Search uses one web query; Deep research makes up to three bounded query variations. Code ranks and deduplicates sources. Optional Context.dev extraction enriches up to three pages when configured. Jev selects passages and judges sufficiency/conflict, the writer drafts up to three cited paragraphs, and Jev checks each paragraph. A failed check returns the exact selected excerpt. Follow-ups use previous questions for retrieval; private notes are sent to Jev and the writer when “Use my notes” is selected.
 
 Your workspace supports owner-scoped saved answers and deletion, 20 plain-text notes (up to 40,000 characters each), `.txt`/`.md` imports, investigations and daily usage display. Deleting a note does not erase existing answers containing an excerpt from it; delete those separately. A signed HttpOnly browser cookie expires after 30 days. Cross-device accounts, rich document extraction, retention automation and billing remain outstanding. Anonymous limits can be reset by clearing cookies, so keep global and provider caps enabled.
 
@@ -35,7 +35,7 @@ The answer renderer supports safe headings, lists, code, bounded tables and expa
 
 Save a completed answer as an investigation. Refresh jobs search the saved question against the public web without private notes or prior conversational context. Text diffs show changed source content, not proven changes in underlying facts.
 
-Install a recurring external invocation of `python discovery.py` with the same database, secret, Jev/search keys and pricing inputs as production; then enable `ZEARCH_DISCOVERY_ENABLED=1` on worker and web. Each invocation schedules due investigations and claims at most one queued job. Daily/weekly schedules expire 29 days after creation. Expired worker leases become failed without automatic paid retries; stale interactive runs are reconciled. No scheduler or notification service is provisioned by this repository.
+Install a recurring external invocation of `python discovery.py` with the same database, secret, Jev/search/writer keys and pricing inputs as production; then enable `ZEARCH_DISCOVERY_ENABLED=1` on worker and web. Each invocation schedules due investigations and claims at most one queued job. Daily/weekly schedules expire 29 days after creation. Expired worker leases become failed without automatic paid retries; stale interactive runs are reconciled. No scheduler or notification service is provisioned by this repository.
 
 ## Tests and evaluation
 
