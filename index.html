@@ -36,11 +36,6 @@
         <kbd>Ctrl K</kbd>
       </button>
 
-      <nav class="rail-section">
-        <h6>Search modes</h6>
-        <ul id="pb-list" class="pb-list"></ul>
-      </nav>
-
       <nav class="rail-section grow">
         <div class="rail-row">
           <h6>History</h6>
@@ -85,23 +80,9 @@
         <div class="thread" id="thread"></div>
       </section>
 
-      <!-- composer and compact search progress -->
+      <!-- search composer -->
       <div class="dock">
         <div class="dock-inner">
-          <div class="progress" id="progress">
-            <div class="progress-hud">
-              <div class="judge" id="judge">
-                <span class="judge-label">Search pipeline · <b id="judge-state">ready</b></span>
-              </div>
-              <ol class="pipeline" id="pipeline">
-                <li data-step="search"><i></i>search</li>
-                <li data-step="pack"><i></i>pack</li>
-                <li data-step="judge"><i></i>judge</li>
-                <li data-step="gate"><i></i>gate</li>
-              </ol>
-            </div>
-          </div>
-
           <form class="composer" id="composer" autocomplete="off">
             <label class="sr-only" for="query">Question</label>
             <textarea id="query" rows="1" maxlength="1000" placeholder="Ask anything, or frame a decision to evaluate…"></textarea>
