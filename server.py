@@ -566,6 +566,10 @@ def _load() -> dict:
 
 
 def save(v: dict) -> None:
+    # Vercel Functions have an ephemeral, read-only deployment filesystem.
+    # Shared links on hosted deployments carry a compact result snapshot in the URL.
+    if os.environ.get("VERCEL"):
+        return
     with _lock:
         DATA.mkdir(exist_ok=True)
         d = _load()
