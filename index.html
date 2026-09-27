@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verdict — decisions with sources</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="mark">∴</span>
+        <span>Verdict</span>
+        <span class="tag">Jev</span>
+      </div>
+      <nav>
+        <button id="btn-labs" class="ghost">Labs</button>
+        <button id="btn-settings" class="ghost">Settings</button>
+      </nav>
+    </header>
+    <main>
+      <section class="hero" id="hero">
+        <h1>Ask for a decision, not an essay.</h1>
+        <p class="sub">High-powered search packs evidence into Jev state. You get typed answers, probabilities, and sources.</p>
+        <form id="ask-form" class="ask">
+          <textarea id="query" rows="3" placeholder="Should we list this RWA token on a CEX this quarter?"></textarea>
+          <div class="ask-row">
+            <select id="playbook">
+              <option value="invest">Invest / ship</option>
+              <option value="triage">Triage / route</option>
+              <option value="risk">Risk / gate</option>
+              <option value="compare">Compare options</option>
+            </select>
+            <button type="submit" id="go">Decide</button>
+          </div>
+        </form>
+        <div class="chips" id="chips"></div>
+      </section>
+      <section class="result hidden" id="result">
+        <div class="result-head">
+          <button class="ghost" id="back">← New question</button>
+          <div class="meta" id="meta"></div>
+        </div>
+        <h2 id="q-title"></h2>
+        <div class="grid">
+          <div>
+            <div id="answers"></div>
+            <div class="policy" id="policy"></div>
+          </div>
+          <aside>
+            <h3>Sources</h3>
+            <div id="sources"></div>
+            <h3>State sent to Jev</h3>
+            <pre id="state-preview"></pre>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="modal hidden" id="settings">
+    <div class="sheet">
+      <h2>Settings</h2>
+      <label>TypeSafe / Gateway API key (optional, stored locally)</label>
+      <input id="api-key" type="password" placeholder="sk-… or apikey-…" />
+      <label>Endpoint</label>
+      <select id="endpoint">
+        <option value="mock">Mock (offline)</option>
+        <option value="typesafe">api.typesafe.ai /v1/systemone</option>
+        <option value="gateway">Vercel AI Gateway</option>
+      </select>
+      <p class="hint">Prefer TYPESAFE_API_KEY on the server. Browser key is demo-only.</p>
+      <div class="row-end">
+        <button class="ghost" id="close-settings">Close</button>
+        <button id="save-settings">Save</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal hidden" id="labs">
+    <div class="sheet">
+      <h2>Market fit, short</h2>
+      <ul class="fit">
+        <li><b>Who:</b> agent builders, ops, research, Web3 diligence.</li>
+        <li><b>Why now:</b> playgrounds exist, search+decision UI does not.</li>
+        <li><b>Wedge:</b> Perplexity for Choice / Score / Noul.</li>
+        <li><b>Not the play:</b> replacing chat.</li>
+        <li><b>Moat:</b> playbooks + source packer + confidence policy.</li>
+      </ul>
+      <button class="ghost" id="close-labs">Close</button>
+    </div>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>
