@@ -12,7 +12,7 @@ These are proposed packaging, not purchasable plans. Dollar prices and allowance
 
 ## Implemented foundation
 
-Every research run reserves conservative micro-USD against global and session UTC-day budgets in one database transaction before upstream work. Duplicate request identifiers replay their existing run. Store returned token usage and estimated provider cost alongside the run. Failed requests retain the operational reservation because upstream billing may have occurred. These are infrastructure safety budgets, NOT a customer credit ledger or an invoice. Jev input tokens are the only model-token charge accounted for; Jev does not generate answer tokens.
+Every research run reserves conservative micro-USD against global and session UTC-day budgets in one database transaction before upstream work. Duplicate request identifiers replay their existing run. Store returned token usage and estimated provider cost alongside the run. Failed requests retain the operational reservation because upstream billing may have occurred. These are infrastructure safety budgets, NOT a customer credit ledger or an invoice. The operational estimate now accounts for Jev input tokens, writer input/output tokens, search calls and optional page scrapes. The reservation bounds two Jev calls, one 900-token writer draft and three scrapes. This is still an estimate rather than a reconciled bill.
 
 ## Billing implementation gate (M3)
 

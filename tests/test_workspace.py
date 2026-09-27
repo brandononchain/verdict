@@ -9,6 +9,7 @@ import test_research as baseline
 import discovery
 import research
 import jev_research as jev
+import writer
 import research_store as db
 import retrieval
 import workspace_store as workspace
@@ -130,7 +131,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_worker_runs_pipeline_once(self):
         iid=workspace.save_investigation('alice',self.completed())
         source={'n':1,'url':'https://example.com/','text':'Updated evidence','title':'Source','domain':'example.com'}
-        with patch.dict(os.environ,{'ZEARCH_DISCOVERY_ENABLED':'1','JEV_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(jev,'call',return_value={'model':'jev-latest','answers':{'best_passage':{'choice':'1','probabilities':{'1':.9}},'sufficient':{'noul':.9},'conflict':{'noul':.1}},'usage':{'input_tokens':10}}):
+        with patch.dict(os.environ,{'ZEARCH_DISCOVERY_ENABLED':'1','JEV_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(writer,'compose',side_effect=writer.WriterError('unavailable')),patch.object(jev,'call',return_value={'model':'jev-latest','answers':{'best_passage':{'choice':'1','probabilities':{'1':.9}},'sufficient':{'noul':.9},'conflict':{'noul':.1}},'usage':{'input_tokens':10}}):
             discovery.enqueue('alice',iid)
             self.assertTrue(discovery.work_once());self.assertFalse(discovery.work_once())
             self.assertEqual(search.call_count,1)

@@ -8,11 +8,12 @@ import research as r
 import research_store as db
 import research_http as http
 import jev_research as jev
+import writer
 
 class ResearchTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
-        self.env=patch.dict(os.environ, {'ZEARCH_DB_PATH':self.temp.name+'/test.db','ZEARCH_SESSION_SECRET':'s'*40,'ZEARCH_JEV_INPUT_USD_PER_MILLION':'1','ZEARCH_SEARCH_USD_PER_CALL':'.01'},clear=True)
+        self.env=patch.dict(os.environ, {'ZEARCH_DB_PATH':self.temp.name+'/test.db','ZEARCH_SESSION_SECRET':'s'*40,'ZEARCH_JEV_INPUT_USD_PER_MILLION':'1','ZEARCH_SEARCH_USD_PER_CALL':'.01','ZEARCH_WRITER_INPUT_USD_PER_MILLION':'1','ZEARCH_WRITER_OUTPUT_USD_PER_MILLION':'2'},clear=True)
         self.env.start();db.migrate()
         self.limits=dict(global_calls=100,user_calls=10,global_budget=10000000,user_budget=1000000)
     def tearDown(self): self.env.stop();self.temp.cleanup()
@@ -44,12 +45,16 @@ class ResearchTests(unittest.TestCase):
                 'sufficient': {'type': 'noul', 'noul': .95},
                 'conflict': {'type': 'noul', 'noul': .1}},
             'usage': {'input_tokens': 10, 'output_tokens': 0}}))
+        stack.enter_context(patch.object(writer, 'compose', return_value=(
+            'Evidence answers the Question. [1]', {'model':'test-writer','input_tokens':20,'output_tokens':10})))
+        stack.enter_context(patch.object(jev, 'verify', return_value=(
+            True, {'probabilities':[.97], 'model':'jev-1.13'}, {'input_tokens':5})))
         return stack
     def test_complete_persisted(self):
         run,_=self.reserve()
         with self.pipeline():
             events=list(r.run('alice',run,[]))
-        self.assertEqual(events[-1]['type'],'complete');self.assertEqual(db.get_run('alice',run['id'])['estimated_cost'],10010)
+        self.assertEqual(events[-1]['type'],'complete');self.assertEqual(db.get_run('alice',run['id'])['estimated_cost'],10055)
     def test_close_does_not_overwrite_complete(self):
         run,_=self.reserve()
         with self.pipeline():
@@ -65,13 +70,21 @@ class ResearchTests(unittest.TestCase):
         run,_=self.reserve()
         with patch.object(r,'search',side_effect=r.Unavailable('Search unavailable')):events=list(r.run('alice',run,[]))
         saved=db.get_run('alice',run['id']);self.assertEqual(saved['status'],'error');self.assertEqual(saved['answer'],'');self.assertEqual(events[-1]['type'],'error')
-    def test_jev_only_answer_is_exact_excerpt(self):
+    def test_writer_and_jev_checked_answer(self):
         run,_=self.reserve()
         with self.pipeline():list(r.run('alice',run,[]))
         saved=db.get_run('alice',run['id'])
         self.assertIn('Evidence answers the Question.',saved['answer'])
         self.assertEqual(saved['usage']['judgment']['model'],'jev-1.13')
-        self.assertNotIn('prompt_tokens',saved['usage'])
+        self.assertEqual(saved['usage']['answer_format'],'jev_verified_prose')
+        self.assertEqual(saved['usage']['draft_check']['probabilities'],[.97])
+    def test_rejected_draft_falls_back_to_excerpt(self):
+        run,_=self.reserve()
+        with self.pipeline(), patch.object(jev,'verify',return_value=(False,{'probabilities':[.2]},{'input_tokens':5})):
+            list(r.run('alice',run,[]))
+        saved=db.get_run('alice',run['id'])
+        self.assertEqual(saved['usage']['answer_format'],'jev_selected_excerpt')
+        self.assertTrue(saved['usage']['draft_rejected'])
     def test_cookie_tamper(self):
         owner,cookie=http.identity({},True);self.assertEqual(http.identity({'Cookie':cookie})[0],owner)
         self.assertIsNone(http.identity({'Cookie':cookie.replace('zearch_session=','zearch_session=a')})[0])
