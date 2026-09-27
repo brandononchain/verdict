@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Zearch app icon</title>
-  <rect x="1" y="1" width="62" height="62" rx="17" fill="#17191f"/>
-  <text x="32" y="48" text-anchor="middle" fill="#ECECEC" font-family="Instrument Serif, Georgia, serif" font-size="48" font-style="italic">z</text>
+  <rect width="64" height="64" rx="18" fill="#17191F"/>
+  <path fill="#E8E8EC" d="M15 14h34a5 5 0 0 1 5 5v4a2 2 0 0 1-3.2 1.6L28.7 40H49a5 5 0 0 1 5 5v4a5 5 0 0 1-5 5H15a5 5 0 0 1-5-5v-4a2 2 0 0 1 3.2-1.6L35.3 27H15a5 5 0 0 1-5-5v-3a5 5 0 0 1 5-5Z"/>
 </svg>

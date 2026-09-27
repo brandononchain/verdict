@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-labelledby="title">
-  <title id="title">zearch</title>
-  <text x="2" y="49" fill="#252631" font-family="Instrument Serif, Georgia, serif" font-size="56" letter-spacing="-2.4">zearch</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 64" role="img" aria-labelledby="title">
+  <title id="title">Zearch</title>
+  <g transform="translate(4 8) scale(.75)"><path fill="#282A31" d="M15 14h34a5 5 0 0 1 5 5v4a2 2 0 0 1-3.2 1.6L28.7 40H49a5 5 0 0 1 5 5v4a5 5 0 0 1-5 5H15a5 5 0 0 1-5-5v-4a2 2 0 0 1 3.2-1.6L35.3 27H15a5 5 0 0 1-5-5v-3a5 5 0 0 1 5-5Z"/></g>
+  <text x="58" y="45" fill="#282A31" font-family="Geist, Inter, Arial, sans-serif" font-size="37" font-weight="560" letter-spacing="-2">zearch</text>
 </svg>
