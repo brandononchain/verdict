@@ -130,6 +130,22 @@ class ResearchTests(unittest.TestCase):
         with patch.dict(os.environ, {'ZEARCH_WRITER_MODEL':'gpt-5.4-mini'}, clear=False):
             with patch.dict(os.environ, {'ZEARCH_SEARCH_USD_PER_CALL':'', 'ZEARCH_WRITER_INPUT_USD_PER_MILLION':''}):
                 self.assertEqual(r.rates()[1:3], [Decimal('0.008'), Decimal('0.75')])
+
+    def test_fresh_market_quote_skips_web_and_is_saved(self):
+        import market_data
+        question = 'What is the current Bitcoin price?'
+        record, fresh = db.reserve('alice', uuid.uuid4().hex, uuid.uuid4().hex, question,
+                                   None, 'test', 100, self.limits)
+        self.assertTrue(fresh)
+        source = {'n': 1, 'url': market_data.TICKER_URL, 'title': 'Coinbase ticker',
+                  'domain': 'api.exchange.coinbase.com', 'text': 'BTC-USD last trade $100',
+                  'excerpt': 'BTC-USD last trade $100', 'retrieved_at': 1}
+        with patch.object(market_data, 'quote', return_value=(source, 'BTC was $100. [1]')), \
+             patch.object(r, 'search', side_effect=AssertionError('web search must not run')):
+            events = list(r.run('alice', record, []))
+        self.assertEqual(events[-1]['type'], 'complete')
+        self.assertEqual(events[-1]['run']['answer'], 'BTC was $100. [1]')
+        self.assertEqual(events[-1]['run']['usage']['search_calls'], 0)
     def test_http_stream_and_private_reload(self):
         import threading, json, urllib.request, urllib.error
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
