@@ -19,7 +19,7 @@ Open http://localhost:8765. SQLite is for local development. The application doe
 
 ## Hosted activation
 
-Vercel Python Functions serve `/api/research`. Railway Postgres is supported through its external `DATABASE_PUBLIC_URL`; put its value in Vercel's server-side `DATABASE_URL`. See [Railway database setup](docs/RAILWAY_DATABASE.md) for the exact environment variables, schema migration, and activation order. The application currently opens short-lived direct Postgres connections; no pooler is bundled.
+Vercel Python Functions serve `/api/research`. Railway Postgres is supported through its external `DATABASE_PUBLIC_URL`; put its value in Vercel's server-side `DATABASE_URL`. The backend initializes its schema automatically on the first database-backed request. See [Railway database setup](docs/RAILWAY_DATABASE.md) for the exact variables and activation order. The application currently opens short-lived direct Postgres connections; no pooler is bundled.
 
 GET `/api/research` reports configuration/database readiness, not provider health. Apply provider spending caps too. A live canary must ask factual, ambiguous and unsupported questions, open citations, follow up, reload a saved answer and verify another browser cannot read it. Human review should check whether Jev's chosen excerpt actually supports the query. Provider calls, PostgreSQL behavior and live quality have not yet been verified.
 

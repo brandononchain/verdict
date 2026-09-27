@@ -64,6 +64,7 @@ def get(handler):
         available = research.ready()
         if available:
             try:
+                db.ensure_schema()
                 with db.connection() as (conn, _):
                     conn.execute("SELECT run_id FROM research_options LIMIT 1")
             except Exception:
@@ -94,6 +95,8 @@ def post(handler):
         body = json.loads(handler.rfile.read(length))
         research.validate(body)
         owner, cookie = identity(handler.headers, create=True)
+        if research.ready():
+            db.ensure_schema()
         record, fresh, history = research.prepare(owner, body)
         if not fresh:
             return send_json(handler, 200, {"run": record}, cookie)

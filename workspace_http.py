@@ -3,6 +3,7 @@ import json
 from urllib.parse import urlsplit
 import discovery
 import research_http as http
+import research_store as db
 import workspace_store as store
 
 
@@ -13,6 +14,7 @@ def handle(handler, mutate=False):
         if mutate and origin and urlsplit(origin).netloc != handler.headers.get('Host'):
             return http.send_json(handler, 403, {'error': 'Request origin is not allowed'})
         owner, cookie = http.identity(handler.headers, create=True)
+        db.ensure_schema()
         if not mutate:
             return http.send_json(handler, 200, {'history': store.history(owner), 'notes': store.notes(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),

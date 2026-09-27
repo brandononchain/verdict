@@ -91,6 +91,34 @@ class ResearchTests(unittest.TestCase):
     def test_production_requires_database(self):
         with patch.dict(os.environ,{'VERCEL':'1'}):
             with self.assertRaises(RuntimeError):db.migrate()
+    def test_hosted_schema_initialization_is_once_per_database(self):
+        previous = db._schema_ready_for
+        db._schema_ready_for = None
+        try:
+            with patch.dict(os.environ, {'DATABASE_URL':'postgresql://example/test'}), \
+                 patch.object(db, 'migrate') as migration:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    list(pool.map(lambda _: db.ensure_schema(), range(20)))
+                self.assertEqual(migration.call_count, 1)
+                db.ensure_schema()
+                self.assertEqual(migration.call_count, 1)
+            with patch.dict(os.environ, {'DATABASE_URL':'postgresql://example/other'}), \
+                 patch.object(db, 'migrate') as migration:
+                db.ensure_schema()
+                self.assertEqual(migration.call_count, 1)
+        finally:
+            db._schema_ready_for = previous
+    def test_failed_initialization_can_retry(self):
+        previous = db._schema_ready_for
+        db._schema_ready_for = None
+        try:
+            with patch.dict(os.environ, {'DATABASE_URL':'postgresql://example/test'}), \
+                 patch.object(db, 'migrate', side_effect=[RuntimeError('unreachable'), None]) as migration:
+                with self.assertRaises(RuntimeError): db.ensure_schema()
+                db.ensure_schema()
+                self.assertEqual(migration.call_count, 2)
+        finally:
+            db._schema_ready_for = previous
     def test_invalid_input(self):
         for value in [None,{}, {'query':'a','request_id':'bad'}, {'query':'a'*2001,'request_id':'a'*32}]:
             with self.assertRaises(ValueError):r.validate(value)
