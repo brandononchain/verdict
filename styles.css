@@ -251,3 +251,18 @@ a { color: inherit; }
 .pending-status i { background: #ccc; }
 .sheet-body input[type=range] { accent-color: #ccc; }
 .assistant-brand > span:first-child { font-family: var(--f-ui); font-size: 15px; font-weight: 400; letter-spacing: -.025em; }
+
+/* Locked monochrome research surface. */
+:root { --warn:#c8c8c8; --bad:#ececec; }
+:focus-visible { outline-color:#dedede; }
+.new-btn svg { color:#c8c8c8; }
+.research-mode,.research-status,.research-notice { color:var(--muted); font-size:12px; }
+.research-notice:empty,.research-status:empty { display:none; }
+.research-prose { font-size:16px; line-height:1.8; overflow-wrap:anywhere; }
+.research-prose p { margin:0 0 1em; white-space:pre-wrap; }
+.research-evidence { margin:20px 0; color:var(--ink-2); font-size:13px; }
+.research-evidence summary { cursor:pointer; padding:8px 0; }
+.research-evidence li { margin:14px 0; }
+.research-evidence li p { color:var(--muted); font-size:12px; }
+.citation { text-decoration-color:#777; text-underline-offset:3px; }
+.research-prose .citation { font-size:12px; margin-inline:2px; }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#212121" />
-  <meta name="description" content="Zearch — a TypeSafe AI search computer. Explore the web, inspect the evidence, and see how confident the answer is." />
+  <meta name="description" content="Zearch — a TypeSafe AI search computer. Explore the web through clear answers and inspectable evidence." />
   <meta property="og:title" content="Zearch — search with evidence" />
   <meta property="og:description" content="A calmer search computer for clear answers and inspectable evidence." />
   <meta property="og:type" content="website" />
@@ -69,7 +69,7 @@
         </div>
       </header>
 
-      <section class="feed" id="feed" aria-live="polite">
+      <section class="feed" id="feed">
         <div class="empty" id="empty">
           <div class="welcome-copy">
             <h1>What would you like to know?</h1>
@@ -77,14 +77,11 @@
           </div>
           <form class="composer home-composer" id="composer" autocomplete="off">
             <label class="sr-only" for="query">Question</label>
-            <textarea id="query" rows="1" maxlength="1000" placeholder="Ask a question or compare options…"></textarea>
+            <textarea id="query" rows="1" maxlength="2000" placeholder="Ask a question or compare options…"></textarea>
             <div class="composer-row">
               <div class="composer-tools">
-                <div class="pb-pill" id="pb-pill">
-                  <select id="playbook" aria-label="Answer format"></select>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-                </div>
-              </div>
+                <span class="research-mode">Web research</span>
+            </div>
               <button type="submit" class="decide" id="decide" aria-label="Search">
                 <span>Search</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -107,25 +104,9 @@
   <dialog class="sheet" id="settings">
     <form method="dialog" class="sheet-body" id="settings-form">
       <header><h2>Settings</h2><button class="icon-btn" value="cancel" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <label for="endpoint">Decision engine</label>
-      <select id="endpoint">
-        <option value="auto">Auto — server key if set, else mock</option>
-        <option value="mock">Mock — offline, deterministic</option>
-        <option value="typesafe">TypeSafe · api.typesafe.ai/v1/systemone</option>
-        <option value="gateway">Vercel AI Gateway</option>
-      </select>
-      <label for="api-key">API key <span class="muted">(browser-stored, demo only)</span></label>
-      <input id="api-key" type="password" placeholder="sk-… or apikey-…" />
-      <p class="hint" id="key-hint">Prefer <code>TYPESAFE_API_KEY</code> on the server. Never ship keys in the browser.</p>
-      <label for="threshold">Act threshold <span class="muted" id="threshold-val">playbook default</span></label>
-      <input id="threshold" type="range" min="0" max="0.99" step="0.01" />
-      <div class="row-split">
-        <button type="button" class="link-btn" id="threshold-reset">use playbook default</button>
-      </div>
-      <footer>
-        <button class="ghost-btn" value="cancel">Cancel</button>
-        <button class="solid-btn" id="save-settings" value="default">Save</button>
-      </footer>
+      <p>Research is private to this browser’s session. Session access expires after 30 days. Signing in and syncing across devices are planned.</p>
+      <p>Clearing local history removes shortcuts on this device; it does not delete server records. Do not submit sensitive information during this beta.</p>
+      <footer><button class="solid-btn">Done</button></footer>
     </form>
   </dialog>
 
@@ -133,14 +114,9 @@
   <dialog class="sheet" id="thesis">
     <form method="dialog" class="sheet-body thesis">
       <header><h2>Search the web. <em>See the reasoning.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <p>Zearch is an open-source search interface powered by JEV (TypeSafe AI). It gathers web evidence, sends a structured state to the model, and shows its typed answers and confidence gate alongside the sources.</p>
-      <p>Use it for open-ended research or questions with a finite decision space. The engine can return <b>act</b>, <b>review</b>, or <b>abstain</b>; your team remains responsible for what happens next.</p>
-      <dl>
-        <dt>Sources</dt><dd>Search results are packed and deduplicated across the web, Wikipedia, instant answers, and a small seed corpus.</dd>
-        <dt>Answers</dt><dd>Playbooks define a finite set of typed questions. Confidence scores and thresholds remain visible.</dd>
-        <dt>Engine</dt><dd>Connect a server-side TypeSafe key for live answers, or use the clearly labeled offline mock mode.</dd>
-        <dt>Limits</dt><dd>Model calibration is vendor-claimed. Verify source quality and tune confidence thresholds for your use case.</dd>
-      </dl>
+      <p>A space for discovery.</p>
+      <p>Zearch searches the web and writes answers from retrieved evidence. Open citations to inspect the original sources. Answers may contain mistakes or incomplete information.</p>
+      <p>This research beta uses server-configured search and language models. The original TypeSafe decision engine remains in the open-source codebase; research answers are generated separately.</p>
     </form>
   </dialog>
 
