@@ -621,6 +621,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/research":
+            import research_http
+            return research_http.get(self)
         if path == "/api/playbooks":
             return self._json(200, {
                 "playbooks": {k: {"name": v["name"], "blurb": v["blurb"], "primary": v["primary"],
@@ -635,12 +638,16 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/"):
             return self._json(404, {"error": "not found"})
         # only serve the app's own static files
-        if path not in ("/", "/index.html", "/styles.css", "/app.js", "/favicon.svg"):
+        allowed = {"/", "/index.html", "/styles.css", "/app.js", "/favicon.svg", "/zearch-mark.svg", "/assets/zearch-horizon.jpg"}
+        if path not in allowed:
             self.path = "/"
         return super().do_GET()
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/research":
+            import research_http
+            return research_http.post(self)
         try:
             body = self._body()
             if path == "/api/search":
@@ -659,6 +666,8 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    import research_store
+    research_store.migrate()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Zearch → http://localhost:{PORT}  (jev: {'server key' if os.environ.get('TYPESAFE_API_KEY') else 'mock unless key set'})")
     try:
