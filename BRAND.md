@@ -6,8 +6,8 @@ Zearch is a quiet, editorial search computer: crisp and inspectable in use, with
 
 ## Identity
 
-- **Wordmark:** lowercase `zearch` in Instrument Serif, used as a restrained editorial signature. In product UI, use the matching font with a Georgia fallback.
-- **Icon:** a single lowercase italic `z` in warm ivory on a charcoal tile. Do not add orbits, nodes, apertures, stars, or a badge-like frame around the mark.
+- **Wordmark:** lowercase `zearch` in a compact modern sans, with tight spacing and a calm weight.
+- **Mark:** one connected, filled Z silhouette with rounded terminals. Keep it a single solid shape. Do not add orbits, dots, apertures, stars, internal strokes, or detached pieces.
 - **Voice:** precise, direct, curious, and honest about uncertainty. Describe demonstrated search and evidence features; do not claim AGI or guaranteed correctness.
 - **Photography:** cinematic horizons, cloud layers, and distant light. Keep imagery low contrast behind the product so it supports focus rather than becoming a wallpaper.
 
@@ -27,8 +27,8 @@ Use neutral solid surfaces for structure. Gradients may appear on primary action
 
 ## Files
 
-- `zearch-mark.svg` — lowercase type mark
-- `zearch-app-icon.svg` and `favicon.svg` — restrained lowercase `z` icon
-- `zearch-logo.svg` — dark-surface wordmark
-- `zearch-wordmark-light.svg` — light-surface wordmark
+- `zearch-mark.svg` — single connected Z silhouette
+- `zearch-app-icon.svg` and `favicon.svg` — the mark on a charcoal tile
+- `zearch-logo.svg` — mark and wordmark for dark surfaces
+- `zearch-wordmark-light.svg` — matching light-surface lockup
 - `assets/zearch-horizon.jpg` — subdued atmospheric homepage background
