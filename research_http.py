@@ -65,7 +65,7 @@ def get(handler):
         if available:
             try:
                 with db.connection() as (conn, _):
-                    conn.execute("SELECT id FROM research_runs LIMIT 1")
+                    conn.execute("SELECT run_id FROM research_options LIMIT 1")
             except Exception:
                 available = False
         return send_json(handler, 200, {"available": available, "tagline": "A space for discovery.",

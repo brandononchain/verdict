@@ -55,6 +55,8 @@ def migrate():
             updated BIGINT NOT NULL, reserved BIGINT NOT NULL, estimated_cost BIGINT,
             day TEXT NOT NULL, request_id TEXT NOT NULL,
             UNIQUE(owner, request_id))""")
+        import workspace_store
+        workspace_store.migrate(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS research_owner_created ON research_runs(owner, created)")
         conn.execute("""CREATE TABLE IF NOT EXISTS research_budgets (
             bucket TEXT NOT NULL, day TEXT NOT NULL, calls BIGINT NOT NULL,
@@ -75,10 +77,14 @@ def public(row):
 def get_run(owner, rid):
     with connection() as (conn, marker):
         row = execute(conn, marker, "SELECT * FROM research_runs WHERE owner=? AND id=?", (owner, rid)).fetchone()
-        return public(row)
+        result = public(row)
+        if result:
+            options = execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (rid,)).fetchone()
+            result.update(dict(options) if options else {'depth': 'standard', 'use_knowledge': 0})
+        return result
 
 
-def reserve(owner, rid, request_id, query, parent_id, model, amount, limits):
+def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, depth="standard", use_knowledge=False):
     """All budgets and the pending run commit in one transaction, before any paid call."""
     now = int(time.time())
     day = time.strftime("%Y-%m-%d", time.gmtime(now))
@@ -88,11 +94,18 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits):
             execute(conn, marker, "INSERT INTO research_budgets(bucket,day,calls,reserved) VALUES(?,?,0,0) ON CONFLICT(bucket,day) DO NOTHING", (bucket, day))
             if marker == "%s":
                 execute(conn, marker, "SELECT bucket FROM research_budgets WHERE bucket=? AND day=? FOR UPDATE", (bucket, day)).fetchone()
+        import workspace_store
+        workspace_store.lock_owner(conn, marker, owner)
         previous = execute(conn, marker, "SELECT * FROM research_runs WHERE owner=? AND request_id=?", (owner, request_id)).fetchone()
         if previous:
+            options = execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (previous['id'],)).fetchone()
+            old = dict(options) if options else {'depth': 'standard', 'use_knowledge': 0}
+            if old['depth'] != depth or bool(old['use_knowledge']) != use_knowledge:
+                raise ValueError('Request identifier belongs to different research options')
             if previous["query"] != query or previous["parent_id"] != parent_id:
                 raise ValueError("Request identifier already belongs to another question")
-            return public(previous), False
+            result = public(previous); result.update(old)
+            return result, False
         if parent_id:
             parent = execute(conn, marker, "SELECT status FROM research_runs WHERE owner=? AND id=?", (owner, parent_id)).fetchone()
             if not parent or parent["status"] != "complete":
@@ -103,7 +116,10 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits):
                 raise LimitReached("Research allowance reached. Please try again after the daily reset.")
             execute(conn, marker, "UPDATE research_budgets SET calls=calls+1,reserved=reserved+? WHERE bucket=? AND day=?", (amount, bucket, day))
         execute(conn, marker, "INSERT INTO research_runs(id,owner,parent_id,query,status,model,created,updated,reserved,day,request_id) VALUES(?,?,?,?,'pending',?,?,?,?,?,?)", (rid, owner, parent_id, query, model, now, now, amount, day, request_id))
-        return public(execute(conn, marker, "SELECT * FROM research_runs WHERE id=?", (rid,)).fetchone()), True
+        execute(conn, marker, 'INSERT INTO research_options(run_id,depth,use_knowledge) VALUES(?,?,?)', (rid, depth, int(use_knowledge)))
+        result = public(execute(conn, marker, "SELECT * FROM research_runs WHERE id=?", (rid,)).fetchone())
+        result.update(depth=depth, use_knowledge=int(use_knowledge))
+        return result, True
 
 
 def save(owner, rid, *, status, answer="", sources=None, usage=None, error=None, estimated_cost=None):

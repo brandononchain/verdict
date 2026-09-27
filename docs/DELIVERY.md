@@ -8,7 +8,20 @@ Implemented: server-controlled Tavily retrieval, actual gateway token streaming,
 
 Not yet production validated: paid provider calls, PostgreSQL execution/concurrency, deployed streaming latency and model quality. Availability reports configuration/database readiness only, not provider health. Do not open paid signup before these gates pass.
 
-Limits: source identifiers are validated, but entailment is not. Retrieved pages may be incomplete; source instructions remain untrusted. Follow-ups include up to three earlier answers; retrieval includes two earlier questions. Anonymous sessions are not accounts. Clearing cookies can bypass session quotas; the global cap remains. A provider budget must also be set because cost estimates are not invoices. Function termination can leave a pending/streaming run; reconciliation is required in M5. Browser stopping closes the response but provider cancellation is best effort.
+Limits: source identifiers are validated, but entailment is not. Retrieved pages may be incomplete; source instructions remain untrusted. Follow-ups include up to three earlier answers; retrieval includes two earlier questions. Anonymous sessions are not accounts. Clearing cookies can bypass session quotas; the global cap remains. A provider budget must also be set because cost estimates are not invoices. Function termination can leave a pending/streaming run; the configured discovery worker reconciles runs older than ten minutes. Browser stopping closes the response but provider cancellation is best effort.
+
+## Release 2: M2–M5 working increments
+
+| Area | Implemented now | Still required for full acceptance |
+|---|---|---|
+| M2 | Three bounded search attempts, query diversification, lexical BM25, duplicate removal, domain diversity, retrieval trace, 20-case human-review evaluation harness | Learned/semantic reranker, calibrated planning and contradiction checks, live quality/cost benchmark |
+| M3 | Private text notes/imports, query-relevant snippets with explicit opt-in, server history and deletion, quota meter | Accounts, cross-device ownership, workspace ACLs, embeddings/hybrid retrieval, document parsers and retention automation |
+| M4 | Safe headings/lists/code/tables, concise-first prompt, expandable Details, responsive workspace UI | Live streamed-answer usability review, full keyboard/screen-reader validation, structured response contract beyond Markdown |
+| M5 | Saved investigations, manual/daily/weekly jobs, durable leases, deduplication, pause/expiry, stale-run reconciliation, source-text diffs | Provisioned worker, live recovery validation, semantic change assessment, opted-in notifications |
+
+These increments are executable and tested with isolated SQLite and provider fixtures. They do not establish production readiness. Readiness requires the additive migration and provider configuration; schedules remain hidden until ZEARCH_DISCOVERY_ENABLED=1. No external notifications are sent.
+
+Validation: 29 Python tests plus Node renderer tests cover quotas, private data, HTTP streaming/reload, concurrent scheduling/claiming, worker completion, stale leases, unsafe-link handling, and parsing. PostgreSQL and paid-provider integration are explicitly unverified. Run the evaluation harness with --execute only when ready to incur the configured provider costs.
 
 ## Milestone gates
 

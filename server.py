@@ -621,6 +621,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/workspace":
+            import workspace_http
+            return workspace_http.handle(self, mutate=self.command == "POST")
         if path == "/api/research":
             import research_http
             return research_http.get(self)
@@ -638,13 +641,16 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/"):
             return self._json(404, {"error": "not found"})
         # only serve the app's own static files
-        allowed = {"/", "/index.html", "/styles.css", "/app.js", "/favicon.svg", "/zearch-mark.svg", "/assets/zearch-horizon.jpg"}
+        allowed = {"/", "/index.html", "/styles.css", "/app.js", "/renderer.js", "/favicon.svg", "/zearch-mark.svg", "/assets/zearch-horizon.jpg"}
         if path not in allowed:
             self.path = "/"
         return super().do_GET()
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/workspace":
+            import workspace_http
+            return workspace_http.handle(self, mutate=self.command == "POST")
         if path == "/api/research":
             import research_http
             return research_http.post(self)
