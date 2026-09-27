@@ -152,7 +152,6 @@
       h("div", { class: "user-message" }, h("div", { class: "user-bubble" }, v.query)),
       h("section", { class: "assistant-message", "aria-label": "Zearch answer" },
         h("div", { class: "assistant-brand" },
-          h("span", { class: "assistant-mark", "aria-hidden": "true" }, "Z"),
           h("span", {}, "Zearch"),
           h("span", { class: "answer-label" }, "Answer")),
         h("div", { class: "answer-pick" }, p.pick || primary?.pick || "Search complete"),
@@ -203,7 +202,7 @@
     const pending = h("article", { class: "turn pending" },
       h("div", { class: "user-message" }, h("div", { class: "user-bubble" }, query)),
       h("section", { class: "assistant-message" },
-        h("div", { class: "assistant-brand" }, h("span", { class: "assistant-mark" }, "Z"), h("span", {}, "Zearch")),
+        h("div", { class: "assistant-brand" }, h("span", {}, "Zearch")),
         status, h("div", { class: "skel" })));
     els.thread.append(pending);
     pending.scrollIntoView({ behavior: "smooth", block: "start" });
