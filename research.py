@@ -162,7 +162,7 @@ def estimate(usage):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     tokens = usage.get('input_tokens')
     calls = usage.get('search_calls', 1)
-    if type(tokens) is not int or tokens < 0 or type(calls) is not int or calls < 1 or calls > 3:
+    if type(tokens) is not int or tokens < 0 or type(calls) is not int or calls < 0 or calls > 3:
         return None
     writer = usage.get('writer') or {}
     wi, wo, scrape = writer.get('input_tokens', 0), writer.get('output_tokens', 0), usage.get('scrape_calls', 0)
@@ -189,6 +189,26 @@ def run(owner, record, history):
     finalized = False
     try:
         yield {"type": "start", "id": rid}
+        import market_data
+        if market_data.wants_btc_usd_quote(query):
+            yield {'type': 'status', 'text': 'Checking the live market quote'}
+            try:
+                source, answer = market_data.quote()
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                raise Unavailable('A fresh BTC-USD quote is unavailable. Please try again shortly.') from exc
+            sources = [source]
+            usage.update({'input_tokens': 0, 'search_calls': 0, 'market_data': 'Coinbase Exchange BTC-USD last trade',
+                          'answer_format': 'validated_market_quote'})
+            db.save(owner, rid, status='streaming', sources=sources)
+            yield {'type': 'research', 'report': {'queries': [], 'search_calls': 0,
+                   'ranking': 'fresh structured Coinbase Exchange ticker'}}
+            yield {'type': 'sources', 'sources': sources}
+            yield {'type': 'delta', 'text': answer}
+            db.save(owner, rid, status='complete', answer=answer, sources=sources,
+                    usage=usage, estimated_cost=estimate(usage))
+            finalized = True
+            yield {'type': 'complete', 'run': db.get_run(owner, rid)}
+            return
         yield {"type": "status", "text": "Searching the web"}
         import retrieval
         sources, report = retrieval.retrieve(query, history, record.get('depth', 'standard'), search)
