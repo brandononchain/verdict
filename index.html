@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
-  <title>Verdict — decisions with sources</title>
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#f8f9fa" />
+  <meta name="description" content="Zearch — source-backed AI search with typed judgments and transparent confidence gates." />
+  <title>Zearch — search with evidence</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,9 +18,9 @@
     <!-- ───────────── left rail ───────────── -->
     <aside class="rail" id="rail" aria-label="Navigation">
       <div class="rail-head">
-        <a class="brand" href="#" id="brand" aria-label="Verdict home">
-          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="17" r="2.4"/><circle cx="18.5" cy="17" r="2.4"/></svg>
-          <span>Verdict</span>
+        <a class="brand" href="#" id="brand" aria-label="Zearch home">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 6.5h13L7 17.5h12"/><circle cx="5.5" cy="6.5" r="1.5"/><circle cx="19" cy="17.5" r="1.5"/></svg>
+          <span>Zearch</span>
         </a>
         <button class="icon-btn rail-close" id="rail-close" aria-label="Close menu">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -27,12 +29,12 @@
 
       <button class="new-btn" id="new-btn">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        <span>New verdict</span>
+        <span>New search</span>
         <kbd>Ctrl K</kbd>
       </button>
 
       <nav class="rail-section">
-        <h6>Playbooks</h6>
+        <h6>Search modes</h6>
         <ul id="pb-list" class="pb-list"></ul>
       </nav>
 
@@ -46,7 +48,7 @@
 
       <div class="rail-foot">
         <button class="rail-link" id="btn-thesis">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h7"/></svg>Thesis
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h7"/></svg>About Zearch
         </button>
         <button class="rail-link" id="btn-settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings
@@ -62,7 +64,7 @@
         <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">
           <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
         </button>
-        <div class="crumbs" id="crumbs"><span>Verdict</span><em>/</em><b>New</b></div>
+        <div class="crumbs" id="crumbs"><span>Zearch</span><em>/</em><b>New search</b></div>
         <div class="top-actions">
           <button class="ghost-btn hidden" id="share-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M13 7l5 5-5 5"/></svg>Share
@@ -72,37 +74,21 @@
 
       <section class="feed" id="feed" aria-live="polite">
         <div class="empty" id="empty">
-          <p class="eyebrow">search → evidence pack → typed decision → confidence gate</p>
-          <h1>Ask for a <em>verdict</em>,<br />not an essay.</h1>
-          <p class="lede">Verdict searches, packs sources into state, and asks Jev a finite question. You get a Choice, a Score, a Noul — and a gate that says whether to act.</p>
+          <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9 11h22L9 29h22"/><circle cx="9" cy="11" r="2"/><circle cx="31" cy="29" r="2"/></svg></div>
+          <h1>What would you like<br />to <em>understand?</em></h1>
+          <p class="lede">Search the web, see the sources, and get a clear answer with its confidence in view.</p>
           <div class="starters" id="starters"></div>
         </div>
         <div class="thread" id="thread"></div>
       </section>
 
-      <!-- dock: neural graph + composer -->
+      <!-- composer and compact search progress -->
       <div class="dock">
         <div class="dock-inner">
-          <div class="neural" id="neural">
-            <canvas id="neural-canvas" aria-hidden="true"></canvas>
-            <div class="neural-hud">
+          <div class="progress" id="progress">
+            <div class="progress-hud">
               <div class="judge" id="judge">
-                <svg class="brain" viewBox="0 0 48 48" aria-hidden="true">
-                  <path class="lobe" d="M23 7c-4-2.5-9-1-10.5 3-4 .2-6.6 3.7-5.6 7.5-3 2-3.6 6.3-1 9-1.4 3.6 1 7.6 5 8 .8 4 5 6.4 9 5 1.4 1.6 3.1 2 3.1 2V7z"/>
-                  <path class="lobe" d="M25 7c4-2.5 9-1 10.5 3 4 .2 6.6 3.7 5.6 7.5 3 2 3.6 6.3 1 9 1.4 3.6-1 7.6-5 8-.8 4-5 6.4-9 5-1.4 1.6-3.1 2-3.1 2V7z"/>
-                  <path class="syn s1" d="M12 16l7 5 -5 7 7 6"/>
-                  <path class="syn s2" d="M36 16l-7 5 5 7 -7 6"/>
-                  <path class="syn s3" d="M19 21h10"/>
-                  <circle class="n n1" cx="12" cy="16" r="1.9"/>
-                  <circle class="n n2" cx="19" cy="21" r="1.9"/>
-                  <circle class="n n3" cx="14" cy="28" r="1.9"/>
-                  <circle class="n n4" cx="21" cy="34" r="1.9"/>
-                  <circle class="n n5" cx="36" cy="16" r="1.9"/>
-                  <circle class="n n6" cx="29" cy="21" r="1.9"/>
-                  <circle class="n n7" cx="34" cy="28" r="1.9"/>
-                  <circle class="n n8" cx="27" cy="34" r="1.9"/>
-                </svg>
-                <span class="judge-label">neural judge · <b id="judge-state">idle</b></span>
+                <span class="judge-label">Search pipeline · <b id="judge-state">ready</b></span>
               </div>
               <ol class="pipeline" id="pipeline">
                 <li data-step="search"><i></i>search</li>
@@ -115,7 +101,7 @@
 
           <form class="composer" id="composer" autocomplete="off">
             <label class="sr-only" for="query">Question</label>
-            <textarea id="query" rows="1" maxlength="1000" placeholder="Should we list this RWA token on a CEX this quarter?"></textarea>
+            <textarea id="query" rows="1" maxlength="1000" placeholder="Ask anything, or frame a decision to evaluate…"></textarea>
             <div class="composer-row">
               <div class="composer-tools">
                 <div class="pb-pill" id="pb-pill">
@@ -125,12 +111,12 @@
                 <span class="gate-hint" id="gate-hint"></span>
               </div>
               <button type="submit" class="decide" id="decide">
-                <span>Decide</span>
+                <span>Search</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
             </div>
           </form>
-          <p class="fineprint">Typed judgments, not paragraphs. Calibration is vendor-claimed — tune gates on your own data.</p>
+          <p class="fineprint">Zearch can be wrong. Check the cited sources before acting on an answer.</p>
         </div>
       </div>
     </main>
@@ -162,23 +148,22 @@
     </form>
   </dialog>
 
-  <!-- thesis -->
+  <!-- about -->
   <dialog class="sheet" id="thesis">
     <form method="dialog" class="sheet-body thesis">
-      <header><h2>Fit is real. Timing is now. <em>Category is empty.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <p>Jev is days old. System One: state in, Choice / Score / Noul out, ~70–500ms, $0.042/M input, output free. The community shipped SDKs, MCP, replicas, playgrounds.</p>
-      <p>Nobody shipped <b>search → evidence pack → typed decision → confidence gate</b>. Every playground assumes you already have state and questions. That is the hole.</p>
+      <header><h2>Search the web. <em>See the reasoning.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p>Zearch is an open-source search interface powered by JEV (TypeSafe AI). It gathers web evidence, sends a structured state to the model, and shows its typed answers and confidence gate alongside the sources.</p>
+      <p>Use it for open-ended research or questions with a finite decision space. The engine can return <b>act</b>, <b>review</b>, or <b>abstain</b>; your team remains responsible for what happens next.</p>
       <dl>
-        <dt>Who wants this</dt><dd>Agent builders (route / gate / compact) · ops, support, risk · research &amp; diligence · anyone thinking in finite answer spaces.</dd>
-        <dt>Who doesn’t</dt><dd>People who want a memo. That’s an LLM.</dd>
-        <dt>Wedge</dt><dd>Perplexity taught people to expect sources. Verdict runs the same loop for judgments. Playbooks + source packer + policy is the product.</dd>
-        <dt>Risks</dt><dd>Hosted-only weights. Vendor-claimed calibration. Don’t wrap the API — wrap the decision workflow.</dd>
+        <dt>Sources</dt><dd>Search results are packed and deduplicated across the web, Wikipedia, instant answers, and a small seed corpus.</dd>
+        <dt>Answers</dt><dd>Playbooks define a finite set of typed questions. Confidence scores and thresholds remain visible.</dd>
+        <dt>Engine</dt><dd>Connect a server-side TypeSafe key for live answers, or use the clearly labeled offline mock mode.</dd>
+        <dt>Limits</dt><dd>Model calibration is vendor-claimed. Verify source quality and tune confidence thresholds for your use case.</dd>
       </dl>
     </form>
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="./neural.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
