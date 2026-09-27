@@ -41,7 +41,7 @@ The server key takes precedence over a browser key. Browser keys are intended on
 4. The selected playbook supplies finite Choice, Score, or Noul questions.
 5. A policy gate returns **act**, **review**, or **abstain** based on confidence, source count, evidence sufficiency, and the human-review signal.
 
-The result includes the primary choice, confidence vs. threshold, gate reasons, typed answer cards, source links, and the state sent to the model. Shared searches use links of the form `/#v/<id>`.
+The result includes the primary choice, confidence vs. threshold, gate reasons, typed answer cards, source links, and the state sent to the model. Local shared searches use `/#v/<id>`; hosted links carry the result snapshot in the URL, so they work without a database.
 
 ## Playbooks
 
@@ -74,7 +74,7 @@ Network search is best-effort. Provider errors or missing results can affect the
 | POST | `/api/decide` | `{ query, playbook, pack?, endpoint?, key?, threshold? }` → structured result |
 | GET | `/api/v/:id` | Shared result |
 
-Searches are stored in `data/verdicts.json` (gitignored), up to the latest 500. Existing paths and stored results are kept for compatibility.
+Local searches are stored in `data/verdicts.json` (gitignored), up to the latest 500. Vercel Functions use stateless share links because their filesystem is ephemeral.
 
 ## Files
 
@@ -83,6 +83,8 @@ Searches are stored in `data/verdicts.json` (gitignored), up to the latest 500. 
 - `styles.css` — responsive interface
 - `app.js` — search flow, rendering, history, settings, and sharing
 - `favicon.svg` — Zearch mark
+- `api/` — Vercel Python Functions for the search API
+- `vercel.json` — function runtime configuration
 
 ## Limitations
 
