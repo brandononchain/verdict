@@ -145,6 +145,18 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ValueError):discovery.enqueue('alice',iid)
 
 class RetrievalTests(unittest.TestCase):
+    def test_primary_domain_preference_is_exact_and_query_specific(self):
+        self.assertEqual(retrieval.primary_domains('Compare PostgreSQL and SQLite'),
+                         ['postgresql.org', 'sqlite.org'])
+        self.assertFalse(retrieval.primary_domain('fakepostgresql.org', ['postgresql.org']))
+        rows=[{'url':'https://blog.example.com/db','text':'PostgreSQL concurrent writes',
+               'title':'PostgreSQL concurrent writes','domain':'blog.example.com','provider_score':.9},
+              {'url':'https://www.postgresql.org/docs/','text':'PostgreSQL concurrent writes',
+               'title':'PostgreSQL concurrent writes','domain':'www.postgresql.org','provider_score':.5}]
+        ranked=retrieval.rank('PostgreSQL concurrent writes',rows)
+        self.assertEqual(ranked[0]['domain'],'www.postgresql.org')
+        self.assertEqual(ranked[0]['source_tier'],'primary')
+
     def test_plan_bounded(self):
         self.assertEqual(len(retrieval.plan('question',[],'deep')),3)
         self.assertEqual(len(retrieval.plan('question',[],'compare')),3)

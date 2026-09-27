@@ -80,3 +80,16 @@ class JevResearchTests(unittest.TestCase):
         self.assertLessEqual(len(jev.passage('specific term', 'x '*2000)),450)
         self.assertEqual(jev.passage('solar panels','Other claim. Solar panels produce power.'),
                          'Solar panels produce power.')
+
+    def test_verification_uses_only_each_paragraphs_citations(self):
+        captured = {}
+        def fake_call(state, questions):
+            captured.update(state)
+            return {'answers': {'supported_0': {'noul': .9}, 'supported_1': {'noul': .9}}}
+        with patch.object(jev, 'call', side_effect=fake_call):
+            approved, _, _ = jev.verify('solar panels', 'First claim. [1]\n\nSecond claim. [2]', SOURCES, [1, 2])
+        self.assertTrue(approved)
+        self.assertEqual([e['id'] for e in captured['checks'][0]['cited_evidence']], [1])
+        self.assertEqual([e['id'] for e in captured['checks'][1]['cited_evidence']], [2])
+        with self.assertRaises(jev.JevError):
+            jev.verify('solar panels', 'Unsupported citation. [999]', SOURCES, [1, 2])

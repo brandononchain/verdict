@@ -161,9 +161,13 @@ class ResearchTests(unittest.TestCase):
             def __enter__(self): return self
             def __exit__(self,*args): self.close()
         with patch.dict(os.environ,{'TAVILY_API_KEY':'test'}), \
-             patch.object(r,'open_provider',return_value=Response(json.dumps(result).encode())):
-            sources=r.search('What is the answer?')
+             patch.object(r,'open_provider',return_value=Response(json.dumps(result).encode())) as provider:
+            sources=r.search('What is the answer about PostgreSQL?')
         self.assertTrue(sources[0]['text'].startswith('The answer is 42.'))
+        payload=provider.call_args.args[1]
+        self.assertEqual(payload['include_domains'],['postgresql.org'])
+        self.assertEqual(payload['include_domains_mode'],'prefer')
+        self.assertTrue(payload['include_published_date'])
 
     def test_fresh_market_quote_skips_web_and_is_saved(self):
         import market_data

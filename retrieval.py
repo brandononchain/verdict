@@ -12,6 +12,32 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 STOP = set('a an the is are was were of to in on for and or what which how does do with by from '
            'can could would will you your me my i it this that tell give find show please currently now'.split())
 
+# Deliberately small, auditable registry. A match prefers the publisher's own
+# pages but never excludes independent evidence or claims all other sites are bad.
+PRIMARY_DOMAINS = {
+    'postgresql': ('postgresql.org',), 'postgres': ('postgresql.org',),
+    'sqlite': ('sqlite.org',), 'python': ('python.org', 'docs.python.org'),
+    'http': ('rfc-editor.org', 'developer.mozilla.org'),
+    'https': ('rfc-editor.org', 'developer.mozilla.org'),
+    'moon': ('nasa.gov',), 'heat pump': ('energy.gov',),
+}
+
+
+def primary_domains(query):
+    words = set(tokens(query))
+    domains = []
+    for term, sites in PRIMARY_DOMAINS.items():
+        if set(term.split()).issubset(words):
+            for site in sites:
+                if site not in domains:
+                    domains.append(site)
+    return domains[:8]
+
+
+def primary_domain(host, preferred):
+    host = (host or '').lower().rstrip('.')
+    return any(host == domain or host.endswith('.' + domain) for domain in preferred)
+
 
 def tokens(text):
     return [t for t in re.findall(r'\w+', text.lower()) if len(t) > 1 and t not in STOP]
@@ -43,8 +69,9 @@ def rank(query, sources, limit=8, budget=24000):
         if key not in unique or len(source['text']) > len(unique[key]['text']):
             unique[key] = dict(source)
     rows = list(unique.values())
-    documents = [Counter(tokens(s.get('title', '') + ' ' + s['text'])) for s in rows]
+    documents = [Counter(tokens(s.get('title', '') + ' ' + s['text'][:3000])) for s in rows]
     terms = set(tokens(query))
+    preferred = primary_domains(query)
     mean = sum(sum(d.values()) for d in documents) / max(1, len(documents)) or 1
     for source, words in zip(rows, documents):
         score = 0
@@ -53,6 +80,18 @@ def rank(query, sources, limit=8, budget=24000):
             frequency = sum(term in doc for doc in documents)
             inverse = math.log(1 + (len(rows) - frequency + .5) / (frequency + .5))
             score += inverse * count * 2.2 / (count + 1.2 * (.25 + .75 * sum(words.values()) / mean))
+        title_terms = set(tokens(source.get('title', '')))
+        focused_terms = set(tokens(source['text'][:800]))
+        coverage = len(terms & (title_terms | focused_terms)) / max(1, len(terms))
+        provider_score = source.get('provider_score')
+        if type(provider_score) not in (int, float) or not math.isfinite(provider_score) or not 0 <= provider_score <= 1:
+            provider_score = 0
+        score += 1.0 * coverage + .4 * provider_score
+        if coverage >= .4 and primary_domain(source.get('domain'), preferred):
+            score += 1.5
+            source['source_tier'] = 'primary'
+        else:
+            source['source_tier'] = 'web'
         source['relevance'] = round(score, 4)
     rows.sort(key=lambda s: (-s['relevance'], s.get('url', s.get('note_id', ''))))
     selected, domains, fingerprints = [], Counter(), set()
@@ -84,4 +123,4 @@ def retrieve(query, history, depth, search):
             except Exception:
                 failed += 1
     return rank(query, results), {'queries': queries, 'search_calls': len(queries),
-        'failed_searches': failed, 'ranking': 'lexical BM25 with URL/content deduplication and domain diversity'}
+        'failed_searches': failed, 'ranking': 'lexical relevance, source provenance, provider score, deduplication and domain diversity'}
