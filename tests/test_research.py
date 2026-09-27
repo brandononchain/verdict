@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from unittest.mock import patch
 import research as r
 import research_store as db
@@ -124,6 +125,11 @@ class ResearchTests(unittest.TestCase):
             with self.assertRaises(ValueError):r.validate(value)
         self.assertIsNone(r.safe_url('javascript:alert(1)'));self.assertIsNone(r.safe_url('https://user:pass@example.com'))
         self.assertEqual(r.validate({'query':'Compare two options','request_id':'a'*32,'depth':'compare'})[0], 'Compare two options')
+
+    def test_default_search_and_pinned_writer_rates(self):
+        with patch.dict(os.environ, {'ZEARCH_WRITER_MODEL':'gpt-5.4-mini'}, clear=False):
+            with patch.dict(os.environ, {'ZEARCH_SEARCH_USD_PER_CALL':'', 'ZEARCH_WRITER_INPUT_USD_PER_MILLION':''}):
+                self.assertEqual(r.rates()[1:3], [Decimal('0.008'), Decimal('0.75')])
     def test_http_stream_and_private_reload(self):
         import threading, json, urllib.request, urllib.error
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
