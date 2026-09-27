@@ -1,17 +1,21 @@
-﻿# Verdict
+# Zearch
 
-**search → evidence pack → typed decision → confidence gate.**
+**Source-backed AI search with typed judgments.**
 
-Perplexity trained people to expect sources. Verdict uses the same loop for *judgments*, not paragraphs. A question goes in. Verdict searches, packs the sources into `state`, and asks TypeSafe Jev (System One) a set of finite, typed questions: Choice, Score, Noul. A policy gate then says **act**, **review**, or **abstain**. Your code owns the action.
+Zearch is an open-source search interface for JEV (TypeSafe AI). It searches the web, packs evidence into structured state, asks a finite set of typed questions, and presents the answers with confidence and a transparent policy gate.
 
-## Run
+The interface follows familiar AI search conventions: one focused composer, a readable conversation thread, visible citations, and controls that stay secondary. Its distinct focus is making structured judgments and their confidence inspectable.
+
+## Run locally
 
 ```bash
-python server.py        # stdlib only, Python 3.10+
+python3 server.py
 # http://localhost:8765
 ```
 
-Live model (optional):
+Python 3.10+ is required. The server uses the standard library.
+
+Optional live engine configuration:
 
 ```bash
 export TYPESAFE_API_KEY=...          # server-side key (preferred)
@@ -23,71 +27,66 @@ export PORT=8765
 
 Settings → Engine:
 
-- **auto** (default): uses TypeSafe when the server has a key, otherwise mock.
-- **mock**: offline.
-- **typesafe** or **gateway**: forces a live endpoint.
+- **Auto** uses TypeSafe when the server has a key, otherwise the offline mock.
+- **Mock** runs locally without a key.
+- **TypeSafe** or **Gateway** selects a live endpoint.
 
-A browser key can be set for local testing. The server env key always wins. Do not ship keys in the browser. If a live call fails, the run falls back to mock and shows a warning. Mock verdicts are always labeled.
+The server key takes precedence over a browser key. Browser keys are intended only for local testing. If a live call fails, Zearch falls back to a clearly labeled mock response.
 
-## The app
+## Search flow
 
-- **Rail**: new verdict, playbooks, history (dot = gate outcome), thesis, settings, engine chip.
-- **Stage**: a thread of verdict turns. Each turn shows:
-  - the pick
-  - the gate badge
-  - confidence against the threshold
-  - gate reasons
-  - typed answer cards with probability bars
-  - the numbered evidence pack
-  - the raw `state`
-  - copy-link, copy-JSON, and re-run actions
-- **Dock**: a live neural graph sits above the composer. Nodes pulse and sparks travel the synapses. While Decide runs, the brain flips to `neural judge · firing` and the pipeline pills (search → pack → judge → gate) light up in turn. On completion the graph settles in the gate's color.
+1. Search providers return candidate pages and snippets.
+2. Zearch interleaves and deduplicates up to eight sources.
+3. The source packer builds the structured state sent to JEV.
+4. The selected playbook supplies finite Choice, Score, or Noul questions.
+5. A policy gate returns **act**, **review**, or **abstain** based on confidence, source count, evidence sufficiency, and the human-review signal.
 
-Shortcuts: `Enter` decide · `Shift+Enter` newline · `Ctrl/Cmd+K` new verdict · `/` focus composer.
+The result includes the primary choice, confidence vs. threshold, gate reasons, typed answer cards, source links, and the state sent to the model. Shared searches use links of the form `/#v/<id>`.
 
 ## Playbooks
 
-| id | primary | act threshold | min sources |
-| --- | --- | --- | --- |
-| `invest` Ship / wait | `decision`: ship · wait · kill | 72% | 3 |
-| `triage` Triage / route | `route`: engineering · support · billing · security · sales | 70% | 1 |
-| `risk` Risk / gate | `gate`: allow · review · block | 80% | 2 |
-| `compare` Compare | `winner`: first · second · tie · insufficient | 65% | 3 |
+| id | purpose | act threshold | min sources |
+| --- | --- | ---: | ---: |
+| `invest` | Ship / wait / kill | 72% | 3 |
+| `triage` | Route an issue | 70% | 1 |
+| `risk` | Allow / review / block | 80% | 2 |
+| `compare` | Compare two options | 65% | 3 |
 
-**act** requires all of the following:
+An **act** result requires the primary confidence to meet its threshold, the minimum source count, sufficient evidence, and no human-review requirement. **Review** is returned near the confidence threshold when the source minimum is met. Other cases **abstain**. Thresholds can be adjusted in Settings.
 
-- primary confidence ≥ threshold
-- source count ≥ minimum
-- `evidence_sufficient` ≥ 0.5
-- `needs_human` < 0.5
+## Search sources
 
-**review** means confidence is within 20 points of the threshold and the source minimum is met. Everything else is **abstain**. You can override the threshold per browser in Settings.
+The packer combines:
+
+- DuckDuckGo Lite
+- DuckDuckGo instant answers
+- Wikipedia
+- A small JEV seed corpus
+
+Network search is best-effort. Provider errors or missing results can affect the quality of a search and are reflected in the returned provider data.
 
 ## API
 
-| Method | Path | Body / notes |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/playbooks` | playbook definitions |
+| GET | `/api/playbooks` | Playbook definitions and engine status |
 | POST | `/api/search` | `{ query, playbook }` → evidence pack |
-| POST | `/api/decide` | `{ query, playbook, pack?, endpoint?, key?, threshold? }` |
-| GET | `/api/v/:id` | shared verdict |
+| POST | `/api/decide` | `{ query, playbook, pack?, endpoint?, key?, threshold? }` → structured result |
+| GET | `/api/v/:id` | Shared result |
 
-Share links: `/#v/<id>`. Verdicts persist to `data/verdicts.json` (gitignored, last 500).
-
-The search packer interleaves and dedupes up to 8 sources from:
-
-- DuckDuckGo lite
-- DDG instant answers
-- Wikipedia
-- a small Jev seed corpus
+Searches are stored in `data/verdicts.json` (gitignored), up to the latest 500. Existing paths and stored results are kept for compatibility.
 
 ## Files
 
-`server.py` API + static · `index.html` shell · `styles.css` · `app.js` UI logic · `neural.js` canvas graph · `favicon.svg`
+- `server.py` — search providers, JEV API, policy, and static HTTP server
+- `index.html` — app structure and metadata
+- `styles.css` — responsive interface
+- `app.js` — search flow, rendering, history, settings, and sharing
+- `favicon.svg` — Zearch mark
 
-## Caveats
+## Limitations
 
-Hosted-only weights. Calibration is vendor-claimed, so tune gates on your own data. The Gateway endpoint path is an assumption until confirmed.
+JEV weights are hosted. Calibration claims come from the vendor and should be validated on your own data. Search snippets and confidence scores are not guarantees; verify sources before acting.
 
 ## License
 

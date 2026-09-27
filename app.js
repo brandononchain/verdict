@@ -1,7 +1,7 @@
-/* Verdict app shell. search → evidence pack → typed decision → confidence gate */
+/* Zearch search interface. Search → evidence pack → typed judgment → confidence gate. */
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
-  const LS = { settings: "verdict:settings", history: "verdict:history", cache: "verdict:cache" };
+  const LS = { settings: "zearch:settings", history: "zearch:history", cache: "zearch:cache" };
 
   // tiny DOM builder — all text goes through textContent (no HTML injection)
   function h(tag, props, ...kids) {
@@ -26,7 +26,7 @@
     shell: $("#shell"), stage: $(".stage"), feed: $("#feed"), empty: $("#empty"), thread: $("#thread"),
     starters: $("#starters"), pbList: $("#pb-list"), history: $("#history"), crumbs: $("#crumbs"),
     form: $("#composer"), q: $("#query"), pb: $("#playbook"), decide: $("#decide"), gateHint: $("#gate-hint"),
-    neural: $("#neural"), judgeState: $("#judge-state"), pipeline: $("#pipeline"), modeChip: $("#mode-chip"),
+    progress: $("#progress"), judgeState: $("#judge-state"), pipeline: $("#pipeline"), modeChip: $("#mode-chip"),
     share: $("#share-btn"), toast: $("#toast"),
     settings: $("#settings"), thesis: $("#thesis"), endpoint: $("#endpoint"), key: $("#api-key"),
     threshold: $("#threshold"), thresholdVal: $("#threshold-val"), keyHint: $("#key-hint"),
@@ -35,14 +35,13 @@
   const state = {
     playbooks: {},
     serverKey: false,
-    settings: Object.assign({ endpoint: "auto", key: "", threshold: null, playbook: "invest" }, load(LS.settings, {})),
-    history: load(LS.history, []),
-    cache: load(LS.cache, {}),
+    settings: Object.assign({ endpoint: "auto", key: "", threshold: null, playbook: "invest" }, load(LS.settings, load("verdict:settings", {}))),
+    history: load(LS.history, load("verdict:history", [])),
+    cache: load(LS.cache, load("verdict:cache", {})),
     busy: false,
     current: null,
   };
 
-  const graph = new window.NeuralGraph($("#neural-canvas"));
 
   const STARTERS = [
     { pb: "invest", q: "Should we list this RWA token on a CEX this quarter?" },
@@ -113,7 +112,7 @@
   function renderHistory() {
     els.history.replaceChildren();
     if (!state.history.length) {
-      els.history.append(h("li", { class: "h-empty" }, "Verdicts you run show up here."));
+      els.history.append(h("li", { class: "h-empty" }, "Your recent searches will appear here."));
       return;
     }
     for (const item of state.history) {
@@ -135,7 +134,7 @@
   }
 
   function setCrumb(text) {
-    els.crumbs.replaceChildren(h("span", {}, "Verdict"), h("em", {}, "/"), h("b", {}, text));
+    els.crumbs.replaceChildren(h("span", {}, "Zearch"), h("em", {}, "/"), h("b", {}, text));
   }
 
   // ───────────────────────── render: verdict
@@ -152,7 +151,7 @@
         h("span", {}, "confidence ", h("b", {}, pct(p.confidence))),
         h("span", {}, primary.options.map((o) => `${o.label} ${pct(o.p)}`).join(" · "))));
 
-    const card = h("div", { class: `verdict ${p.gate}` },
+    const card = h("div", { class: `result-card ${p.gate}` },
       h("div", {}, h("div", { class: "v-label" }, `${p.primary} · ${primary.type}`), h("div", { class: "v-pick" }, p.pick || "—")),
       h("div", { class: "v-right" }, h("span", { class: `gate ${p.gate}` }, h("i"), p.gate)),
       h("p", { class: "v-summary" }, p.summary),
@@ -191,7 +190,7 @@
       h("details", { class: "state" }, h("summary", {}, `state sent to Jev · ${v.state.length} chars`), h("pre", {}, v.state)),
       h("div", { class: "turn-actions" },
         h("button", { class: "ghost-btn", type: "button", onclick: () => share(v) }, "Copy share link"),
-        h("button", { class: "ghost-btn", type: "button", onclick: () => copy(JSON.stringify(v, null, 2), "Verdict JSON copied") }, "Copy JSON"),
+        h("button", { class: "ghost-btn", type: "button", onclick: () => copy(JSON.stringify(v, null, 2), "Search data copied") }, "Copy JSON"),
         h("button", { class: "ghost-btn", type: "button", onclick: () => { setPlaybook(v.playbook); els.q.value = v.query; autosize(); run(); } }, "Re-run")));
 
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -213,11 +212,10 @@
         h("span", { class: "opt-p" }, pct(o.p)))));
   }
 
-  // ───────────────────────── neural + pipeline
+  // ───────────────────────── search progress
   function setFiring(on) {
-    els.neural.classList.toggle("firing", on);
-    els.judgeState.textContent = on ? "firing" : "idle";
-    graph.setFiring(on);
+    els.progress.classList.toggle("working", on);
+    els.judgeState.textContent = on ? "working" : "ready";
   }
   function step(name, status) {
     const li = els.pipeline.querySelector(`[data-step="${name}"]`);
@@ -235,7 +233,7 @@
     state.busy = true;
     els.decide.disabled = true;
     els.decide.classList.add("busy");
-    els.decide.querySelector("span").textContent = "Deciding";
+    els.decide.querySelector("span").textContent = "Searching";
     els.q.value = "";
     autosize();
     showThread();
@@ -280,7 +278,6 @@
       step("gate", "run");
       await sleep(160);
       step("gate", "done");
-      graph.settle(v.policy.gate);
 
       remember(v);
       state.current = v.id;
@@ -292,7 +289,7 @@
       toast(`${v.policy.gate.toUpperCase()} · ${v.policy.pick} · ${pct(v.policy.confidence)} · ${total}ms`);
     } catch (e) {
       resetPipeline();
-      pending.replaceWith(h("article", { class: "turn" }, h("h2", { class: "turn-q" }, query), h("div", { class: "err" }, `Decision failed: ${e.message}`)));
+      pending.replaceWith(h("article", { class: "turn" }, h("h2", { class: "turn-q" }, query), h("div", { class: "err" }, `Search failed: ${e.message}`)));
       els.q.value = query;
       autosize();
     } finally {
@@ -300,7 +297,7 @@
       state.busy = false;
       els.decide.disabled = !els.q.value.trim();
       els.decide.classList.remove("busy");
-      els.decide.querySelector("span").textContent = "Decide";
+      els.decide.querySelector("span").textContent = "Search";
     }
   }
 
@@ -323,7 +320,7 @@
 
   // ───────────────────────── routing
   function showThread() { els.empty.classList.add("hidden"); }
-  function newVerdict() {
+  function newSearch() {
     state.current = null;
     els.thread.replaceChildren();
     els.empty.classList.remove("hidden");
@@ -337,7 +334,7 @@
 
   async function route() {
     const m = location.hash.match(/^#v\/([\w-]+)$/);
-    if (!m) return newVerdict();
+    if (!m) return newSearch();
     const id = m[1];
     let v = state.cache[id];
     if (!v) {
@@ -346,7 +343,7 @@
         if (r.ok) v = await r.json();
       } catch { /* offline */ }
     }
-    if (!v) { toast("Verdict not found"); return newVerdict(); }
+    if (!v) { toast("Search not found"); return newSearch(); }
     state.current = id;
     showThread();
     els.thread.replaceChildren(renderTurn(v));
@@ -401,8 +398,8 @@
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); run(); }
     });
     els.pb.addEventListener("change", () => setPlaybook(els.pb.value));
-    $("#new-btn").addEventListener("click", () => { closeRail(); newVerdict(); });
-    $("#brand").addEventListener("click", (e) => { e.preventDefault(); newVerdict(); });
+    $("#new-btn").addEventListener("click", () => { closeRail(); newSearch(); });
+    $("#brand").addEventListener("click", (e) => { e.preventDefault(); newSearch(); });
     $("#menu-btn").addEventListener("click", openRail);
     $("#rail-close").addEventListener("click", closeRail);
     $("#scrim").addEventListener("click", closeRail);
@@ -439,7 +436,7 @@
     [els.settings, els.thesis].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close("cancel"); }));
 
     document.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); newVerdict(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); newSearch(); }
       else if (e.key === "/" && document.activeElement !== els.q && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); els.q.focus(); }
       else if (e.key === "Escape") closeRail();
     });

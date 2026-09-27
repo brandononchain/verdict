@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verdict: search -> evidence pack -> typed decision -> confidence gate.
+"""Zearch: source-backed search -> evidence pack -> typed judgment -> confidence gate.
 
 Stdlib only. Serves the static app and a small JSON API.
 """
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 STORE = DATA / "verdicts.json"
 PORT = int(os.environ.get("PORT", "8765"))
-UA = "Mozilla/5.0 (Verdict evidence packer; +https://github.com/brandononchain/verdict)"
+UA = "Mozilla/5.0 (Zearch evidence packer)"
 SEARCH_TIMEOUT = 4.5
 MAX_SOURCES = 8
 MAX_STATE_CHARS = 6000
@@ -631,7 +631,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/"):
             return self._json(404, {"error": "not found"})
         # only serve the app's own static files
-        if path not in ("/", "/index.html", "/styles.css", "/app.js", "/neural.js", "/favicon.svg"):
+        if path not in ("/", "/index.html", "/styles.css", "/app.js", "/favicon.svg"):
             self.path = "/"
         return super().do_GET()
 
@@ -656,7 +656,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Verdict → http://localhost:{PORT}  (jev: {'server key' if os.environ.get('TYPESAFE_API_KEY') else 'mock unless key set'})")
+    print(f"Zearch → http://localhost:{PORT}  (jev: {'server key' if os.environ.get('TYPESAFE_API_KEY') else 'mock unless key set'})")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
