@@ -24,9 +24,9 @@
 
   const els = {
     shell: $("#shell"), stage: $(".stage"), feed: $("#feed"), empty: $("#empty"), thread: $("#thread"),
-    starters: $("#starters"), pbList: $("#pb-list"), history: $("#history"), crumbs: $("#crumbs"),
+    starters: $("#starters"), history: $("#history"), crumbs: $("#crumbs"),
     form: $("#composer"), q: $("#query"), pb: $("#playbook"), decide: $("#decide"), gateHint: $("#gate-hint"),
-    progress: $("#progress"), judgeState: $("#judge-state"), pipeline: $("#pipeline"), modeChip: $("#mode-chip"),
+    modeChip: $("#mode-chip"),
     share: $("#share-btn"), toast: $("#toast"),
     settings: $("#settings"), thesis: $("#thesis"), endpoint: $("#endpoint"), key: $("#api-key"),
     threshold: $("#threshold"), thresholdVal: $("#threshold-val"), keyHint: $("#key-hint"),
@@ -71,13 +71,8 @@
 
   // ───────────────────────── render: chrome
   function renderPlaybooks() {
-    els.pbList.replaceChildren();
     els.pb.replaceChildren();
     for (const [id, pb] of Object.entries(state.playbooks)) {
-      els.pbList.append(h("li", {}, h("button", {
-        type: "button", "aria-pressed": String(id === state.settings.playbook), "data-pb": id,
-        onclick: () => { setPlaybook(id); closeRail(); els.q.focus(); },
-      }, h("i"), h("span", {}, pb.name), h("small", {}, pb.blurb))));
       els.pb.append(h("option", { value: id }, pb.name));
     }
     els.pb.value = state.settings.playbook;
@@ -88,7 +83,6 @@
     state.settings.playbook = id;
     store(LS.settings, state.settings);
     els.pb.value = id;
-    els.pbList.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pb === id)));
     renderGateHint();
   }
 
@@ -212,19 +206,6 @@
         h("span", { class: "opt-p" }, pct(o.p)))));
   }
 
-  // ───────────────────────── search progress
-  function setFiring(on) {
-    els.progress.classList.toggle("working", on);
-    els.judgeState.textContent = on ? "working" : "ready";
-  }
-  function step(name, status) {
-    const li = els.pipeline.querySelector(`[data-step="${name}"]`);
-    if (!li) return;
-    li.classList.remove("run", "done");
-    if (status) li.classList.add(status);
-  }
-  function resetPipeline() { els.pipeline.querySelectorAll("li").forEach((li) => li.classList.remove("run", "done")); }
-
   // ───────────────────────── run
   async function run() {
     const query = els.q.value.trim();
@@ -238,32 +219,18 @@
     autosize();
     showThread();
     setCrumb(query);
-    resetPipeline();
-    setFiring(true);
-
-    const log = h("ol", { class: "pending-log" });
-    const pending = h("article", { class: "turn pending" }, h("h2", { class: "turn-q" }, query), h("div", { class: "skel" }), log);
+    const status = h("p", { class: "pending-status" }, h("i", { "aria-hidden": "true" }), "Searching the web…");
+    const pending = h("article", { class: "turn pending" }, h("h2", { class: "turn-q" }, query), status, h("div", { class: "skel" }));
     els.thread.append(pending);
     pending.scrollIntoView({ behavior: "smooth", block: "start" });
-    const say = (label, text) => log.append(h("li", {}, h("b", {}, label), " ", text));
 
     const t0 = performance.now();
     try {
-      step("search", "run");
-      say("search", "querying web · wikipedia · instant answers · seed corpus");
       const pack = await api("/api/search", { query, playbook });
-      step("search", "done");
-      const live = Object.entries(pack.providers).filter(([, n]) => n).map(([k, n]) => `${k}:${n}`).join(" ");
-      say("search", `${pack.ms}ms · ${live || "no provider results"}`);
-
-      step("pack", "run");
-      say("pack", `${pack.sources.length} sources deduped → ${pack.state.length} chars of state`);
+      status.lastChild.textContent = `Reviewing ${pack.sources.length} sources…`;
       await sleep(220);
-      step("pack", "done");
-
-      step("judge", "run");
       const pb = state.playbooks[playbook];
-      say("judge", `${Object.keys(pb.questions).length} typed questions in parallel`);
+      status.lastChild.textContent = "Weighing the evidence…";
       const tj = performance.now();
       const v = await api("/api/decide", {
         query, playbook, pack,
@@ -273,11 +240,6 @@
       });
       const spent = performance.now() - tj;
       if (spent < 650) await sleep(650 - spent); // let the judge visibly fire
-      step("judge", "done");
-
-      step("gate", "run");
-      await sleep(160);
-      step("gate", "done");
 
       remember(v);
       state.current = v.id;
@@ -288,12 +250,10 @@
       const total = Math.round(performance.now() - t0);
       toast(`${v.policy.gate.toUpperCase()} · ${v.policy.pick} · ${pct(v.policy.confidence)} · ${total}ms`);
     } catch (e) {
-      resetPipeline();
       pending.replaceWith(h("article", { class: "turn" }, h("h2", { class: "turn-q" }, query), h("div", { class: "err" }, `Search failed: ${e.message}`)));
       els.q.value = query;
       autosize();
     } finally {
-      setFiring(false);
       state.busy = false;
       els.decide.disabled = !els.q.value.trim();
       els.decide.classList.remove("busy");
@@ -326,7 +286,6 @@
     els.empty.classList.remove("hidden");
     els.share.classList.add("hidden");
     setCrumb("New");
-    resetPipeline();
     renderHistory();
     if (location.hash) history.replaceState(null, "", location.pathname);
     els.q.focus();
