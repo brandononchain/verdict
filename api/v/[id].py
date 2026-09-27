@@ -8,10 +8,7 @@ import server
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        result_id = urlparse(self.path).path.rsplit("/", 1)[-1]
-        verdict = server.get_verdict(result_id)
-        status = 200 if verdict else 404
-        self._json(status, verdict if verdict else {"error": "not found"})
+        self._json(410, {"error": "The legacy result route is retired. Use /api/research."})
 
     def _json(self, status, data):
         payload = json.dumps(data).encode()

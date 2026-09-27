@@ -636,8 +636,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "model": MODEL,
             })
         if path.startswith("/api/v/"):
-            v = get_verdict(path.rsplit("/", 1)[-1])
-            return self._json(200, v) if v else self._json(404, {"error": "not found"})
+            return self._json(410, {"error": "The legacy result route is retired. Use /api/research."})
         if path.startswith("/api/"):
             return self._json(404, {"error": "not found"})
         # only serve the app's own static files
@@ -663,7 +662,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json(400, {"error": "query is required"})
                 return self._json(200, pack_evidence(q, pb))
             if path == "/api/decide":
-                return self._json(200, decide(body))
+                return self._json(410, {"error": "The old decision prototype is retired. Use /api/research."})
             return self._json(404, {"error": "not found"})
         except ValueError as e:
             return self._json(400, {"error": str(e)})

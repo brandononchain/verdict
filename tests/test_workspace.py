@@ -8,6 +8,7 @@ from unittest.mock import patch
 import test_research as baseline
 import discovery
 import research
+import jev_research as jev
 import research_store as db
 import retrieval
 import workspace_store as workspace
@@ -16,6 +17,7 @@ class WorkspaceTests(unittest.TestCase):
     setUp = baseline.ResearchTests.setUp
     tearDown = baseline.ResearchTests.tearDown
     reserve = baseline.ResearchTests.reserve
+    pipeline = baseline.ResearchTests.pipeline
 
     def completed(self, owner='alice'):
         run, _ = self.reserve(owner)
@@ -36,14 +38,24 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(workspace.knowledge('alice', 'project budget'), [])
 
     def test_private_text_never_enters_search_query(self):
-        workspace.add_note('alice','Budget','Confidential budget amount is 500 credits.')
-        source={'n':1,'url':'https://example.com/','text':'Public budget evidence','title':'Source','domain':'example.com'}
-        for use_notes in (False,True):
-            with self.subTest(use_notes=use_notes),patch.dict(os.environ,{'ZEARCH_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(research,'stream_model',return_value=iter([('delta','Answer [1]')])) as model:
-                run,fresh,history=research.prepare('alice',{'query':'budget','request_id':uuid.uuid4().hex,'use_knowledge':use_notes})
-                list(research.run('alice',run,history))
-                self.assertNotIn('Confidential',str(search.call_args))
-                self.assertEqual('Confidential' in str(model.call_args),use_notes)
+        workspace.add_note('alice', 'Budget', 'Confidential budget amount is 500 credits.')
+        source = {'n': 1, 'url': 'https://example.com/', 'text': 'Public budget evidence',
+                  'title': 'Source', 'domain': 'example.com'}
+        with self.pipeline():
+            for use_notes in (False, True):
+                with self.subTest(use_notes=use_notes), patch.dict(os.environ, {'JEV_MODEL': 'test'}), \
+                     patch.object(research, 'ready', return_value=True), \
+                     patch.object(research, 'search', return_value=[source]) as search, \
+                     patch.object(jev, 'call', return_value={
+                         'model': 'jev-latest', 'answers': {
+                             'best_passage': {'choice':'1','probabilities':{'1':.9}},
+                             'sufficient':{'noul':.9}, 'conflict':{'noul':.1}},
+                         'usage':{'input_tokens':10}}) as model:
+                    run, _, history = research.prepare('alice', {'query':'budget',
+                        'request_id':uuid.uuid4().hex,'use_knowledge':use_notes})
+                    list(research.run('alice',run,history))
+                    self.assertNotIn('Confidential',str(search.call_args))
+                    self.assertEqual('Confidential' in str(model.call_args),use_notes)
 
     def test_note_limits_atomic(self):
         def add(n):
@@ -70,8 +82,8 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_deep_reservation_accounts_for_all_searches(self):
         self.assertEqual(research.reservation('deep')-research.reservation('standard'),20000)
-        usage={'prompt_tokens':10,'completion_tokens':5,'search_calls':3}
-        self.assertEqual(research.estimate(usage),30020)
+        usage={'input_tokens':10,'search_calls':3}
+        self.assertEqual(research.estimate(usage),30010)
 
     def test_job_enqueue_deduplicates_under_concurrency(self):
         iid=workspace.save_investigation('alice',self.completed())
@@ -118,7 +130,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_worker_runs_pipeline_once(self):
         iid=workspace.save_investigation('alice',self.completed())
         source={'n':1,'url':'https://example.com/','text':'Updated evidence','title':'Source','domain':'example.com'}
-        with patch.dict(os.environ,{'ZEARCH_DISCOVERY_ENABLED':'1','ZEARCH_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(research,'stream_model',return_value=iter([('delta','Answer [1]')])):
+        with patch.dict(os.environ,{'ZEARCH_DISCOVERY_ENABLED':'1','JEV_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(jev,'call',return_value={'model':'jev-latest','answers':{'best_passage':{'choice':'1','probabilities':{'1':.9}},'sufficient':{'noul':.9},'conflict':{'noul':.1}},'usage':{'input_tokens':10}}):
             discovery.enqueue('alice',iid)
             self.assertTrue(discovery.work_once());self.assertFalse(discovery.work_once())
             self.assertEqual(search.call_count,1)
