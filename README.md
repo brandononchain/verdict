@@ -2,7 +2,7 @@
 
 **A space for discovery.**
 
-An open-source Jev-guided research engine with a monochrome conversational interface. Zearch retrieves web evidence, Jev selects passages and judges sufficiency, an OpenAI writer composes cited paragraphs, and Jev checks them before release. See [the architecture](docs/JEV_ONLY.md), [delivery gates](docs/DELIVERY.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
+An open-source Jev-guided research engine with a monochrome conversational interface. Zearch retrieves web evidence, Jev selects passages and judges sufficiency, an OpenAI writer composes cited paragraphs, and Jev checks them before release. See [the architecture](docs/JEV_ONLY.md), [delivery gates](docs/DELIVERY.md), [build roadmap](docs/ROADMAP.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
 
 ## Local setup
 
