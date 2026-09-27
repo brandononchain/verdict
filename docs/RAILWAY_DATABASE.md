@@ -24,9 +24,9 @@ Railway's public TCP proxy incurs network egress and direct connections consume 
 | `ZEARCH_WRITER_MODEL` | An available OpenAI Responses API text model in your account |
 | `TAVILY_API_KEY` | Tavily account; current web search still depends on it |
 | `ZEARCH_JEV_INPUT_USD_PER_MILLION` | Current contracted Jev input-token price in USD |
-| `ZEARCH_WRITER_INPUT_USD_PER_MILLION` | Current writer input-token price in USD |
+| `ZEARCH_WRITER_INPUT_USD_PER_MILLION` | Defaults to `0.75` only when writer model is `gpt-5.4-mini`; required for other models |
 | `ZEARCH_WRITER_OUTPUT_USD_PER_MILLION` | Current writer output-token price in USD |
-| `ZEARCH_SEARCH_USD_PER_CALL` | Effective Tavily search price in USD per call |
+| `ZEARCH_SEARCH_USD_PER_CALL` | Defaults to `0.008` for Tavily basic search; override for your effective rate |
 | `ZEARCH_RESEARCH_ENABLED` | Set to `1` with the other required variables; the first request initializes the schema |
 
 The four pricing inputs must be positive, finite values. Operational limits have defaults in `.env.example`; set them deliberately before broader access. Optional rendered-page enrichment needs `ZEARCH_ENRICHMENT_ENABLED=1`, `CONTEXT_DEV_API_KEY`, and `ZEARCH_SCRAPE_USD_PER_CALL`. Keep it off until those are available. Discovery jobs need a separately provisioned recurring worker; enabling the web flag alone does not run the worker.

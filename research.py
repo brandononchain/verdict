@@ -23,9 +23,12 @@ class Unavailable(Exception):
 
 def configuration():
     required = ["ZEARCH_SESSION_SECRET", "TYPESAFE_API_KEY", "TAVILY_API_KEY",
-                "ZEARCH_JEV_INPUT_USD_PER_MILLION", "ZEARCH_SEARCH_USD_PER_CALL",
-                "OPENAI_API_KEY", "ZEARCH_WRITER_MODEL", "ZEARCH_WRITER_INPUT_USD_PER_MILLION",
+                "ZEARCH_JEV_INPUT_USD_PER_MILLION",
+                "OPENAI_API_KEY", "ZEARCH_WRITER_MODEL",
                 "ZEARCH_WRITER_OUTPUT_USD_PER_MILLION"]
+    # Default rates apply to Tavily basic search and the pinned writer model only.
+    if os.environ.get("ZEARCH_WRITER_MODEL") != "gpt-5.4-mini":
+        required.append("ZEARCH_WRITER_INPUT_USD_PER_MILLION")
     if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') == '1':
         required += ['CONTEXT_DEV_API_KEY', 'ZEARCH_SCRAPE_USD_PER_CALL']
     if os.environ.get("VERCEL"):
@@ -43,9 +46,11 @@ def ready():
 
 
 def rates():
-    values = [Decimal(os.environ[key]) for key in (
-        'ZEARCH_JEV_INPUT_USD_PER_MILLION', 'ZEARCH_SEARCH_USD_PER_CALL',
-        'ZEARCH_WRITER_INPUT_USD_PER_MILLION', 'ZEARCH_WRITER_OUTPUT_USD_PER_MILLION')]
+    writer_default = '0.75' if os.environ.get('ZEARCH_WRITER_MODEL') == 'gpt-5.4-mini' else None
+    values = [Decimal(os.environ['ZEARCH_JEV_INPUT_USD_PER_MILLION']),
+              Decimal(os.environ.get('ZEARCH_SEARCH_USD_PER_CALL') or '0.008'),
+              Decimal(os.environ.get('ZEARCH_WRITER_INPUT_USD_PER_MILLION') or writer_default),
+              Decimal(os.environ['ZEARCH_WRITER_OUTPUT_USD_PER_MILLION'])]
     if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') == '1':
         values.append(Decimal(os.environ['ZEARCH_SCRAPE_USD_PER_CALL']))
     else:
