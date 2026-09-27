@@ -56,6 +56,12 @@ class ResearchTests(unittest.TestCase):
         with self.pipeline():
             events=list(r.run('alice',run,[]))
         self.assertEqual(events[-1]['type'],'complete');self.assertEqual(db.get_run('alice',run['id'])['estimated_cost'],10055)
+        usage=events[-1]['run']['usage']
+        self.assertIn('retrieval',usage['stage_ms'])
+        self.assertIn('jev_selection',usage['stage_ms'])
+        self.assertIn('writer',usage['stage_ms'])
+        self.assertIn('jev_verification',usage['stage_ms'])
+        self.assertGreaterEqual(usage['total_ms'],0)
     def test_close_does_not_overwrite_complete(self):
         run,_=self.reserve()
         with self.pipeline():
@@ -71,6 +77,12 @@ class ResearchTests(unittest.TestCase):
         run,_=self.reserve()
         with patch.object(r,'search',side_effect=r.Unavailable('Search unavailable')):events=list(r.run('alice',run,[]))
         saved=db.get_run('alice',run['id']);self.assertEqual(saved['status'],'error');self.assertEqual(saved['answer'],'');self.assertEqual(events[-1]['type'],'error')
+        self.assertEqual(saved['usage']['failure_stage'],'retrieval')
+        self.assertEqual(saved['usage']['failure_kind'],'Unavailable')
+        import usage_report
+        summary=usage_report.report()['standard']
+        self.assertEqual(summary['failure_stages'],{'retrieval':1})
+        self.assertEqual(summary['failure_kinds'],{'Unavailable':1})
     def test_writer_and_jev_checked_answer(self):
         run,_=self.reserve()
         with self.pipeline():list(r.run('alice',run,[]))
@@ -79,6 +91,15 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(saved['usage']['judgment']['model'],'jev-1.13')
         self.assertEqual(saved['usage']['answer_format'],'jev_verified_prose')
         self.assertEqual(saved['usage']['draft_check']['probabilities'],[.97])
+    def test_operator_report_aggregates_traces_without_queries(self):
+        import usage_report
+        run,_=self.reserve()
+        with self.pipeline(): list(r.run('alice',run,[]))
+        summary=usage_report.report()['standard']
+        self.assertEqual(summary['runs'],1)
+        self.assertEqual(summary['jev_gates'],{'answer':1})
+        self.assertEqual(summary['stage_ms']['retrieval']['count'],1)
+        self.assertNotIn('Question',str(summary))
     def test_rejected_draft_falls_back_to_excerpt(self):
         run,_=self.reserve()
         with self.pipeline(), patch.object(jev,'verify',return_value=(False,{'probabilities':[.2]},{'input_tokens':5})):
@@ -86,6 +107,7 @@ class ResearchTests(unittest.TestCase):
         saved=db.get_run('alice',run['id'])
         self.assertEqual(saved['usage']['answer_format'],'jev_selected_excerpt')
         self.assertTrue(saved['usage']['draft_rejected'])
+        self.assertEqual(saved['usage']['draft_fallback_reason'],'unsupported_draft')
     def test_first_pass_abstain_can_recover_with_verified_prose(self):
         run,_=self.reserve()
         abstain={'selected':None,'selected_probability':.7,'sufficiency_probability':.4,

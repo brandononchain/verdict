@@ -50,6 +50,6 @@ node --check app.js
 python -m py_compile research.py jev_research.py writer.py enrichment.py research_store.py discovery.py
 ```
 
-Tests use isolated SQLite and mocked provider responses; no paid calls occur. `python evals/run.py` lists review cases without provider calls. `python evals/run.py --execute --limit 3 --depth deep` explicitly incurs provider costs through normal budgets and persists results. Human scoring is required. `python usage_report.py` reports aggregate estimated cost and latency of retained runs only; it is not a billing ledger.
+Tests use isolated SQLite and mocked provider responses; no paid calls occur. `python evals/run.py` lists review cases without provider calls. `python evals/run.py --execute --limit 3 --depth deep` explicitly incurs provider costs through normal budgets and persists results. Human scoring is required. `python usage_report.py` is an operator-only aggregate of retained runs by mode: estimated cost, stage and total latency, failure stages and kinds, search failures, Jev gates, draft fallbacks, and source tiers. It does not print prompts or owner IDs and is not a billing ledger. New runs carry timing and ranking traces in their existing records; older runs without them are omitted from those metrics.
 
 Disable `ZEARCH_RESEARCH_ENABLED` to halt new research; disable `ZEARCH_DISCOVERY_ENABLED` to stop new worker claims. Schema creation is additive; rolling back code does not erase stored records. Pricing hypotheses are not purchasable plans.
