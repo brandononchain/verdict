@@ -23,7 +23,7 @@
   }
   function closeRail() { $('shell').classList.remove('rail-open'); }
   function controls() {
-    $('decide').disabled = !active && (!available || !query.value.trim());
+    $('decide').disabled = !active && !query.value.trim();
     $('decide').querySelector('span').textContent = active ? 'Stop' : 'Search';
     $('decide').setAttribute('aria-label', active ? 'Stop research' : 'Search');
     $('decide').dataset.busy = String(Boolean(active));
@@ -129,7 +129,7 @@
   async function submit(event) {
     event.preventDefault();
     if (active) { active.abort(); return; }
-    const question = query.value.trim(); if (!question || !available) return;
+    const question = query.value.trim(); if (!question) return;
     version++; active = new AbortController(); showThread();
     const view = turn({ query: question, answer: '', sources: [], status: 'pending' });
     query.value = ''; controls(); let complete = false, paintPending = false;
@@ -282,6 +282,6 @@
     if (!response.ok) throw Error(); return response.json();
   }).then(data => {
     available = data.available;
-    notice.textContent = available ? '' : 'Research is being configured. Please check back shortly.'; controls();
+    notice.textContent = available ? '' : 'Research setup is incomplete. You can send a question to check its status.'; controls();
   }).catch(() => { notice.textContent = 'Research is temporarily unavailable. Please try again later.'; });
 })();

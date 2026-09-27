@@ -83,6 +83,7 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_deep_reservation_accounts_for_all_searches(self):
         self.assertEqual(research.reservation('deep')-research.reservation('standard'),20000)
+        self.assertEqual(research.reservation('compare'),research.reservation('deep'))
         usage={'input_tokens':10,'search_calls':3}
         self.assertEqual(research.estimate(usage),30010)
 
@@ -146,6 +147,8 @@ class WorkspaceTests(unittest.TestCase):
 class RetrievalTests(unittest.TestCase):
     def test_plan_bounded(self):
         self.assertEqual(len(retrieval.plan('question',[],'deep')),3)
+        self.assertEqual(len(retrieval.plan('question',[],'compare')),3)
+        self.assertIn('tradeoffs',retrieval.plan('question',[],'compare')[2])
         self.assertEqual(len(retrieval.plan('question',[],'standard')),1)
 
     def test_dedup_ranking_and_domain_diversity(self):

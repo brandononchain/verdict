@@ -25,7 +25,7 @@ GET `/api/research` reports configuration/database readiness, not provider healt
 
 ## Features in the current release
 
-Search uses one web query; Deep research makes up to three bounded query variations. Code ranks and deduplicates sources. Optional Context.dev extraction enriches up to three pages when configured. Jev selects passages and judges sufficiency/conflict, the writer drafts up to three cited paragraphs, and Jev checks each paragraph. A failed check returns the exact selected excerpt. Follow-ups use previous questions for retrieval; private notes are sent to Jev and the writer when “Use my notes” is selected.
+Search uses one web query; Deep research makes three bounded queries for primary and conflicting evidence. Compare makes three queries oriented around strengths and tradeoffs. Code ranks and deduplicates sources. Optional Context.dev extraction enriches up to three pages when configured. Jev selects passages and judges sufficiency/conflict, the writer drafts up to three cited paragraphs, and Jev checks each paragraph. A failed check returns the exact selected excerpt. Follow-ups use previous questions for retrieval; private notes are sent to Jev and the writer when “Use my notes” is selected.
 
 Your workspace supports owner-scoped saved answers and deletion, 20 plain-text notes (up to 40,000 characters each), `.txt`/`.md` imports, investigations and daily usage display. Deleting a note does not erase existing answers containing an excerpt from it; delete those separately. A signed HttpOnly browser cookie expires after 30 days. Cross-device accounts, rich document extraction, retention automation and billing remain outstanding. Anonymous limits can be reset by clearing cookies, so keep global and provider caps enabled.
 

@@ -123,6 +123,7 @@ class ResearchTests(unittest.TestCase):
         for value in [None,{}, {'query':'a','request_id':'bad'}, {'query':'a'*2001,'request_id':'a'*32}]:
             with self.assertRaises(ValueError):r.validate(value)
         self.assertIsNone(r.safe_url('javascript:alert(1)'));self.assertIsNone(r.safe_url('https://user:pass@example.com'))
+        self.assertEqual(r.validate({'query':'Compare two options','request_id':'a'*32,'depth':'compare'})[0], 'Compare two options')
     def test_http_stream_and_private_reload(self):
         import threading, json, urllib.request, urllib.error
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

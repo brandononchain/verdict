@@ -59,7 +59,7 @@ def reservation(depth='standard'):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     # Two Jev judgments, one bounded draft, at most three page extractions.
     return math.ceil(200_000 * jev_rate + 20_000 * writer_in +
-        900 * writer_out + (search_rate * (3 if depth == 'deep' else 1) + scrape_rate * 3) * 1_000_000)
+        900 * writer_out + (search_rate * (3 if depth in ('deep', 'compare') else 1) + scrape_rate * 3) * 1_000_000)
 
 
 def limits():
@@ -81,7 +81,7 @@ def validate(body):
     parent = body.get("parent_id")
     if parent is not None and (not isinstance(parent, str) or not re.fullmatch(r"[a-f0-9]{32}", parent)):
         raise ValueError("Invalid follow-up identifier")
-    if body.get('depth', 'standard') not in ('standard', 'deep') or not isinstance(body.get('use_knowledge', False), bool):
+    if body.get('depth', 'standard') not in ('standard', 'deep', 'compare') or not isinstance(body.get('use_knowledge', False), bool):
         raise ValueError('Invalid research options')
     return query.strip(), request_id, parent
 

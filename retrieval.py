@@ -29,6 +29,9 @@ def plan(query, history, depth):
     queries = [base]
     if depth == 'deep':
         queries += [base + ' primary sources official documentation evidence', base + ' limitations conflicting evidence independent analysis']
+    elif depth == 'compare':
+        queries += [base + ' advantages strengths direct comparison evidence',
+                    base + ' disadvantages limitations tradeoffs alternatives independent evidence']
     return queries
 
 
