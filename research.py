@@ -195,7 +195,19 @@ def prepare(owner, body):
 
 def run(owner, record, history):
     rid, query = record["id"], record["query"]
-    answer, sources, usage = "", [], {}
+    answer, sources, usage = "", [], {'stage_ms': {}}
+    started = time.monotonic()
+    current_stage = 'initialization'
+    def measured(name, action, *args):
+        nonlocal current_stage
+        current_stage = name
+        start = time.monotonic()
+        try:
+            return action(*args)
+        finally:
+            usage['stage_ms'][name] = round((time.monotonic() - start) * 1000)
+    def finish_metrics():
+        usage['total_ms'] = round((time.monotonic() - started) * 1000)
     finalized = False
     try:
         yield {"type": "start", "id": rid}
@@ -203,7 +215,7 @@ def run(owner, record, history):
         if market_data.wants_btc_usd_quote(query):
             yield {'type': 'status', 'text': 'Checking the live market quote'}
             try:
-                source, answer = market_data.quote()
+                source, answer = measured('market_quote', market_data.quote)
             except (OSError, ValueError, TypeError, KeyError) as exc:
                 raise Unavailable('A fresh BTC-USD quote is unavailable. Please try again shortly.') from exc
             sources = [source]
@@ -214,6 +226,7 @@ def run(owner, record, history):
                    'ranking': 'fresh structured Coinbase Exchange ticker'}}
             yield {'type': 'sources', 'sources': sources}
             yield {'type': 'delta', 'text': answer}
+            finish_metrics()
             db.save(owner, rid, status='complete', answer=answer, sources=sources,
                     usage=usage, estimated_cost=estimate(usage))
             finalized = True
@@ -221,11 +234,11 @@ def run(owner, record, history):
             return
         yield {"type": "status", "text": "Searching the web"}
         import retrieval
-        sources, report = retrieval.retrieve(query, history, record.get('depth', 'standard'), search)
+        sources, report = measured('retrieval', retrieval.retrieve, query, history, record.get('depth', 'standard'), search)
         usage.update(report)
         if record.get('use_knowledge'):
             import workspace_store
-            private = workspace_store.knowledge(owner, query)
+            private = measured('private_knowledge', workspace_store.knowledge, owner, query)
             # Keep selected private snippets separate from public web retrieval.
             sources = sources[:6] + private[:2]
             for n, source in enumerate(sources, 1):
@@ -234,7 +247,7 @@ def run(owner, record, history):
             raise Unavailable('No usable evidence was found. Try a more specific question.')
         yield {'type': 'status', 'text': 'Reading sources'}
         import enrichment
-        sources, enrich_report = enrichment.enrich(sources)
+        sources, enrich_report = measured('enrichment', enrichment.enrich, sources)
         usage.update(enrich_report)
         report.update(enrich_report)
         yield {'type': 'research', 'report': report}
@@ -242,12 +255,12 @@ def run(owner, record, history):
         yield {"type": "sources", "sources": sources}
         yield {'type': 'status', 'text': 'Jev is judging the evidence'}
         import jev_research
-        judgment, selected, model_usage, candidates = jev_research.judge(query, sources)
+        judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, query, sources)
         usage['input_tokens'] = model_usage.get('input_tokens', 0)
         usage['judgment'] = judgment
         answer = jev_research.format_answer(judgment, selected, candidates, sources)
         usage['answer_format'] = 'jev_selected_excerpt'
-        # A single 180-character passage can fail Jev's first sufficiency gate
+        # A short selected passage can fail Jev's first sufficiency gate
         # even when the full retrieved snippets support a concise answer. Let
         # the writer try those sources, but publish only after Jev verifies its
         # actual paragraphs against the cited full evidence.
@@ -257,10 +270,10 @@ def run(owner, record, history):
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
             try:
-                draft, writer_usage = writer.compose(query, sources, draft_ids)
+                draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids)
                 usage['writer'] = writer_usage
                 yield {'type': 'status', 'text': 'Jev is checking the draft'}
-                approved, check, check_usage = jev_research.verify(query, draft, sources, draft_ids)
+                approved, check, check_usage = measured('jev_verification', jev_research.verify, query, draft, sources, draft_ids)
                 usage['input_tokens'] += check_usage.get('input_tokens', 0)
                 usage['draft_check'] = check
                 if approved:
@@ -269,18 +282,27 @@ def run(owner, record, history):
                     usage['draft_source_ids'] = draft_ids
                 else:
                     usage['draft_rejected'] = True
-            except (writer.WriterError, jev_research.JevError):
+                    usage['draft_fallback_reason'] = 'unsupported_draft'
+            except (writer.WriterError, jev_research.JevError) as exc:
                 usage['draft_rejected'] = True
+                usage['draft_fallback_reason'] = 'writer_error' if isinstance(exc, writer.WriterError) else 'verification_error'
         yield {'type': 'delta', 'text': answer}
+        finish_metrics()
         cost = estimate(usage)
         db.save(owner, rid, status="complete", answer=answer, sources=sources, usage=usage, estimated_cost=cost)
         finalized = True
         yield {"type": "complete", "run": db.get_run(owner, rid)}
     except GeneratorExit:
         if not finalized:
+            usage['failure_stage'] = current_stage
+            usage['failure_kind'] = 'disconnected'
+            finish_metrics()
             db.save(owner, rid, status="interrupted", answer=answer, sources=sources, usage=usage, error="Connection closed")
         raise
     except Exception as exc:
+        usage['failure_stage'] = current_stage
+        usage['failure_kind'] = type(exc).__name__
+        finish_metrics()
         message = str(exc) if isinstance(exc, (Unavailable, ValueError)) or type(exc).__name__ == "JevError" else "Research could not finish. Please try again."
         db.save(owner, rid, status="error", answer=answer, sources=sources, usage=usage, error=message)
         yield {"type": "error", "id": rid, "error": message}

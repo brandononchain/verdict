@@ -80,6 +80,7 @@ def rank(query, sources, limit=8, budget=24000):
             frequency = sum(term in doc for doc in documents)
             inverse = math.log(1 + (len(rows) - frequency + .5) / (frequency + .5))
             score += inverse * count * 2.2 / (count + 1.2 * (.25 + .75 * sum(words.values()) / mean))
+        lexical_relevance = score
         title_terms = set(tokens(source.get('title', '')))
         focused_terms = set(tokens(source['text'][:800]))
         coverage = len(terms & (title_terms | focused_terms)) / max(1, len(terms))
@@ -87,11 +88,17 @@ def rank(query, sources, limit=8, budget=24000):
         if type(provider_score) not in (int, float) or not math.isfinite(provider_score) or not 0 <= provider_score <= 1:
             provider_score = 0
         score += 1.0 * coverage + .4 * provider_score
+        primary_boost = 0
         if coverage >= .4 and primary_domain(source.get('domain'), preferred):
-            score += 1.5
+            primary_boost = 1.5
+            score += primary_boost
             source['source_tier'] = 'primary'
         else:
             source['source_tier'] = 'web'
+        source['ranking_factors'] = {'lexical_relevance': round(lexical_relevance, 3),
+                                     'query_coverage': round(coverage, 3),
+                                     'provider_score': round(provider_score, 3),
+                                     'primary_boost': primary_boost}
         source['relevance'] = round(score, 4)
     rows.sort(key=lambda s: (-s['relevance'], s.get('url', s.get('note_id', ''))))
     selected, domains, fingerprints = [], Counter(), set()
@@ -114,13 +121,16 @@ def rank(query, sources, limit=8, budget=24000):
 def retrieve(query, history, depth, search):
     queries = plan(query, history, depth)
     results, failed = [], 0
+    failure_kinds = Counter()
     # Provider timeouts bound each worker; every attempt is reserved before here.
     with ThreadPoolExecutor(max_workers=len(queries)) as pool:
         futures = [pool.submit(search, q) for q in queries]
         for future in futures:
             try:
                 results.extend(future.result())
-            except Exception:
+            except Exception as exc:
                 failed += 1
+                failure_kinds[type(exc).__name__] += 1
     return rank(query, results), {'queries': queries, 'search_calls': len(queries),
-        'failed_searches': failed, 'ranking': 'lexical relevance, source provenance, provider score, deduplication and domain diversity'}
+        'failed_searches': failed, 'search_failure_kinds': dict(failure_kinds),
+        'ranking': 'lexical relevance, source provenance, provider score, deduplication and domain diversity'}

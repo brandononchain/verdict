@@ -21,7 +21,7 @@ The gates below are ordered by dependency. A milestone is complete only when its
 
 ## Work order within the next milestone
 
-1. **M6.1: Instrument runs.** Persist stage timing, provider errors, source ranking reasons, writer fallback reasons, and Jev verdicts without storing secrets. Add an operator report segmented by mode.
+1. **M6.1: Instrument runs (implemented).** Persist stage timing, provider error classes, source ranking reasons, writer fallback reasons, and Jev verdicts without storing secrets. The operator CLI reports aggregates by mode. Validate these fields on live runs during M6.3; historical records have no traces.
 2. **M6.2: Build the review set.** Add representative questions, expected evidence characteristics, and a human scoring rubric. Separate stable facts from time-sensitive cases whose correct value changes.
 3. **M6.3: Evaluate production.** Run a small capped batch, open citations, label failures, and set thresholds from the measured baseline. Fix the largest failure class first, then rerun the same set plus new holdouts.
 

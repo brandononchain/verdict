@@ -180,3 +180,5 @@ class RetrievalTests(unittest.TestCase):
             return [{'url':'https://example.com/','title':'Source','domain':'example.com','text':'Evidence'}]
         result,report=retrieval.retrieve('question',[],'deep',search)
         self.assertEqual(len(result),1);self.assertEqual(report['failed_searches'],1);self.assertEqual(report['search_calls'],3)
+        self.assertEqual(report['search_failure_kinds'],{'RuntimeError':1})
+        self.assertEqual(set(result[0]['ranking_factors']),{'lexical_relevance','query_coverage','provider_score','primary_boost'})
