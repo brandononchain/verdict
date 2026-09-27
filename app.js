@@ -105,7 +105,7 @@
         traceBody.textContent = `${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.\n${run.usage.queries.join('\n')}`;
       }
     }
-    update(); return { run, update, status, body };
+    update(); return { run, update, status, body, root };
   }
   async function route() {
     if (active) return;
@@ -177,9 +177,18 @@
       }
       if (!complete) throw Error('Research ended before completion. Any partial answer is incomplete.');
     } catch (error) {
-      active.abort(); view.run.status = 'interrupted';
-      view.run.error = error.name === 'AbortError' ? 'Stopped · any partial answer is incomplete.' : error.message;
-      view.update();
+      active.abort();
+      const message = error.name === 'AbortError' ? 'Stopped · any partial answer is incomplete.' : error.message;
+      if (!view.run.id) {
+        view.root.remove(); query.value = question;
+        if (!thread.childElementCount) {
+          empty.classList.remove('hidden'); empty.insertBefore(form, notice);
+          empty.insertBefore(fine, notice); form.classList.add('home-composer');
+          notice.textContent = message;
+        } else toast(message);
+      } else {
+        view.run.status = 'interrupted'; view.run.error = message; view.update();
+      }
     } finally { active = null; controls(); query.focus(); loadWorkspace(false); }
   }
 
