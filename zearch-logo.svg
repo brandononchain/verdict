@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 40" role="img" aria-labelledby="title">
+  <title id="title">Zearch</title>
+  <defs>
+    <linearGradient id="signal" x1="8" x2="33" y1="5" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7479c0"/>
+      <stop offset="1" stop-color="#9994c7"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 13h18L11 27h18" stroke="url(#signal)" stroke-width="2.4"/>
+    <path d="M7 17a14 14 0 0 1 24-7M33 23a14 14 0 0 1-24 7" stroke="#9c9bbd" stroke-width="1.35"/>
+  </g>
+  <text x="48" y="27" fill="#292a3b" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" letter-spacing="-1.2">zearch</text>
+</svg>
