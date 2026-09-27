@@ -1,5 +1,6 @@
 """Live grounded answer pipeline. No mock answers or client-supplied evidence."""
 import json
+import ipaddress
 import math
 import os
 import re
@@ -22,7 +23,11 @@ class Unavailable(Exception):
 
 def configuration():
     required = ["ZEARCH_SESSION_SECRET", "TYPESAFE_API_KEY", "TAVILY_API_KEY",
-                "ZEARCH_JEV_INPUT_USD_PER_MILLION", "ZEARCH_SEARCH_USD_PER_CALL"]
+                "ZEARCH_JEV_INPUT_USD_PER_MILLION", "ZEARCH_SEARCH_USD_PER_CALL",
+                "OPENAI_API_KEY", "ZEARCH_WRITER_MODEL", "ZEARCH_WRITER_INPUT_USD_PER_MILLION",
+                "ZEARCH_WRITER_OUTPUT_USD_PER_MILLION"]
+    if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') == '1':
+        required += ['CONTEXT_DEV_API_KEY', 'ZEARCH_SCRAPE_USD_PER_CALL']
     if os.environ.get("VERCEL"):
         required.append("DATABASE_URL")
     missing = [key for key in required if not os.environ.get(key)]
@@ -39,16 +44,22 @@ def ready():
 
 def rates():
     values = [Decimal(os.environ[key]) for key in (
-        'ZEARCH_JEV_INPUT_USD_PER_MILLION', 'ZEARCH_SEARCH_USD_PER_CALL')]
-    if any(not value.is_finite() or value <= 0 for value in values):
+        'ZEARCH_JEV_INPUT_USD_PER_MILLION', 'ZEARCH_SEARCH_USD_PER_CALL',
+        'ZEARCH_WRITER_INPUT_USD_PER_MILLION', 'ZEARCH_WRITER_OUTPUT_USD_PER_MILLION')]
+    if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') == '1':
+        values.append(Decimal(os.environ['ZEARCH_SCRAPE_USD_PER_CALL']))
+    else:
+        values.append(Decimal(0))
+    if any(not value.is_finite() or value <= 0 for value in values[:4]) or not values[4].is_finite() or values[4] < 0:
         raise Unavailable('Research pricing configuration is invalid')
     return values
 
 
 def reservation(depth='standard'):
-    jev_rate, search_rate = rates()
-    return math.ceil(MAX_INPUT_BYTES * jev_rate + search_rate *
-        (3 if depth == 'deep' else 1) * 1_000_000)
+    jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
+    # Two Jev judgments, one bounded draft, at most three page extractions.
+    return math.ceil(200_000 * jev_rate + 20_000 * writer_in +
+        900 * writer_out + (search_rate * (3 if depth == 'deep' else 1) + scrape_rate * 3) * 1_000_000)
 
 
 def limits():
@@ -82,6 +93,13 @@ def safe_url(url):
         p = urllib.parse.urlsplit(url)
         if p.scheme not in ("https", "http") or not p.hostname or p.username or p.password:
             return None
+        if p.port not in (None, 80, 443) or p.hostname.lower() in ('localhost', 'metadata.google.internal') or p.hostname.lower().endswith(('.local', '.internal')):
+            return None
+        try:
+            if not ipaddress.ip_address(p.hostname).is_global:
+                return None
+        except ValueError:
+            pass
         return urllib.parse.urlunsplit((p.scheme, p.netloc, p.path or "/", p.query, ""))
     except ValueError:
         return None
@@ -136,12 +154,17 @@ def search(query):
 
 
 def estimate(usage):
-    jev_rate, search_rate = rates()
+    jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     tokens = usage.get('input_tokens')
     calls = usage.get('search_calls', 1)
     if type(tokens) is not int or tokens < 0 or type(calls) is not int or calls < 1 or calls > 3:
         return None
-    return math.ceil(tokens * jev_rate + calls * search_rate * 1_000_000)
+    writer = usage.get('writer') or {}
+    wi, wo, scrape = writer.get('input_tokens', 0), writer.get('output_tokens', 0), usage.get('scrape_calls', 0)
+    if any(type(n) is not int or n < 0 for n in (wi, wo, scrape)) or scrape > 3:
+        return None
+    return math.ceil(tokens * jev_rate + wi * writer_in + wo * writer_out +
+                     (calls * search_rate + scrape * scrape_rate) * 1_000_000)
 
 
 def prepare(owner, body):
@@ -174,16 +197,38 @@ def run(owner, record, history):
                 source['n'] = n
         if not sources:
             raise Unavailable('No usable evidence was found. Try a more specific question.')
+        yield {'type': 'status', 'text': 'Reading sources'}
+        import enrichment
+        sources, enrich_report = enrichment.enrich(sources)
+        usage.update(enrich_report)
+        report.update(enrich_report)
         yield {'type': 'research', 'report': report}
         db.save(owner, rid, status="streaming", sources=sources)
         yield {"type": "sources", "sources": sources}
         yield {'type': 'status', 'text': 'Jev is judging the evidence'}
         import jev_research
         judgment, selected, model_usage, candidates = jev_research.judge(query, sources)
-        usage.update(model_usage)
+        usage['input_tokens'] = model_usage.get('input_tokens', 0)
         usage['judgment'] = judgment
-        usage['answer_format'] = 'source_excerpt_selected_by_jev'
         answer = jev_research.format_answer(judgment, selected, candidates, sources)
+        usage['answer_format'] = 'jev_selected_excerpt'
+        if judgment['gate'] == 'answer':
+            yield {'type': 'status', 'text': 'Writing from selected evidence'}
+            import writer
+            try:
+                draft, writer_usage = writer.compose(query, sources, judgment['evidence_ids'])
+                usage['writer'] = writer_usage
+                yield {'type': 'status', 'text': 'Jev is checking the draft'}
+                approved, check, check_usage = jev_research.verify(query, draft, sources, judgment['evidence_ids'])
+                usage['input_tokens'] += check_usage.get('input_tokens', 0)
+                usage['draft_check'] = check
+                if approved:
+                    answer = draft
+                    usage['answer_format'] = 'jev_verified_prose'
+                else:
+                    usage['draft_rejected'] = True
+            except (writer.WriterError, jev_research.JevError):
+                usage['draft_rejected'] = True
         yield {'type': 'delta', 'text': answer}
         cost = estimate(usage)
         db.save(owner, rid, status="complete", answer=answer, sources=sources, usage=usage, estimated_cost=cost)

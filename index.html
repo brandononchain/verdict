@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#212121" />
   <meta name="description" content="Zearch — a TypeSafe AI search computer. Explore the web through clear answers and inspectable evidence." />
   <meta property="og:title" content="Zearch — search with evidence" />
-  <meta property="og:description" content="Evidence-led research with Jev as the only AI model." />
+  <meta property="og:description" content="Evidence-led research. Jev judges, a writer explains, and Jev checks the answer." />
   <meta property="og:type" content="website" />
   <title>Zearch — search with evidence</title>
   <link rel="icon" href="./favicon.svg?v=double-loop" type="image/svg+xml" />
@@ -107,7 +107,7 @@
     <form method="dialog" class="sheet-body" id="settings-form">
       <header><h2>Settings</h2><button class="icon-btn" value="cancel" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
       <p>Research is private to this browser’s session. Session access expires after 30 days. Signing in and syncing across devices are planned.</p>
-      <p>Manage stored notes, searches and investigations in Your workspace. Clearing local shortcuts does not delete saved research. Notes selected for research are sent to the configured answer provider.</p>
+      <p>Manage stored notes, searches and investigations in Your workspace. Clearing local shortcuts does not delete saved research. With “Use my notes” on, selected excerpts are sent to Jev and the writing provider.</p>
       <footer><button class="solid-btn">Done</button></footer>
     </form>
   </dialog>
@@ -117,8 +117,8 @@
     <form method="dialog" class="sheet-body thesis">
       <header><h2>Search the web. <em>See the reasoning.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
       <p>A space for discovery.</p>
-      <p>Zearch searches the web. Jev selects relevant evidence and decides when the sources are sufficient. The interface shows source excerpts, typed judgments, and citations. Open the original sources for context.</p>
-      <p>Jev is the only AI model in the research path. It returns typed decisions rather than original prose. Answers shown here are excerpts from retrieved sources, selected by Jev.</p>
+      <p>Zearch searches the web. Jev selects relevant evidence and judges whether it can answer your question. A writing model composes short cited paragraphs; Jev checks them against the sources before you see them.</p>
+      <p>If a draft fails that check, Zearch shows the exact passage Jev selected. Open the original sources for context; a citation is a trail to evidence, not a guarantee.</p>
     </form>
   </dialog>
 
@@ -127,7 +127,7 @@
       <header><h2>Your workspace</h2><button class="icon-btn" id="workspace-close" aria-label="Close workspace">×</button></header>
       <p id="workspace-status" role="status"></p>
       <p class="hint">Private to this browser session. Account sync and paid plans are not enabled yet.</p>
-      <section><h3>Knowledge</h3><p class="hint">Add plain text notes or .txt/.md files. Selected excerpts go to the answer provider when “Use my notes” is on. Deleting a note does not erase answers already generated from it.</p>
+      <section><h3>Knowledge</h3><p class="hint">Add plain text notes or .txt/.md files. Selected excerpts go to Jev and the writing provider when “Use my notes” is on. Deleting a note does not erase answers already generated from it.</p>
         <form id="note-form"><label for="note-title">Title</label><input id="note-title" maxlength="120" required />
           <label for="note-body">Text</label><textarea id="note-body" maxlength="40000" rows="5" required></textarea>
           <label for="note-file">Or import a text file</label><input id="note-file" type="file" accept=".txt,.md,text/plain,text/markdown" />

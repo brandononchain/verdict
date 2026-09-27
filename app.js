@@ -282,6 +282,6 @@
     if (!response.ok) throw Error(); return response.json();
   }).then(data => {
     available = data.available;
-    notice.textContent = available ? '' : 'Jev research is being configured. Please check back shortly.'; controls();
+    notice.textContent = available ? '' : 'Research is being configured. Please check back shortly.'; controls();
   }).catch(() => { notice.textContent = 'Research is temporarily unavailable. Please try again later.'; });
 })();

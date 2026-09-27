@@ -2,7 +2,7 @@
 
 **A space for discovery.**
 
-An open-source Jev-only research engine with a monochrome conversational interface. Zearch retrieves public web evidence, asks TypeSafe's Jev typed questions about it, and displays a selected source passage with a citation or abstains. Jev is the only AI model in the research path. It does not generate prose. See [the architecture](docs/JEV_ONLY.md), [delivery gates](docs/DELIVERY.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
+An open-source Jev-guided research engine with a monochrome conversational interface. Zearch retrieves web evidence, Jev selects passages and judges sufficiency, an OpenAI writer composes cited paragraphs, and Jev checks them before release. See [the architecture](docs/JEV_ONLY.md), [delivery gates](docs/DELIVERY.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
 
 ## Local setup
 
@@ -19,17 +19,17 @@ Open http://localhost:8765. SQLite is for local development. The application doe
 
 ## Hosted activation
 
-Vercel Python Functions serve `/api/research`. Add a pooled PostgreSQL `DATABASE_URL`, a random `ZEARCH_SESSION_SECRET` of at least 32 characters, `TAVILY_API_KEY`, `TYPESAFE_API_KEY`, `JEV_MODEL` (defaults to `jev-latest`), and current pricing inputs in `.env.example`. Configure Preview and Production separately. Apply `python research_store.py` from a trusted environment with that database URL. Then enable `ZEARCH_RESEARCH_ENABLED=1` and redeploy.
+Vercel Python Functions serve `/api/research`. Add a pooled PostgreSQL `DATABASE_URL`, a random `ZEARCH_SESSION_SECRET` of at least 32 characters, `TAVILY_API_KEY`, `TYPESAFE_API_KEY`, `OPENAI_API_KEY`, `ZEARCH_WRITER_MODEL`, `JEV_MODEL` (defaults to `jev-latest`), and current pricing inputs in `.env.example`. Configure Preview and Production separately. Apply `python research_store.py` from a trusted environment with that database URL. Set `ZEARCH_ENRICHMENT_ENABLED=1` only with a server-side `CONTEXT_DEV_API_KEY` and scrape price. Then enable `ZEARCH_RESEARCH_ENABLED=1` and redeploy.
 
 GET `/api/research` reports configuration/database readiness, not provider health. Apply provider spending caps too. A live canary must ask factual, ambiguous and unsupported questions, open citations, follow up, reload a saved answer and verify another browser cannot read it. Human review should check whether Jev's chosen excerpt actually supports the query. Provider calls, PostgreSQL behavior and live quality have not yet been verified.
 
 ## Features in the current release
 
-Search uses one web query; Deep research makes up to three bounded query variations. Code ranks candidates lexically and removes duplicate sources. Jev chooses a passage and judges evidence sufficiency/conflict in a single typed request. Answers are exact excerpts selected by Jev, not original multi-source essays. Follow-ups use previous questions for retrieval; private notes are sent to Jev only when “Use my notes” is selected.
+Search uses one web query; Deep research makes up to three bounded query variations. Code ranks and deduplicates sources. Optional Context.dev extraction enriches up to three pages when configured. Jev selects passages and judges sufficiency/conflict, the writer drafts up to three cited paragraphs, and Jev checks each paragraph. A failed check returns the exact selected excerpt. Follow-ups use previous questions for retrieval; private notes are sent to Jev only when “Use my notes” is selected.
 
 Your workspace supports owner-scoped saved answers and deletion, 20 plain-text notes (up to 40,000 characters each), `.txt`/`.md` imports, investigations and daily usage display. Deleting a note does not erase existing answers containing an excerpt from it; delete those separately. A signed HttpOnly browser cookie expires after 30 days. Cross-device accounts, rich document extraction, retention automation and billing remain outstanding. Anonymous limits can be reset by clearing cookies, so keep global and provider caps enabled.
 
-The answer renderer supports safe headings, lists, code, bounded tables and expandable Details. HTML and model-authored links are not executed. Jev's selected answer is short; source cards provide more evidence.
+The answer renderer supports safe headings, lists, code, bounded tables and expandable Details. HTML and model-authored links are not executed. Source cards provide the underlying evidence. Jev support probabilities do not prove the answer is true.
 
 ## Discovery worker
 
@@ -43,9 +43,9 @@ Install a recurring external invocation of `python discovery.py` with the same d
 python -m unittest discover -s tests -v
 node tests/renderer.test.js
 node --check app.js
-python -m py_compile research.py jev_research.py research_store.py discovery.py
+python -m py_compile research.py jev_research.py writer.py enrichment.py research_store.py discovery.py
 ```
 
-Tests use isolated SQLite and a mocked **typed Jev response**; no paid calls occur. `python evals/run.py` lists review cases without provider calls. `python evals/run.py --execute --limit 3 --depth deep` explicitly incurs provider costs through normal budgets and persists results. Human scoring is required. `python usage_report.py` reports aggregate estimated cost and latency of retained runs only; it is not a billing ledger.
+Tests use isolated SQLite and mocked provider responses; no paid calls occur. `python evals/run.py` lists review cases without provider calls. `python evals/run.py --execute --limit 3 --depth deep` explicitly incurs provider costs through normal budgets and persists results. Human scoring is required. `python usage_report.py` reports aggregate estimated cost and latency of retained runs only; it is not a billing ledger.
 
 Disable `ZEARCH_RESEARCH_ENABLED` to halt new research; disable `ZEARCH_DISCOVERY_ENABLED` to stop new worker claims. Schema creation is additive; rolling back code does not erase stored records. Pricing hypotheses are not purchasable plans.

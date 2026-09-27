@@ -22,7 +22,7 @@ def raw(choice='1', enough=.91, conflict=.02):
 class JevResearchTests(unittest.TestCase):
     def test_only_typed_question_payload(self):
         state, questions, candidates = jev.state_and_questions('How do solar panels work?', SOURCES)
-        self.assertEqual(set(questions), {'best_passage','sufficient','conflict'})
+        self.assertEqual(set(questions), {'best_passage','sufficient','conflict','relevant_1','relevant_2'})
         self.assertEqual(questions['best_passage']['type'],'choice')
         self.assertIn('none', questions['best_passage']['criteria'])
         self.assertNotIn('messages',state)
