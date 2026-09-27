@@ -1,5 +1,6 @@
 """Typed judgment and confidence gate endpoint."""
 import json
+import os
 from http.server import BaseHTTPRequestHandler
 
 import server
@@ -7,6 +8,8 @@ import server
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        if os.environ.get("VERCEL"):
+            return self._json(410, {"error": "The hosted decision prototype is retired. Use /api/research."})
         try:
             length = int(self.headers.get("Content-Length") or 0)
             if length > 200_000:

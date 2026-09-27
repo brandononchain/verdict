@@ -6,7 +6,7 @@ An open-source research interface with a locked monochrome identity. The new res
 
 ## Current release
 
-M1 foundation is implemented. Live activation requires server configuration and database migration. M2–M5 are planned, not claimed complete. See [delivery gates](docs/DELIVERY.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
+M1 foundation and working M2–M5 increments are implemented: bounded deep retrieval, private text knowledge, structured answer rendering, and durable discovery jobs. Live activation requires server configuration and database migration. Full milestone acceptance, accounts and paid billing remain outstanding. See [delivery gates](docs/DELIVERY.md), [business model](docs/MONETIZATION.md), and [brand](BRAND.md).
 
 ## Local setup
 
@@ -34,6 +34,7 @@ Run a live canary after configuration: ask a factual question, open a citation, 
 ```sh
 python -m unittest discover -s tests -v
 node --check app.js
+node tests/renderer.test.js
 python -m py_compile research.py research_http.py research_store.py server.py
 ```
 
@@ -41,6 +42,25 @@ Tests use isolated SQLite and mocked providers. No paid provider requests occur 
 
 ## Data and access
 
-Runs are scoped to a signed HttpOnly browser-session cookie. Its access expires after 30 days; records are not automatically deleted. Local history stores only IDs and questions. Clearing history removes local shortcuts, not server data. Cross-device accounts, deletion UI, retention automation and uploads belong to M3. Do not accept sensitive uploads in this beta. Keep ZEARCH_RESEARCH_ENABLED=0 until operational configuration is complete.
+Runs are scoped to a signed HttpOnly browser-session cookie. Its access expires after 30 days; records are not automatically deleted. Local history stores only IDs and questions. Clearing history removes local shortcuts, not server data. The workspace supports owner-scoped deletion and .txt/.md imports (40,000 characters, 20 notes). Selecting Use my notes sends relevant snippets to the configured model. Deleting a note does not erase existing generated answers; delete those separately. Cross-device accounts, rich document extraction, and retention automation remain outstanding. Keep ZEARCH_RESEARCH_ENABLED=0 until operational configuration is complete.
 
-To roll back research availability, set ZEARCH_RESEARCH_ENABLED=0 and redeploy. Schema creation is additive; reverting code does not delete records. The old `/api/decide` and `/api/search` endpoints retain prototype behavior and must not be mistaken for this production research contract.
+To roll back research availability, set ZEARCH_RESEARCH_ENABLED=0 and redeploy. Schema creation is additive; reverting code does not delete records. The old `/api/decide` endpoint returns 410 on Vercel so the legacy path cannot bypass research budgets. Local typed-decision code and `/api/search` remain prototype code, separate from the research contract.
+
+## M2–M5 increment
+
+- Search / Deep research selects one or three bounded provider searches. Ranking uses lexical BM25, URL/content deduplication and domain diversity. This is not neural reranking or automatic claim verification.
+- Your workspace lists saved answers, private text notes, investigations and daily run usage. Ownership uses the signed browser session; account sync is not implemented.
+- Answer rendering supports safe headings, lists, code, bounded tables and expandable Details. Model-authored HTML and arbitrary links are not executed.
+- Save investigation on a completed answer. Refresh jobs search the saved question against the public web without conversation context or private notes. Diffing compares retrieved source text, not factual truth.
+
+Re-run `python research_store.py` before activating this release; schema additions are idempotent and work with existing M1 records. Until migrated, readiness fails closed.
+
+## Discovery worker
+
+Install a recurring external invocation of `python discovery.py` with the same database, secret, provider and pricing environment as production; then set ZEARCH_DISCOVERY_ENABLED=1 on both worker and web deployment. Each invocation schedules due investigations and executes at most one queued job. Invoke every minute; add bounded worker capacity only after observing throughput/cost. This release does not provision a scheduler or send notifications.
+
+Daily/weekly schedules expire 29 days after creation, so anonymous schedules cannot run indefinitely. Pause cancels queued work; active work finishes. Five-minute leases prevent competing workers from claiming the same job. Expired leases become failed and require an explicit refresh; uncertain paid calls are never automatically repeated. The worker also reconciles research stuck for over ten minutes. All calls use the same global/session budget reservation as interactive research.
+
+## Evaluation and economics
+
+`python evals/run.py` lists cases without provider calls. `python evals/run.py --execute --limit 3 --depth deep` explicitly runs paid evaluations through normal budgets and persists results. Human review of claim support and usefulness is required; no quality score is synthesized by the runner. `python usage_report.py` outputs aggregate cost/latency for retained runs only, without prompts or private notes. Deleted runs are absent from this diagnostic report; this is not a financial ledger.
