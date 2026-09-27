@@ -1,34 +1,40 @@
-# Zearch brand direction
+# Zearch — approved brand identity
 
-## Visual thesis
+Status: **LOCKED — approved by Brandon on September 27, 2026.**
 
-Zearch is a quiet, editorial search computer: crisp and inspectable in use, with a sense of scale and possibility in its surrounding atmosphere.
+## Source of truth
+The approved concept is the double-loop identity board shown in this conversation: two connected rounded loops, lowercase wordmark, and monochrome celestial campaign imagery. Source image: exec-b4506059-09c5-426a-966f-f495626b96eb.png.
+These SVGs are the scalable production interpretation of that approved concept. Preserve this identity in future work; new concepts require an explicit request.
 
-## Identity
+## Symbol
+Two balanced rounded loops intersect to form a central lens: intersecting perspectives and discovery. Keep their proportions, common stroke weight, connected crossings, and generous inner spaces. No Z monogram, floating dots, orbital embellishments, detached pieces, or added symbols.
 
-- **Wordmark:** lowercase `zearch` in a compact modern sans, with tight spacing and a calm weight.
-- **Mark:** one connected, filled Z silhouette with rounded terminals. Keep it a single solid shape. Do not add orbits, dots, apertures, stars, internal strokes, or detached pieces.
-- **Voice:** precise, direct, curious, and honest about uncertainty. Describe demonstrated search and evidence features; do not claim AGI or guaranteed correctness.
-- **Photography:** cinematic horizons, cloud layers, and distant light. Keep imagery low contrast behind the product so it supports focus rather than becoming a wallpaper.
+## Wordmark
+Lowercase **zearch**, regular-weight contemporary sans, lightly tightened spacing. Product font: Geist, with Inter/Arial fallbacks. SVG lockups use live text and require these fonts for identical typography; the symbol itself is font-independent.
 
-## Color
+## Palette
+- Charcoal: #212121 — primary canvas
+- Graphite: #2B2B2B — surfaces
+- Off-white: #ECECEC — symbol, wordmark, primary text
+- Neutral gray: #9A9A9A — secondary text
+Use monochrome identity colors. Functional warning/success colors may communicate status.
 
-| Token | Value | Use |
-|---|---|---|
-| Night | `#17191F` | Navigation rail and icon background |
-| Carbon | `#212121` | Main search surface |
-| Graphite | `#2B2B2B` | Composer and raised surfaces |
-| Chalk | `#ECECEC` | Primary text and wordmark |
-| Horizon blue | `#26364D` | Image atmosphere |
-| Dusk lavender | `#7370B3` | Subtle focus and border accents |
-| Dawn amber | `#D49B69` | Natural highlight in imagery only |
+## Voice and copy
+**A space for discovery.**
+Campaign line: **Follow your curiosity.**
+Domain direction: **zearch.computer** (does not imply registration or DNS setup).
+Clear, curious, restrained. Describe the actual search engine capabilities accurately.
 
-Use neutral solid surfaces for structure. Gradients may appear on primary action controls and hairline focus borders. Avoid neon, coins, chrome, particles, glowing emblems, generic AI symbols, and decorative icon containers.
+## Imagery
+Cinematic monochrome landscapes, celestial scale, mist, distant horizons, human curiosity. Keep the logo flat and crisp. Atmosphere belongs in campaign imagery, with generous space and quiet typography.
 
-## Files
+## Usage
+Use a minimum clear space of one stroke width around the symbol. Prefer 24px or larger in UI. Use the same geometry in favicon, app tile, wordmark lockups and campaigns. Do not stretch, rotate, add effects, or substitute prior marks.
 
-- `zearch-mark.svg` — single connected Z silhouette
-- `zearch-app-icon.svg` and `favicon.svg` — the mark on a charcoal tile
-- `zearch-logo.svg` — mark and wordmark for dark surfaces
-- `zearch-wordmark-light.svg` — matching light-surface lockup
-- `assets/zearch-horizon.jpg` — subdued atmospheric homepage background
+## Assets
+- zearch-mark.svg — off-white symbol, transparent
+- zearch-mark-dark.svg — charcoal symbol, transparent
+- zearch-app-icon.svg — charcoal app tile
+- favicon.svg — matching browser icon
+- zearch-logo.svg — dark-surface horizontal lockup
+- zearch-wordmark-light.svg — light-surface horizontal lockup
