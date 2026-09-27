@@ -9,7 +9,8 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-STOP = set('a an the is are was were of to in on for and or what which how does do with by from'.split())
+STOP = set('a an the is are was were of to in on for and or what which how does do with by from '
+           'can could would will you your me my i it this that tell give find show please currently now'.split())
 
 
 def tokens(text):

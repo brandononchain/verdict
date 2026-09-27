@@ -137,7 +137,11 @@ def search(query):
         if not isinstance(row, dict):
             continue
         url = safe_url(row.get("url"))
-        content = row.get("raw_content") or row.get("content") or ""
+        snippet = row.get("content") or ""
+        raw_content = row.get("raw_content") or ""
+        # The provider's focused snippet often contains the answer while page
+        # extraction begins with navigation, cookie banners, and unrelated text.
+        content = (snippet + "\n" + raw_content) if isinstance(snippet, str) and isinstance(raw_content, str) else ""
         if not url or url in seen or not isinstance(content, str) or not content.strip():
             continue
         seen.add(url)
@@ -237,19 +241,26 @@ def run(owner, record, history):
         usage['judgment'] = judgment
         answer = jev_research.format_answer(judgment, selected, candidates, sources)
         usage['answer_format'] = 'jev_selected_excerpt'
-        if judgment['gate'] == 'answer':
+        # A single 180-character passage can fail Jev's first sufficiency gate
+        # even when the full retrieved snippets support a concise answer. Let
+        # the writer try those sources, but publish only after Jev verifies its
+        # actual paragraphs against the cited full evidence.
+        draft_ids = judgment['evidence_ids'] if judgment['gate'] == 'answer' else (
+            [source['n'] for source in sources[:4]] if judgment['gate'] == 'abstain' else [])
+        if draft_ids:
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
             try:
-                draft, writer_usage = writer.compose(query, sources, judgment['evidence_ids'])
+                draft, writer_usage = writer.compose(query, sources, draft_ids)
                 usage['writer'] = writer_usage
                 yield {'type': 'status', 'text': 'Jev is checking the draft'}
-                approved, check, check_usage = jev_research.verify(query, draft, sources, judgment['evidence_ids'])
+                approved, check, check_usage = jev_research.verify(query, draft, sources, draft_ids)
                 usage['input_tokens'] += check_usage.get('input_tokens', 0)
                 usage['draft_check'] = check
                 if approved:
                     answer = draft
                     usage['answer_format'] = 'jev_verified_prose'
+                    usage['draft_source_ids'] = draft_ids
                 else:
                     usage['draft_rejected'] = True
             except (writer.WriterError, jev_research.JevError):
