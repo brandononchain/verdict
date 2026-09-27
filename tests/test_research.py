@@ -86,6 +86,27 @@ class ResearchTests(unittest.TestCase):
         saved=db.get_run('alice',run['id'])
         self.assertEqual(saved['usage']['answer_format'],'jev_selected_excerpt')
         self.assertTrue(saved['usage']['draft_rejected'])
+    def test_first_pass_abstain_can_recover_with_verified_prose(self):
+        run,_=self.reserve()
+        abstain={'selected':None,'selected_probability':.7,'sufficiency_probability':.4,
+                 'conflict_probability':.1,'gate':'abstain','evidence_ids':[],'model':'jev-test'}
+        with self.pipeline(), patch.object(jev,'judge',return_value=(abstain,None,{'input_tokens':10},[])):
+            list(r.run('alice',run,[]))
+        saved=db.get_run('alice',run['id'])
+        self.assertEqual(saved['usage']['answer_format'],'jev_verified_prose')
+        self.assertEqual(saved['usage']['draft_source_ids'],[1])
+        self.assertIn('[1]',saved['answer'])
+
+    def test_unverified_abstain_stays_abstained(self):
+        run,_=self.reserve()
+        abstain={'selected':None,'selected_probability':.7,'sufficiency_probability':.4,
+                 'conflict_probability':.1,'gate':'abstain','evidence_ids':[],'model':'jev-test'}
+        with self.pipeline(), patch.object(jev,'judge',return_value=(abstain,None,{'input_tokens':10},[])), \
+             patch.object(jev,'verify',return_value=(False,{'probabilities':[.1]},{'input_tokens':5})):
+            list(r.run('alice',run,[]))
+        saved=db.get_run('alice',run['id'])
+        self.assertIn('could not find a passage',saved['answer'])
+        self.assertTrue(saved['usage']['draft_rejected'])
     def test_cookie_tamper(self):
         owner,cookie=http.identity({},True);self.assertEqual(http.identity({'Cookie':cookie})[0],owner)
         self.assertIsNone(http.identity({'Cookie':cookie.replace('zearch_session=','zearch_session=a')})[0])
@@ -130,6 +151,19 @@ class ResearchTests(unittest.TestCase):
         with patch.dict(os.environ, {'ZEARCH_WRITER_MODEL':'gpt-5.4-mini'}, clear=False):
             with patch.dict(os.environ, {'ZEARCH_SEARCH_USD_PER_CALL':'', 'ZEARCH_WRITER_INPUT_USD_PER_MILLION':''}):
                 self.assertEqual(r.rates()[1:3], [Decimal('0.008'), Decimal('0.75')])
+
+    def test_search_keeps_focused_snippet_ahead_of_page_chrome(self):
+        import io, json
+        result={'results':[{'url':'https://example.com/fact','title':'Fact',
+                            'content':'The answer is 42.',
+                            'raw_content':'Navigation menu. ' * 400}]}
+        class Response(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self,*args): self.close()
+        with patch.dict(os.environ,{'TAVILY_API_KEY':'test'}), \
+             patch.object(r,'open_provider',return_value=Response(json.dumps(result).encode())):
+            sources=r.search('What is the answer?')
+        self.assertTrue(sources[0]['text'].startswith('The answer is 42.'))
 
     def test_fresh_market_quote_skips_web_and_is_saved(self):
         import market_data

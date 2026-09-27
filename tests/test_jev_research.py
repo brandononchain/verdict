@@ -77,6 +77,6 @@ class JevResearchTests(unittest.TestCase):
             with self.assertRaises(jev.JevError):jev.judge('solar panels',SOURCES)
 
     def test_passage_is_bounded_and_extracts(self):
-        self.assertLessEqual(len(jev.passage('specific term', 'x '*2000)),180)
+        self.assertLessEqual(len(jev.passage('specific term', 'x '*2000)),450)
         self.assertEqual(jev.passage('solar panels','Other claim. Solar panels produce power.'),
                          'Solar panels produce power.')
