@@ -21,7 +21,7 @@ Limits: source identifiers are validated, but entailment is not. Retrieved pages
 
 These increments are executable and tested with isolated SQLite and provider fixtures. They do not establish production readiness. Readiness requires the additive migration and provider configuration; schedules remain hidden until ZEARCH_DISCOVERY_ENABLED=1. No external notifications are sent.
 
-Validation: 29 Python tests plus Node renderer tests cover quotas, private data, HTTP streaming/reload, concurrent scheduling/claiming, worker completion, stale leases, unsafe-link handling, and parsing. PostgreSQL and paid-provider integration are explicitly unverified. Run the evaluation harness with --execute only when ready to incur the configured provider costs.
+Validation: 30 Python tests plus Node renderer tests cover quotas, private data, HTTP streaming/reload, concurrent scheduling/claiming, worker completion, stale leases, unsafe-link handling, and parsing. PostgreSQL and paid-provider integration are explicitly unverified. Run the evaluation harness with --execute only when ready to incur the configured provider costs.
 
 ## Milestone gates
 

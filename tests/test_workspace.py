@@ -35,6 +35,16 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue(workspace.delete_note('alice', note['id']))
         self.assertEqual(workspace.knowledge('alice', 'project budget'), [])
 
+    def test_private_text_never_enters_search_query(self):
+        workspace.add_note('alice','Budget','Confidential budget amount is 500 credits.')
+        source={'n':1,'url':'https://example.com/','text':'Public budget evidence','title':'Source','domain':'example.com'}
+        for use_notes in (False,True):
+            with self.subTest(use_notes=use_notes),patch.dict(os.environ,{'ZEARCH_MODEL':'test'}),patch.object(research,'ready',return_value=True),patch.object(research,'search',return_value=[source]) as search,patch.object(research,'stream_model',return_value=iter([('delta','Answer [1]')])) as model:
+                run,fresh,history=research.prepare('alice',{'query':'budget','request_id':uuid.uuid4().hex,'use_knowledge':use_notes})
+                list(research.run('alice',run,history))
+                self.assertNotIn('Confidential',str(search.call_args))
+                self.assertEqual('Confidential' in str(model.call_args),use_notes)
+
     def test_note_limits_atomic(self):
         def add(n):
             try: workspace.add_note('alice',str(n),'text'); return 1

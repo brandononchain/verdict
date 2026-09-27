@@ -44,7 +44,7 @@ Tests use isolated SQLite and mocked providers. No paid provider requests occur 
 
 Runs are scoped to a signed HttpOnly browser-session cookie. Its access expires after 30 days; records are not automatically deleted. Local history stores only IDs and questions. Clearing history removes local shortcuts, not server data. The workspace supports owner-scoped deletion and .txt/.md imports (40,000 characters, 20 notes). Selecting Use my notes sends relevant snippets to the configured model. Deleting a note does not erase existing generated answers; delete those separately. Cross-device accounts, rich document extraction, and retention automation remain outstanding. Keep ZEARCH_RESEARCH_ENABLED=0 until operational configuration is complete.
 
-To roll back research availability, set ZEARCH_RESEARCH_ENABLED=0 and redeploy. Schema creation is additive; reverting code does not delete records. The old `/api/decide` and `/api/search` endpoints retain prototype behavior and must not be mistaken for this production research contract.
+To roll back research availability, set ZEARCH_RESEARCH_ENABLED=0 and redeploy. Schema creation is additive; reverting code does not delete records. The old `/api/decide` endpoint returns 410 on Vercel so the legacy path cannot bypass research budgets. Local typed-decision code and `/api/search` remain prototype code, separate from the research contract.
 
 ## M2–M5 increment
 
