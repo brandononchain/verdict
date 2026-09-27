@@ -1,33 +1,34 @@
-# Zearch brand system
+# Zearch brand direction
 
-## Idea
+## Visual thesis
 
-**A clear signal through the noise.** Zearch turns web evidence into a readable answer, then makes the source trail and confidence easy to inspect.
+Zearch is a quiet, editorial search computer: crisp and inspectable in use, with a sense of scale and possibility in its surrounding atmosphere.
 
 ## Identity
 
-- **Wordmark:** lowercase `zearch`, set in Geist Sans at medium weight with tight, calm spacing.
-- **Mark:** a geometric Z set between two interrupted aperture strokes. The diagonal reads as a path; the small endpoint dot marks a source.
+- **Wordmark:** lowercase `zearch` in Instrument Serif, used as a restrained editorial signature. In product UI, use the matching font with a Georgia fallback.
+- **Icon:** a single lowercase italic `z` in warm ivory on a charcoal tile. Do not add orbits, nodes, apertures, stars, or a badge-like frame around the mark.
 - **Voice:** precise, direct, curious, and honest about uncertainty. Describe demonstrated search and evidence features; do not claim AGI or guaranteed correctness.
+- **Photography:** cinematic horizons, cloud layers, and distant light. Keep imagery low contrast behind the product so it supports focus rather than becoming a wallpaper.
 
 ## Color
 
 | Token | Value | Use |
 |---|---|---|
-| Instrument | `#171717` | Navigation rail |
+| Night | `#17191F` | Navigation rail and icon background |
 | Carbon | `#212121` | Main search surface |
 | Graphite | `#2B2B2B` | Composer and raised surfaces |
-| Chalk | `#ECECEC` | Primary text on dark surfaces |
-| Signal lavender | `#D7D1FF` | Mark and focused states |
-| Signal blue | `#A8D0E8` | Mark endpoint and restrained gradient finish |
-| Quiet violet | `#7370B3` | Light-surface mark variant |
+| Chalk | `#ECECEC` | Primary text and wordmark |
+| Horizon blue | `#26364D` | Image atmosphere |
+| Dusk lavender | `#7370B3` | Subtle focus and border accents |
+| Dawn amber | `#D49B69` | Natural highlight in imagery only |
 
-Keep gradients inside the signal mark and primary search action. Use solid neutral surfaces for structure. Avoid neon, coins, chrome, particles, and glow effects.
+Use neutral solid surfaces for structure. Gradients may appear on primary action controls and hairline focus borders. Avoid neon, coins, chrome, particles, glowing emblems, generic AI symbols, and decorative icon containers.
 
 ## Files
 
-- `zearch-mark.svg` — transparent primary mark for dark surfaces
-- `zearch-app-icon.svg` — dark square app icon
-- `zearch-logo.svg` — dark wordmark lockup
-- `zearch-wordmark-light.svg` — light-surface wordmark lockup
-- `favicon.svg` — browser tab icon
+- `zearch-mark.svg` — lowercase type mark
+- `zearch-app-icon.svg` and `favicon.svg` — restrained lowercase `z` icon
+- `zearch-logo.svg` — dark-surface wordmark
+- `zearch-wordmark-light.svg` — light-surface wordmark
+- `assets/zearch-horizon.jpg` — subdued atmospheric homepage background
