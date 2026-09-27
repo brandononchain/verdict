@@ -333,6 +333,24 @@
   }
 
   async function route() {
+    const shared = location.hash.match(/^#s\/([\w-]+)$/);
+    if (shared) {
+      try {
+        const base64 = shared[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+        const decoded = new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)));
+        const v = JSON.parse(decoded);
+        if (!v?.id || !v?.policy || !Array.isArray(v.sources)) throw new Error("invalid share");
+        state.current = v.id;
+        state.cache[v.id] = v;
+        showThread();
+        els.thread.replaceChildren(renderTurn(v));
+        els.share.classList.remove("hidden");
+        setCrumb(v.query);
+        els.feed.scrollTop = 0;
+        return;
+      } catch { toast("This share link is invalid"); return newSearch(); }
+    }
     const m = location.hash.match(/^#v\/([\w-]+)$/);
     if (!m) return newSearch();
     const id = m[1];
@@ -371,8 +389,13 @@
     catch { toast("Copy failed — clipboard blocked"); }
   }
   function share(v) {
-    const id = v?.id || state.current;
-    if (id) copy(`${location.origin}${location.pathname}#v/${id}`, "Share link copied");
+    const result = v || state.cache[state.current];
+    if (!result) return;
+    const bytes = new TextEncoder().encode(JSON.stringify(result));
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const payload = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    copy(`${location.origin}${location.pathname}#s/${payload}`, "Share link copied");
   }
   function openRail() { els.shell.classList.add("rail-open"); }
   function closeRail() { els.shell.classList.remove("rail-open"); }
