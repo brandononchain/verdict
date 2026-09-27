@@ -124,10 +124,14 @@ def open_provider(url, payload, key, timeout=20):
 
 
 def search(query):
-    with open_provider("https://api.tavily.com/search", {
-        "query": query[:4000], "search_depth": "basic", "max_results": 6,
-        "include_answer": False, "include_raw_content": "text",
-    }, os.environ["TAVILY_API_KEY"]) as response:
+    import retrieval
+    payload = {"query": query[:4000], "search_depth": "basic", "max_results": 8,
+               "include_answer": False, "include_raw_content": "text",
+               "include_published_date": True}
+    preferred = retrieval.primary_domains(query)
+    if preferred:
+        payload.update(include_domains=preferred, include_domains_mode='prefer')
+    with open_provider("https://api.tavily.com/search", payload, os.environ["TAVILY_API_KEY"]) as response:
         raw = response.read(2_000_001)
         if len(raw) > 2_000_000:
             raise Unavailable("Search response exceeded its size limit")
@@ -154,8 +158,10 @@ def search(query):
                         "domain": urllib.parse.urlsplit(url).hostname,
                         "text": text, "excerpt": text[:450],
                         "retrieved_at": int(time.time()),
+                        "published_date": str(row.get('published_date') or '')[:80],
+                        "provider_score": row.get('score'),
                         "content_type": "page" if row.get("raw_content") else "snippet"})
-        if len(sources) == 6:
+        if len(sources) == 8:
             break
     if not sources:
         raise Unavailable("No usable sources were returned. Try a more specific question.")

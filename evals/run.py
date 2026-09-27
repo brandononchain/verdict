@@ -15,7 +15,7 @@ import uuid
 parser = argparse.ArgumentParser()
 parser.add_argument('--execute', action='store_true')
 parser.add_argument('--limit', type=int, default=3)
-parser.add_argument('--depth', choices=['standard','deep'], default='standard')
+parser.add_argument('--depth', choices=['standard','deep','compare'], default='standard')
 args = parser.parse_args()
 cases = json.loads(Path(__file__).with_name('questions.json').read_text())[:max(0,min(20,args.limit))]
 for case in cases:

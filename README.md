@@ -29,6 +29,8 @@ Search uses one web query; Deep research makes three bounded queries for primary
 
 Current BTC-USD price questions use a fresh Coinbase Exchange last-trade ticker with a timestamp and source citation. The numeric quote is rendered directly from validated structured data; it is not a Jev or writer estimate. A stale or unreachable ticker returns an explicit unavailable message rather than an old web-page price. The quote is venue-specific and can differ across exchanges.
 
+For covered technical and science topics, search prefers the publisher's own domain while still allowing independent results. Ranking combines query coverage, provider score and a bounded primary-source boost; the matched domain list is deliberately auditable and incomplete. Jev's paragraph verification sees only the evidence actually cited in that paragraph. Source presence and automated support judgments do not replace human review of citation quality.
+
 Your workspace supports owner-scoped saved answers and deletion, 20 plain-text notes (up to 40,000 characters each), `.txt`/`.md` imports, investigations and daily usage display. Deleting a note does not erase existing answers containing an excerpt from it; delete those separately. A signed HttpOnly browser cookie expires after 30 days. Cross-device accounts, rich document extraction, retention automation and billing remain outstanding. Anonymous limits can be reset by clearing cookies, so keep global and provider caps enabled.
 
 The answer renderer supports safe headings, lists, code, bounded tables and expandable Details. HTML and model-authored links are not executed. Source cards provide the underlying evidence. Jev support probabilities do not prove the answer is true.
