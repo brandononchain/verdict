@@ -25,9 +25,8 @@
   const els = {
     shell: $("#shell"), stage: $(".stage"), feed: $("#feed"), empty: $("#empty"), thread: $("#thread"),
     starters: $("#starters"), history: $("#history"), crumbs: $("#crumbs"),
-    form: $("#composer"), q: $("#query"), pb: $("#playbook"), decide: $("#decide"), gateHint: $("#gate-hint"),
-    modeChip: $("#mode-chip"),
-    share: $("#share-btn"), toast: $("#toast"),
+    form: $("#composer"), q: $("#query"), pb: $("#playbook"), decide: $("#decide"),
+    share: $("#share-btn"), toast: $("#toast"), fineprint: $(".fineprint"), dock: $(".dock-inner"),
     settings: $("#settings"), thesis: $("#thesis"), endpoint: $("#endpoint"), key: $("#api-key"),
     threshold: $("#threshold"), thresholdVal: $("#threshold-val"), keyHint: $("#key-hint"),
   };
@@ -44,10 +43,9 @@
 
 
   const STARTERS = [
-    { pb: "invest", q: "Should we list this RWA token on a CEX this quarter?" },
-    { pb: "risk", q: "Let an agent auto-approve refunds under $200 for accounts with prior chargebacks?" },
-    { pb: "triage", q: "Customer says the API has returned 502 errors for three days and wants a refund." },
-    { pb: "compare", q: "Arbitrum vs Base for launching a consumer app this year?" },
+    { pb: "invest", label: "Research a decision", q: "Should our team build this feature now or wait?" },
+    { pb: "risk", label: "Assess a risk", q: "Should we approve this request or send it for review?" },
+    { pb: "compare", label: "Compare options", q: "Compare two options for my use case." },
   ];
 
   // ───────────────────────── boot
@@ -64,8 +62,8 @@
     renderPlaybooks();
     renderStarters();
     renderHistory();
-    renderMode();
     bind();
+    homeComposer();
     route();
   }
 
@@ -76,31 +74,23 @@
       els.pb.append(h("option", { value: id }, pb.name));
     }
     els.pb.value = state.settings.playbook;
-    renderGateHint();
   }
 
   function setPlaybook(id) {
     state.settings.playbook = id;
     store(LS.settings, state.settings);
     els.pb.value = id;
-    renderGateHint();
   }
 
   function thresholdFor(id) {
     return state.settings.threshold ?? state.playbooks[id]?.threshold ?? 0.7;
   }
 
-  function renderGateHint() {
-    const pb = state.playbooks[state.settings.playbook];
-    if (!pb) return;
-    els.gateHint.textContent = `act ≥ ${pct(thresholdFor(state.settings.playbook))} · min ${pb.min_sources} src · ${Object.keys(pb.questions).length} questions`;
-  }
-
   function renderStarters() {
     els.starters.replaceChildren(...STARTERS.map((s, i) => h("button", {
       type: "button", class: "starter", style: `animation-delay:${120 + i * 70}ms`,
       onclick: () => { setPlaybook(s.pb); els.q.value = s.q; autosize(); run(); },
-    }, h("small", {}, state.playbooks[s.pb]?.name || s.pb), h("span", {}, s.q))));
+    }, h("span", { class: "starter-label" }, s.label), h("span", { class: "starter-prompt" }, s.q))));
   }
 
   function renderHistory() {
@@ -117,75 +107,65 @@
     }
   }
 
-  function renderMode() {
-    const ep = state.settings.endpoint;
-    let label, live = false;
-    if (ep === "auto") { live = state.serverKey; label = live ? "typesafe · server key" : "mock engine"; }
-    else if (ep === "mock") label = "mock engine";
-    else { live = !!(state.serverKey || state.settings.key); label = `${ep} · ${live ? "live" : "no key"}`; }
-    els.modeChip.classList.toggle("live", live);
-    els.modeChip.querySelector("span").textContent = label;
-  }
-
   function setCrumb(text) {
     els.crumbs.replaceChildren(h("span", {}, "Zearch"), h("em", {}, "/"), h("b", {}, text));
   }
 
-  // ───────────────────────── render: verdict
+  // ───────────────────────── render: conversational answer
   function renderTurn(v) {
     const p = v.policy;
     const primary = v.answers.find((a) => a.id === p.primary);
     const others = v.answers.filter((a) => a.id !== p.primary);
-
-    const meter = h("div", { class: "meter" },
-      h("div", { class: "meter-track" },
-        h("div", { class: "meter-fill", "data-w": pct(p.confidence) }),
-        h("div", { class: "meter-thr", style: `left:${p.threshold * 100}%`, "data-l": `gate ${pct(p.threshold)}` })),
-      h("div", { class: "meter-legend" },
-        h("span", {}, "confidence ", h("b", {}, pct(p.confidence))),
-        h("span", {}, primary.options.map((o) => `${o.label} ${pct(o.p)}`).join(" · "))));
-
-    const card = h("div", { class: `result-card ${p.gate}` },
-      h("div", {}, h("div", { class: "v-label" }, `${p.primary} · ${primary.type}`), h("div", { class: "v-pick" }, p.pick || "—")),
-      h("div", { class: "v-right" }, h("span", { class: `gate ${p.gate}` }, h("i"), p.gate)),
-      h("p", { class: "v-summary" }, p.summary),
-      meter,
-      h("ul", { class: "reasons", style: "grid-column:1/-1" }, p.reasons.map((r) => h("li", {}, r))));
-
-    const answers = h("div", { class: "answers" }, others.map((a, i) => answerCard(a, i)));
-
+    const sourceLink = (s) => {
+      const url = safeUrl(s.url);
+      return h(url ? "a" : "span", url ? { href: url, target: "_blank", rel: "noopener noreferrer", class: "source-link" } : { class: "source-link" },
+        h("span", { class: "source-number" }, s.n),
+        h("span", { class: "source-title", title: s.title }, s.title || s.domain));
+    };
     const sources = v.sources.length
-      ? h("ol", { class: "sources" }, v.sources.map((s) => {
-          const url = safeUrl(s.url);
-          return h("li", { class: "src" }, h(url ? "a" : "div", url ? { href: url, target: "_blank", rel: "noopener noreferrer" } : { class: "a" },
-            h("span", { class: "src-n" }, s.n),
-            h("span", { class: "src-d" }, s.domain, h("em", {}, s.source)),
-            h("span", { class: "src-t" }, s.title),
-            h("span", { class: "src-s" }, s.snippet)));
-        }))
-      : h("p", { class: "no-src" }, "No external evidence retrieved. The gate treats this as low signal.");
+      ? h("section", { class: "source-block", "aria-label": "Sources" },
+          h("div", { class: "source-heading" }, h("span", {}, "Sources"), h("span", {}, `${v.sources.length}`)),
+          h("div", { class: "source-chips" }, v.sources.slice(0, 3).map(sourceLink)),
+          v.sources.length > 3 && h("details", { class: "more-sources" },
+            h("summary", {}, `View all ${v.sources.length} sources`),
+            h("ol", { class: "source-list" }, v.sources.map((s) => h("li", {},
+              sourceLink(s), h("span", { class: "source-domain" }, `${s.domain} · ${s.source}`),
+              h("p", {}, s.snippet))))))
+      : h("p", { class: "no-src" }, "No web sources were returned for this search.");
 
-    const meta = h("div", { class: "turn-meta" },
-      h("span", {}, h("b", {}, v.playbook_name)),
-      h("span", {}, `engine `, h("b", {}, v.mode === "mock" ? "mock" : `${v.mode} · ${v.model}`)),
-      h("span", {}, `search `, h("b", {}, `${v.timing.search_ms}ms`)),
-      h("span", {}, `judge `, h("b", {}, v.timing.judge_ms < 1 ? "<1ms" : `${v.timing.judge_ms}ms`)),
-      h("span", {}, `${v.usage.input_tokens || 0} tok in · `, h("b", {}, `$${(v.cost_usd || 0).toFixed(6)}`)),
-      v.warning && h("span", { class: "warn" }, `⚠ ${v.warning}`));
+    const detailSummary = h("div", { class: "detail-summary" },
+      h("div", { class: "confidence-line" },
+        h("span", { class: `gate gate-${p.gate}` }, h("i"), p.gate),
+        h("span", {}, `${pct(p.confidence)} confidence`)),
+      h("div", { class: "confidence-track" },
+        h("i", { style: `width:${pct(p.confidence)}` }),
+        h("b", { style: `left:${pct(p.threshold)}` })));
+    const detailParts = [
+      h("div", { class: "detail-checks" }, p.reasons.map((r) => h("span", {}, r))),
+      others.length && h("div", { class: "typed-answers" }, h("h3", {}, "Other signals"), others.map((a, i) => answerCard(a, i))),
+      h("details", { class: "raw-state" }, h("summary", {}, `Structured state sent to JEV · ${v.state.length} characters`), h("pre", {}, v.state)),
+      h("div", { class: "runtime-note" }, `${v.playbook_name} · ${v.mode === "mock" ? "Mock engine" : `${v.mode} · ${v.model}`} · ${v.timing.search_ms} ms search`),
+      v.warning && h("p", { class: "warn" }, v.warning),
+    ];
 
     const turn = h("article", { class: "turn", "data-id": v.id },
-      h("h2", { class: "turn-q" }, v.query),
-      meta,
-      card,
-      others.length && h("div", { class: "section-h" }, h("span", {}, "Typed answers"), h("span", {}, "Choice · Score · Noul")),
-      others.length && answers,
-      h("div", { class: "section-h" }, h("span", {}, "Evidence pack"), h("span", {}, `${v.sources.length} sources → state`)),
-      sources,
-      h("details", { class: "state" }, h("summary", {}, `state sent to Jev · ${v.state.length} chars`), h("pre", {}, v.state)),
-      h("div", { class: "turn-actions" },
-        h("button", { class: "ghost-btn", type: "button", onclick: () => share(v) }, "Copy share link"),
-        h("button", { class: "ghost-btn", type: "button", onclick: () => copy(JSON.stringify(v, null, 2), "Search data copied") }, "Copy JSON"),
-        h("button", { class: "ghost-btn", type: "button", onclick: () => { setPlaybook(v.playbook); els.q.value = v.query; autosize(); run(); } }, "Re-run")));
+      h("div", { class: "user-message" }, h("div", { class: "user-bubble" }, v.query)),
+      h("section", { class: "assistant-message", "aria-label": "Zearch answer" },
+        h("div", { class: "assistant-brand" },
+          h("span", { class: "assistant-mark", "aria-hidden": "true" }, "Z"),
+          h("span", {}, "Zearch"),
+          h("span", { class: "answer-label" }, "Answer")),
+        h("div", { class: "answer-pick" }, p.pick || primary?.pick || "Search complete"),
+        h("p", { class: "answer-summary" }, p.summary),
+        detailSummary,
+        sources,
+        h("details", { class: "reasoning" },
+          h("summary", {}, "How this answer was reached"),
+          h("div", { class: "reasoning-body" }, detailParts)),
+        h("div", { class: "turn-actions" },
+          h("button", { class: "text-action", type: "button", title: "Copy share link", onclick: () => share(v) }, "Share"),
+          h("button", { class: "text-action", type: "button", title: "Copy result data", onclick: () => copy(JSON.stringify(v, null, 2), "Search data copied") }, "Copy data"),
+          h("button", { class: "text-action", type: "button", title: "Run this search again", onclick: () => { setPlaybook(v.playbook); els.q.value = v.query; autosize(); run(); } }, "Run again"))));
 
     requestAnimationFrame(() => requestAnimationFrame(() => {
       turn.querySelectorAll("[data-w]").forEach((el) => { el.style.width = el.dataset.w; });
@@ -220,7 +200,11 @@
     showThread();
     setCrumb(query);
     const status = h("p", { class: "pending-status" }, h("i", { "aria-hidden": "true" }), "Searching the web…");
-    const pending = h("article", { class: "turn pending" }, h("h2", { class: "turn-q" }, query), status, h("div", { class: "skel" }));
+    const pending = h("article", { class: "turn pending" },
+      h("div", { class: "user-message" }, h("div", { class: "user-bubble" }, query)),
+      h("section", { class: "assistant-message" },
+        h("div", { class: "assistant-brand" }, h("span", { class: "assistant-mark" }, "Z"), h("span", {}, "Zearch")),
+        status, h("div", { class: "skel" })));
     els.thread.append(pending);
     pending.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -250,7 +234,9 @@
       const total = Math.round(performance.now() - t0);
       toast(`${v.policy.gate.toUpperCase()} · ${v.policy.pick} · ${pct(v.policy.confidence)} · ${total}ms`);
     } catch (e) {
-      pending.replaceWith(h("article", { class: "turn" }, h("h2", { class: "turn-q" }, query), h("div", { class: "err" }, `Search failed: ${e.message}`)));
+      pending.replaceWith(h("article", { class: "turn" },
+        h("div", { class: "user-message" }, h("div", { class: "user-bubble" }, query)),
+        h("section", { class: "assistant-message" }, h("div", { class: "err" }, `Search failed: ${e.message}`))));
       els.q.value = query;
       autosize();
     } finally {
@@ -279,12 +265,23 @@
   }
 
   // ───────────────────────── routing
-  function showThread() { els.empty.classList.add("hidden"); }
+  function homeComposer() {
+    els.form.classList.add("home-composer");
+    els.fineprint.classList.add("home-fineprint");
+    els.empty.append(els.form, els.fineprint, els.starters);
+  }
+  function showThread() {
+    els.empty.classList.add("hidden");
+    els.form.classList.remove("home-composer");
+    els.fineprint.classList.remove("home-fineprint");
+    els.dock.append(els.form, els.fineprint);
+  }
   function newSearch() {
     state.current = null;
     els.thread.replaceChildren();
     els.empty.classList.remove("hidden");
     els.share.classList.add("hidden");
+    homeComposer();
     setCrumb("New");
     renderHistory();
     if (location.hash) history.replaceState(null, "", location.pathname);
@@ -412,7 +409,6 @@
       if (t === "1") state.settings.threshold = +els.threshold.value;
       if (t === "reset") state.settings.threshold = null;
       store(LS.settings, state.settings);
-      renderMode(); renderGateHint();
       toast("Settings saved");
     });
     [els.settings, els.thesis].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close("cancel"); }));

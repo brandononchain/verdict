@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="light" />
-  <meta name="theme-color" content="#f7f8fb" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#212121" />
   <meta name="description" content="Zearch — a TypeSafe AI search computer. Explore the web, inspect the evidence, and see how confident the answer is." />
   <meta property="og:title" content="Zearch — search with evidence" />
   <meta property="og:description" content="A calmer search computer for clear answers and inspectable evidence." />
@@ -38,7 +38,7 @@
 
       <nav class="rail-section grow">
         <div class="rail-row">
-          <h6>History</h6>
+          <h6>Your searches</h6>
           <button class="link-btn" id="clear-history" title="Clear local history">clear</button>
         </div>
         <ul id="history" class="history"></ul>
@@ -51,7 +51,6 @@
         <button class="rail-link" id="btn-settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings
         </button>
-        <div class="mode-chip" id="mode-chip" title="Decision engine"><i></i><span>mock</span></div>
       </div>
     </aside>
     <div class="scrim" id="scrim"></div>
@@ -72,36 +71,35 @@
 
       <section class="feed" id="feed" aria-live="polite">
         <div class="empty" id="empty">
-          <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M11 12h18L11 28h18"/><path class="mark-orbit" d="M7 17a14 14 0 0 1 24-7M33 23a14 14 0 0 1-24 7"/></svg></div>
-          <h1>What would you like<br />to <em>understand?</em></h1>
-          <p class="lede">Search the web, see the sources, and get a clear answer with its confidence in view.</p>
-          <div class="starters" id="starters"></div>
-        </div>
-        <div class="thread" id="thread"></div>
-      </section>
-
-      <!-- search composer -->
-      <div class="dock">
-        <div class="dock-inner">
-          <form class="composer" id="composer" autocomplete="off">
+          <div class="welcome-copy">
+            <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M11 12h18L11 28h18"/><path class="mark-orbit" d="M7 17a14 14 0 0 1 24-7M33 23a14 14 0 0 1-24 7"/></svg></div>
+            <h1>What would you like to know?</h1>
+            <p class="lede">Search the web. Get a clear answer with sources.</p>
+          </div>
+          <form class="composer home-composer" id="composer" autocomplete="off">
             <label class="sr-only" for="query">Question</label>
-            <textarea id="query" rows="1" maxlength="1000" placeholder="Ask anything, or frame a decision to evaluate…"></textarea>
+            <textarea id="query" rows="1" maxlength="1000" placeholder="Ask a question or compare options…"></textarea>
             <div class="composer-row">
               <div class="composer-tools">
                 <div class="pb-pill" id="pb-pill">
-                  <select id="playbook" aria-label="Playbook"></select>
+                  <select id="playbook" aria-label="Answer format"></select>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
                 </div>
-                <span class="gate-hint" id="gate-hint"></span>
               </div>
-              <button type="submit" class="decide" id="decide">
+              <button type="submit" class="decide" id="decide" aria-label="Search">
                 <span>Search</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
             </div>
           </form>
-          <p class="fineprint">Zearch can be wrong. Check the cited sources before acting on an answer.</p>
+          <p class="fineprint home-fineprint">Zearch can be wrong. Check important sources.</p>
+          <div class="starters" id="starters"></div>
         </div>
+        <div class="thread" id="thread"></div>
+      </section>
+
+      <div class="dock">
+        <div class="dock-inner"></div>
       </div>
     </main>
   </div>
