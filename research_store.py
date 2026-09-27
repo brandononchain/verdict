@@ -1,18 +1,23 @@
 """Durable, owner-scoped runs and atomic spending reservations.
 
 SQLite is for local development only. Hosted deployments require Postgres.
-Run `python research_store.py` once to apply the idempotent schema.
+Hosted requests initialize the idempotent schema on first use.
 """
 import json
 import os
 import sqlite3
 import time
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
 
 class LimitReached(Exception):
     pass
+
+
+_schema_lock = threading.Lock()
+_schema_ready_for = None
 
 
 @contextmanager
@@ -47,6 +52,9 @@ def execute(conn, marker, sql, params=()):
 
 def migrate():
     with connection() as (conn, _):
+        if os.environ.get('DATABASE_URL'):
+            # Vercel instances may cold-start together; serialize DDL across them.
+            conn.execute('SELECT pg_advisory_xact_lock(91270419)')
         conn.execute("""CREATE TABLE IF NOT EXISTS research_runs (
             id TEXT PRIMARY KEY, owner TEXT NOT NULL, parent_id TEXT,
             query TEXT NOT NULL, status TEXT NOT NULL, answer TEXT NOT NULL DEFAULT '',
@@ -61,6 +69,22 @@ def migrate():
         conn.execute("""CREATE TABLE IF NOT EXISTS research_budgets (
             bucket TEXT NOT NULL, day TEXT NOT NULL, calls BIGINT NOT NULL,
             reserved BIGINT NOT NULL, PRIMARY KEY(bucket, day))""")
+
+
+def ensure_schema():
+    """Initialize hosted Postgres once per process and database URL, then serve normally."""
+    global _schema_ready_for
+    url = os.environ.get('DATABASE_URL')
+    if not url:
+        if os.environ.get('VERCEL'):
+            raise RuntimeError('Hosted research requires DATABASE_URL')
+        return  # The local SQLite server and tests already migrate at startup.
+    if _schema_ready_for == url:
+        return
+    with _schema_lock:
+        if _schema_ready_for != url:
+            migrate()
+            _schema_ready_for = url
 
 
 def public(row):
