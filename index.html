@@ -2,93 +2,183 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
   <title>Verdict — decisions with sources</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="top">
-      <div class="brand">
-        <span class="mark">∴</span>
-        <span>Verdict</span>
-        <span class="tag">Jev</span>
+  <div class="shell" id="shell">
+    <!-- ───────────── left rail ───────────── -->
+    <aside class="rail" id="rail" aria-label="Navigation">
+      <div class="rail-head">
+        <a class="brand" href="#" id="brand" aria-label="Verdict home">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="17" r="2.4"/><circle cx="18.5" cy="17" r="2.4"/></svg>
+          <span>Verdict</span>
+        </a>
+        <button class="icon-btn rail-close" id="rail-close" aria-label="Close menu">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
-      <nav>
-        <button id="btn-labs" class="ghost">Labs</button>
-        <button id="btn-settings" class="ghost">Settings</button>
+
+      <button class="new-btn" id="new-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>New verdict</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <nav class="rail-section">
+        <h6>Playbooks</h6>
+        <ul id="pb-list" class="pb-list"></ul>
       </nav>
-    </header>
-    <main>
-      <section class="hero" id="hero">
-        <h1>Ask for a decision, not an essay.</h1>
-        <p class="sub">High-powered search packs evidence into Jev state. You get typed answers, probabilities, and sources.</p>
-        <form id="ask-form" class="ask">
-          <textarea id="query" rows="3" placeholder="Should we list this RWA token on a CEX this quarter?"></textarea>
-          <div class="ask-row">
-            <select id="playbook">
-              <option value="invest">Invest / ship</option>
-              <option value="triage">Triage / route</option>
-              <option value="risk">Risk / gate</option>
-              <option value="compare">Compare options</option>
-            </select>
-            <button type="submit" id="go">Decide</button>
-          </div>
-        </form>
-        <div class="chips" id="chips"></div>
-      </section>
-      <section class="result hidden" id="result">
-        <div class="result-head">
-          <button class="ghost" id="back">← New question</button>
-          <div class="meta" id="meta"></div>
+
+      <nav class="rail-section grow">
+        <div class="rail-row">
+          <h6>History</h6>
+          <button class="link-btn" id="clear-history" title="Clear local history">clear</button>
         </div>
-        <h2 id="q-title"></h2>
-        <div class="grid">
-          <div>
-            <div id="answers"></div>
-            <div class="policy" id="policy"></div>
-          </div>
-          <aside>
-            <h3>Sources</h3>
-            <div id="sources"></div>
-            <h3>State sent to Jev</h3>
-            <pre id="state-preview"></pre>
-          </aside>
+        <ul id="history" class="history"></ul>
+      </nav>
+
+      <div class="rail-foot">
+        <button class="rail-link" id="btn-thesis">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h7"/></svg>Thesis
+        </button>
+        <button class="rail-link" id="btn-settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings
+        </button>
+        <div class="mode-chip" id="mode-chip" title="Decision engine"><i></i><span>mock</span></div>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <!-- ───────────── stage ───────────── -->
+    <main class="stage">
+      <header class="stage-top">
+        <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        </button>
+        <div class="crumbs" id="crumbs"><span>Verdict</span><em>/</em><b>New</b></div>
+        <div class="top-actions">
+          <button class="ghost-btn hidden" id="share-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M13 7l5 5-5 5"/></svg>Share
+          </button>
         </div>
+      </header>
+
+      <section class="feed" id="feed" aria-live="polite">
+        <div class="empty" id="empty">
+          <p class="eyebrow">search → evidence pack → typed decision → confidence gate</p>
+          <h1>Ask for a <em>verdict</em>,<br />not an essay.</h1>
+          <p class="lede">Verdict searches, packs sources into state, and asks Jev a finite question. You get a Choice, a Score, a Noul — and a gate that says whether to act.</p>
+          <div class="starters" id="starters"></div>
+        </div>
+        <div class="thread" id="thread"></div>
       </section>
+
+      <!-- dock: neural graph + composer -->
+      <div class="dock">
+        <div class="dock-inner">
+          <div class="neural" id="neural">
+            <canvas id="neural-canvas" aria-hidden="true"></canvas>
+            <div class="neural-hud">
+              <div class="judge" id="judge">
+                <svg class="brain" viewBox="0 0 48 48" aria-hidden="true">
+                  <path class="lobe" d="M23 7c-4-2.5-9-1-10.5 3-4 .2-6.6 3.7-5.6 7.5-3 2-3.6 6.3-1 9-1.4 3.6 1 7.6 5 8 .8 4 5 6.4 9 5 1.4 1.6 3.1 2 3.1 2V7z"/>
+                  <path class="lobe" d="M25 7c4-2.5 9-1 10.5 3 4 .2 6.6 3.7 5.6 7.5 3 2 3.6 6.3 1 9 1.4 3.6-1 7.6-5 8-.8 4-5 6.4-9 5-1.4 1.6-3.1 2-3.1 2V7z"/>
+                  <path class="syn s1" d="M12 16l7 5 -5 7 7 6"/>
+                  <path class="syn s2" d="M36 16l-7 5 5 7 -7 6"/>
+                  <path class="syn s3" d="M19 21h10"/>
+                  <circle class="n n1" cx="12" cy="16" r="1.9"/>
+                  <circle class="n n2" cx="19" cy="21" r="1.9"/>
+                  <circle class="n n3" cx="14" cy="28" r="1.9"/>
+                  <circle class="n n4" cx="21" cy="34" r="1.9"/>
+                  <circle class="n n5" cx="36" cy="16" r="1.9"/>
+                  <circle class="n n6" cx="29" cy="21" r="1.9"/>
+                  <circle class="n n7" cx="34" cy="28" r="1.9"/>
+                  <circle class="n n8" cx="27" cy="34" r="1.9"/>
+                </svg>
+                <span class="judge-label">neural judge · <b id="judge-state">idle</b></span>
+              </div>
+              <ol class="pipeline" id="pipeline">
+                <li data-step="search"><i></i>search</li>
+                <li data-step="pack"><i></i>pack</li>
+                <li data-step="judge"><i></i>judge</li>
+                <li data-step="gate"><i></i>gate</li>
+              </ol>
+            </div>
+          </div>
+
+          <form class="composer" id="composer" autocomplete="off">
+            <label class="sr-only" for="query">Question</label>
+            <textarea id="query" rows="1" maxlength="1000" placeholder="Should we list this RWA token on a CEX this quarter?"></textarea>
+            <div class="composer-row">
+              <div class="composer-tools">
+                <div class="pb-pill" id="pb-pill">
+                  <select id="playbook" aria-label="Playbook"></select>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+                </div>
+                <span class="gate-hint" id="gate-hint"></span>
+              </div>
+              <button type="submit" class="decide" id="decide">
+                <span>Decide</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </form>
+          <p class="fineprint">Typed judgments, not paragraphs. Calibration is vendor-claimed — tune gates on your own data.</p>
+        </div>
+      </div>
     </main>
   </div>
-  <div class="modal hidden" id="settings">
-    <div class="sheet">
-      <h2>Settings</h2>
-      <label>TypeSafe / Gateway API key (optional, stored locally)</label>
-      <input id="api-key" type="password" placeholder="sk-… or apikey-…" />
-      <label>Endpoint</label>
+
+  <!-- settings -->
+  <dialog class="sheet" id="settings">
+    <form method="dialog" class="sheet-body" id="settings-form">
+      <header><h2>Settings</h2><button class="icon-btn" value="cancel" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <label for="endpoint">Decision engine</label>
       <select id="endpoint">
-        <option value="mock">Mock (offline)</option>
-        <option value="typesafe">api.typesafe.ai /v1/systemone</option>
+        <option value="auto">Auto — server key if set, else mock</option>
+        <option value="mock">Mock — offline, deterministic</option>
+        <option value="typesafe">TypeSafe · api.typesafe.ai/v1/systemone</option>
         <option value="gateway">Vercel AI Gateway</option>
       </select>
-      <p class="hint">Prefer TYPESAFE_API_KEY on the server. Browser key is demo-only.</p>
-      <div class="row-end">
-        <button class="ghost" id="close-settings">Close</button>
-        <button id="save-settings">Save</button>
+      <label for="api-key">API key <span class="muted">(browser-stored, demo only)</span></label>
+      <input id="api-key" type="password" placeholder="sk-… or apikey-…" />
+      <p class="hint" id="key-hint">Prefer <code>TYPESAFE_API_KEY</code> on the server. Never ship keys in the browser.</p>
+      <label for="threshold">Act threshold <span class="muted" id="threshold-val">playbook default</span></label>
+      <input id="threshold" type="range" min="0" max="0.99" step="0.01" />
+      <div class="row-split">
+        <button type="button" class="link-btn" id="threshold-reset">use playbook default</button>
       </div>
-    </div>
-  </div>
-  <div class="modal hidden" id="labs">
-    <div class="sheet">
-      <h2>Market fit, short</h2>
-      <ul class="fit">
-        <li><b>Who:</b> agent builders, ops, research, Web3 diligence.</li>
-        <li><b>Why now:</b> playgrounds exist, search+decision UI does not.</li>
-        <li><b>Wedge:</b> Perplexity for Choice / Score / Noul.</li>
-        <li><b>Not the play:</b> replacing chat.</li>
-        <li><b>Moat:</b> playbooks + source packer + confidence policy.</li>
-      </ul>
-      <button class="ghost" id="close-labs">Close</button>
-    </div>
-  </div>
+      <footer>
+        <button class="ghost-btn" value="cancel">Cancel</button>
+        <button class="solid-btn" id="save-settings" value="default">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- thesis -->
+  <dialog class="sheet" id="thesis">
+    <form method="dialog" class="sheet-body thesis">
+      <header><h2>Fit is real. Timing is now. <em>Category is empty.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p>Jev is days old. System One: state in, Choice / Score / Noul out, ~70–500ms, $0.042/M input, output free. The community shipped SDKs, MCP, replicas, playgrounds.</p>
+      <p>Nobody shipped <b>search → evidence pack → typed decision → confidence gate</b>. Every playground assumes you already have state and questions. That is the hole.</p>
+      <dl>
+        <dt>Who wants this</dt><dd>Agent builders (route / gate / compact) · ops, support, risk · research &amp; diligence · anyone thinking in finite answer spaces.</dd>
+        <dt>Who doesn’t</dt><dd>People who want a memo. That’s an LLM.</dd>
+        <dt>Wedge</dt><dd>Perplexity taught people to expect sources. Verdict runs the same loop for judgments. Playbooks + source packer + policy is the product.</dd>
+        <dt>Risks</dt><dd>Hosted-only weights. Vendor-claimed calibration. Don’t wrap the API — wrap the decision workflow.</dd>
+      </dl>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./neural.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
