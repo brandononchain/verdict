@@ -99,7 +99,7 @@
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
         li.append(make('p', '', source.excerpt)); sources.append(li);
       }
-      details.hidden = !sources.children.length; summary.textContent = sources.children.length + ' sources';
+      details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
       if (run.usage?.queries) {
         trace.hidden = false;
         traceBody.textContent = `${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.\n${run.usage.queries.join('\n')}`;
