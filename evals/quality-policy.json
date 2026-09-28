@@ -1,0 +1,9 @@
+{
+  "version": "m6.4-v1",
+  "baseline_id": null,
+  "thresholds": {
+    "standard": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null},
+    "deep": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null},
+    "compare": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null}
+  }
+}

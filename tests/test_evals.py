@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from evals import run, review
+from evals import run, review, quality_gate
 
 
 class EvaluationWorkflowTests(unittest.TestCase):
@@ -41,3 +41,22 @@ class EvaluationWorkflowTests(unittest.TestCase):
             row = {'run_id':'same'}
             path.write_text(json.dumps(row)+'\n'+json.dumps(row)+'\n')
             with self.assertRaises(ValueError): review.read_rows(path)
+
+    def test_release_gate_needs_complete_human_cohort_and_measured_thresholds(self):
+        self.assertEqual(quality_gate.evaluate([], {})['status'], 'HOLD')
+        rows=[]
+        for case in run.corpus()['cases']:
+            rows.append(dict(version='m6.2-v1', case_id=case['id'], category=case['category'],
+                             mode=case['mode'], temporal=case['temporal'], run_id=case['id'],
+                             status='complete', reviewer='human', reviewed_at='2026-09-28T00:00:00Z',
+                             citations_opened=True, scores={key:'pass' for key in review.DIMENSIONS},
+                             failure_stage='none', total_ms=5000, estimated_cost=12000))
+        policy={'version':'m6.4-v1','baseline_id':'test-fixture-only','thresholds':{
+            mode:{'min_pass_rate':{key:.95 for key in review.DIMENSIONS},
+                  'max_p95_total_ms':6000,'max_p95_estimated_cost_usd':.02}
+            for mode in quality_gate.MODES}}
+        self.assertEqual(quality_gate.evaluate(rows, {})['status'], 'HOLD')
+        self.assertEqual(quality_gate.evaluate(rows, policy)['status'], 'GO')
+        rows[0]['scores']['citation_support']='fail'
+        policy['thresholds']['standard']['min_pass_rate']['citation_support']=1
+        self.assertEqual(quality_gate.evaluate(rows, policy)['status'], 'HOLD')
