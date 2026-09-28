@@ -67,6 +67,8 @@ def migrate():
         workspace_store.migrate(conn)
         import account_store
         account_store.migrate(conn)
+        import billing_store
+        billing_store.migrate(conn)
         import source_store
         source_store.migrate(conn)
         import source_revalidation
