@@ -42,7 +42,7 @@ def handle(handler, mutate=False):
         if action == 'claim_workspace':
             anonymous_owner, _ = http.anonymous_identity(handler.headers)
             result = workspace.claim_workspace(anonymous_owner, account['id'])
-            return http.send_json(handler, 200, {'result': result})
+            return http.send_json(handler, 200, {'result': result}, http.new_anonymous_cookie())
         if action == 'delete_account':
             owner = 'acct:' + account['id']
             with db.connection() as (conn, marker):

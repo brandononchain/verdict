@@ -35,6 +35,19 @@ def identity(headers, create=False):
     return anonymous_identity(headers, create)
 
 
+def new_anonymous_cookie():
+    secret = os.environ.get('ZEARCH_SESSION_SECRET', '')
+    if len(secret) < 32:
+        raise research.Unavailable('Live research is being configured. Please check back shortly.')
+    payload = secrets.token_hex(24) + '.' + str(int(time.time()) + 30 * 86400)
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    token = payload + '.' + sig
+    cookie = 'zearch_session=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000'
+    if os.environ.get('VERCEL'):
+        cookie += '; Secure'
+    return cookie
+
+
 def anonymous_identity(headers, create=False):
     secret = os.environ.get("ZEARCH_SESSION_SECRET", "")
     if len(secret) < 32:
@@ -55,12 +68,8 @@ def anonymous_identity(headers, create=False):
     if not valid:
         if not create:
             return None, None
-        payload = secrets.token_hex(24) + "." + str(int(time.time()) + 30 * 86400)
-        sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-        token = payload + "." + sig
-        cookie = "zearch_session=" + token + "; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000"
-        if os.environ.get("VERCEL"):
-            cookie += "; Secure"
+        cookie = new_anonymous_cookie()
+        token = cookie.split(';', 1)[0].split('=', 1)[1]
     # Database never stores the bearer cookie itself.
     owner = hmac.new(secret.encode(), token.split(".")[0].encode(), hashlib.sha256).hexdigest()
     return owner, cookie

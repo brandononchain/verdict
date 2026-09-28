@@ -156,7 +156,15 @@ class M10Tests(unittest.TestCase):
                 self.assertEqual(verified.status,200)
                 return verified.response_headers['Set-Cookie'].split(';',1)[0]
             alice=sign_in('alice@example.com')
-            self.assertEqual(call(account_http,'/api/account',{'Cookie':guest_cookie+'; '+alice},
+            claim=call(account_http,'/api/account',{'Cookie':guest_cookie+'; '+alice},
+                {'action':'claim_workspace'})
+            self.assertEqual(claim.status,200)
+            rotated_guest=claim.response_headers['Set-Cookie'].split(';',1)[0]
+            self.assertNotEqual(rotated_guest,guest_cookie)
+            self.assertEqual(call(workspace_http,'/api/workspace',{'Cookie':rotated_guest},{'action':'add_note',
+                'title':'Later guest note','body':'Second claim'}).status,200)
+            self.assertTrue(call(account_http,'/api/account',{'Cookie':rotated_guest+'; '+alice}).result()['claim_available'])
+            self.assertEqual(call(account_http,'/api/account',{'Cookie':rotated_guest+'; '+alice},
                 {'action':'claim_workspace'}).status,200)
             bob=sign_in('bob@example.com')
             self.assertEqual(call(workspace_http,'/api/workspace?export=1',{'Cookie':bob}).result()['documents'],[])
@@ -167,6 +175,7 @@ class M10Tests(unittest.TestCase):
             alice_export=call(workspace_http,'/api/workspace?export=1',{'Cookie':alice}).result()
             self.assertEqual(alice_export['documents'][0]['text'],'Alice private facts')
             self.assertEqual(alice_export['runs'][0]['answer'],'Alice answer [1]')
+            self.assertEqual(alice_export['notes'][0]['body'],'Second claim')
             second_device=sign_in('alice@example.com')
             self.assertEqual(call(workspace_http,'/api/workspace?export=1',{'Cookie':second_device}).result()['runs'][0]['id'],run['id'])
             self.assertEqual(call(account_http,'/api/account',{'Cookie':alice},{'action':'delete_account'}).status,200)
