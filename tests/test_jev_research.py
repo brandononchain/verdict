@@ -52,7 +52,7 @@ class JevResearchTests(unittest.TestCase):
             judgment, chosen, usage, candidates = jev.judge('How do solar panels work?',SOURCES)
         answer=jev.format_answer(judgment,chosen,candidates,SOURCES)
         self.assertEqual(judgment['gate'],'answer')
-        self.assertIn('Solar panels turn sunlight into electricity. [1]',answer.replace('”',''))
+        self.assertIn('Solar panels turn sunlight into electricity. Other content not related. [1]',answer.replace('”',''))
         self.assertEqual(usage['input_tokens'],63)
 
     def test_abstains_without_evidence(self):
@@ -80,6 +80,10 @@ class JevResearchTests(unittest.TestCase):
         self.assertLessEqual(len(jev.passage('specific term', 'x '*2000)),450)
         self.assertEqual(jev.passage('solar panels','Other claim. Solar panels produce power.'),
                          'Solar panels produce power.')
+        evidence = ('HTTP 429 means too many requests from the client. '
+                    'The server is asking the client to slow down. '
+                    'A Retry-After header may say how long to wait before another request.')
+        self.assertEqual(jev.passage('What does HTTP 429 mean and how should a client respond?', evidence), evidence)
 
     def test_verification_uses_only_each_paragraphs_citations(self):
         captured = {}
