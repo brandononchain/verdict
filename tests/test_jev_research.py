@@ -62,6 +62,19 @@ class JevResearchTests(unittest.TestCase):
         self.assertEqual(judgment['gate'],'abstain')
         self.assertNotIn('Solar panels',jev.format_answer(judgment,chosen,candidates,SOURCES))
 
+    def test_site_overview_asks_for_collective_evidence_and_has_bounded_excerpts(self):
+        _, questions, candidates = jev.state_and_questions('Summarize this site', SOURCES, 'crawl')
+        self.assertIn('collectively', questions['sufficient']['instructions'])
+        overview = jev.captured_overview(candidates, SOURCES)
+        self.assertIn('Solar panels turn sunlight into electricity.', overview)
+        self.assertIn('[1]', overview)
+        self.assertNotIn('I could not find a passage', overview)
+
+    def test_partial_draft_keeps_only_approved_prefix(self):
+        draft = 'Supported point. [1]\n\nUnsupported point. [2]'
+        self.assertEqual(jev.supported_prefix(draft, {'probabilities':[.91,.12]}), 'Supported point. [1]')
+        self.assertEqual(jev.supported_prefix(draft, {'probabilities':[.12,.91]}), '')
+
     def test_conflict_requires_review(self):
         with patch.object(jev,'call',return_value=raw(conflict=.8)):
             judgment,chosen,_,candidates=jev.judge('solar panels',SOURCES)

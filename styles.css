@@ -331,3 +331,15 @@ a { color: inherit; }
 
 .decide[data-busy=true] svg { display:none; }
 .decide[data-busy=true]::after { content:""; width:11px; height:11px; border-radius:2px; background:currentColor; }
+
+/* Conversation layout: keep the URL under its prompt on narrow screens. */
+.user-message { flex-direction:column; align-items:flex-end; gap:5px; }
+.user-message > .source-meta { max-width:min(82%,600px); margin:0 2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:680px) {
+  .user-message > .source-meta { max-width:92%; }
+  .dock { padding-inline:12px; }
+  .dock .composer { padding:10px 12px 9px; border-color:#484848; background:#2b2b2b; box-shadow:none; }
+  .composer .target-url { margin-bottom:8px; background:#252525; font-size:12px; }
+  .research-prose { font-size:15px; line-height:1.65; }
+  .research-evidence { margin:13px 0; }
+}
