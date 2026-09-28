@@ -16,6 +16,7 @@ import research
 import jev_research as jev
 import writer
 import uuid
+import artifact
 import research_store as db
 import workspace_store as workspace
 
@@ -123,6 +124,34 @@ class M10Tests(unittest.TestCase):
         db.save('alice',child['id'],status='complete',answer='Derived fact [1]')
         self.assertTrue(workspace.delete_run('alice',parent['id']))
         self.assertEqual(db.get_run('alice',child['id'])['status'],'redacted')
+
+    def test_research_brief_export_is_owner_scoped_and_revocable(self):
+        class Handler:
+            def __init__(self,path,cookie):
+                self.path=path; self.headers={'Cookie':cookie}; self.wfile=io.BytesIO(); self.status=None; self.response_headers={}
+            def send_response(self,status): self.status=status
+            def send_header(self,key,value): self.response_headers[key]=value
+            def end_headers(self): pass
+        alice=research_http.identity({},True)[1].split(';',1)[0]
+        bob=research_http.identity({},True)[1].split(';',1)[0]
+        owner,_=research_http.identity({'Cookie':alice})
+        run,_=self.reserve(owner)
+        db.save(owner,run['id'],status='complete',answer='The answer is 42. [1]',sources=[{
+            'n':1,'url':'https://example.org/evidence','title':'Evidence','text':'42', 'source_version_id':'a'*64}])
+        path='/api/artifact?id='+run['id']+'&format=pdf'
+        denied=Handler(path,bob); artifact.handle(denied)
+        self.assertEqual(denied.status,404)
+        allowed=Handler(path,alice); artifact.handle(allowed)
+        self.assertEqual(allowed.status,200)
+        self.assertTrue(allowed.wfile.getvalue().startswith(b'%PDF-'))
+        self.assertEqual(allowed.response_headers['Content-Type'],'application/pdf')
+        self.assertEqual(allowed.response_headers['Cache-Control'],'no-store')
+        text=Handler(path.replace('pdf','txt'),alice); artifact.handle(text)
+        self.assertIn(b'The answer is 42. [1]',text.wfile.getvalue())
+        self.assertIn(b'https://example.org/evidence',text.wfile.getvalue())
+        workspace.delete_run(owner,run['id'])
+        after=Handler(path,alice); artifact.handle(after)
+        self.assertEqual(after.status,404)
 
     def test_http_two_account_isolation_claim_export_and_delete(self):
         class Handler:
