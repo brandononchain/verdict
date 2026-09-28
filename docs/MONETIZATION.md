@@ -26,6 +26,6 @@ Go/no-go: launch a small invitation beta, measure at least two weeks of usage, e
 
 ## Release 2 instrumentation
 
-Deep research reserves three search attempts before execution; partial search failures remain counted because providers may charge. The workspace now shows daily run use/reset and the operator report separates standard/deep completion, missing-cost records, estimated costs and p95 timing. A 20-case evaluation harness supplies qualitative review prompts. This enables pricing decisions; it does not itself prove a sustainable margin.
+Deep research reserves three search attempts before execution; partial search failures remain counted because providers may charge. The workspace now shows daily run use/reset and the operator report separates standard/deep completion, missing-cost records, estimated costs and p95 timing. A versioned 100-case evaluation harness supplies qualitative review prompts and blank human scorecards. This enables pricing decisions; it does not itself prove a sustainable margin.
 
 Customer billing remains disabled. Avoid coupling anonymous browser sessions to paid balances. Before launch, introduce durable account IDs and the separate immutable credit ledger described above; connect checkout only after signed webhook and entitlement tests pass. Do not represent the daily operational quota as a purchased credit balance.
