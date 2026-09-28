@@ -1,5 +1,6 @@
 """On-demand, owner-scoped research brief. No model call or persistent duplicate."""
 import io
+import csv
 import json
 import re
 from datetime import datetime, timezone
@@ -33,6 +34,29 @@ def data_json(run):
                    'captured_at': s.get('retrieved_at'), 'source_version_id': s.get('source_version_id'),
                    'text': s.get('text'), 'assets': s.get('assets') or [], 'emails': s.get('emails') or []}
                   for s in run['sources'] if s.get('url')]}, ensure_ascii=False, indent=2).encode('utf-8')
+
+
+def data_csv(run):
+    """Flat inventory with source provenance and spreadsheet-safe untrusted cells."""
+    if run.get('depth') not in ('scrape', 'crawl'):
+        raise ValueError('No collected-page dataset')
+    output = io.StringIO(newline='')
+    writer = csv.writer(output)
+    writer.writerow(['type', 'page_url', 'page_title', 'value', 'label', 'captured_at', 'source_version_id'])
+    def safe(value):
+        value = str(value or '')
+        return "'" + value if value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r')) else value
+    for source in run['sources']:
+        if not source.get('url'): continue
+        common = [safe(source.get('url')), safe(source.get('title'))]
+        tail = [safe(source.get('retrieved_at')), safe(source.get('source_version_id'))]
+        writer.writerow(['page', *common, safe(source.get('description')), 'description', *tail])
+        for asset in source.get('assets') or []:
+            writer.writerow([safe(asset.get('kind') or 'asset'), *common,
+                             safe(asset.get('url')), safe(asset.get('label')), *tail])
+        for email in source.get('emails') or []:
+            writer.writerow(['email', *common, safe(email), 'public contact', *tail])
+    return ('\ufeff' + output.getvalue()).encode('utf-8')
 
 
 def brief_pdf(run):
@@ -146,19 +170,21 @@ def handle(handler):
     params = parse_qs(urlsplit(handler.path).query)
     rid = params.get('id', [''])[0]
     kind = params.get('format', ['pdf'])[0]
-    if not re.fullmatch(r'[a-f0-9]{32}', rid) or kind not in ('pdf', 'txt', 'json'):
+    if not re.fullmatch(r'[a-f0-9]{32}', rid) or kind not in ('pdf', 'txt', 'json', 'csv'):
         return http.send_json(handler, 404, {'error': 'Document not found'})
     try:
         owner, _ = http.identity(handler.headers)
         run = db.get_run(owner, rid) if owner else None
         if not run or run['status'] != 'complete':
             return http.send_json(handler, 404, {'error': 'Document not found'})
-        if kind == 'json' and run.get('depth') not in ('scrape', 'crawl'):
+        if kind in ('json', 'csv') and run.get('depth') not in ('scrape', 'crawl'):
             return http.send_json(handler, 404, {'error': 'Document not found'})
         if kind == 'pdf':
             payload, content_type = brief_pdf(run), 'application/pdf'
         elif kind == 'json':
             payload, content_type = data_json(run), 'application/json; charset=utf-8'
+        elif kind == 'csv':
+            payload, content_type = data_csv(run), 'text/csv; charset=utf-8'
         else:
             payload, content_type = brief_text(run).encode('utf-8'), 'text/plain; charset=utf-8'
         handler.send_response(200)

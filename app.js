@@ -110,8 +110,41 @@
     const root = make('article', 'turn'), question = make('div', 'user-message');
     const response = make('section', 'assistant-message'), status = make('p', 'research-status');
     const body = make('div', 'research-prose'), details = make('details', 'research-evidence');
-    const assetDetails = make('details', 'asset-evidence'), assetSummary = make('summary');
-    const assetGrid = make('div', 'asset-grid'); assetDetails.append(assetSummary, assetGrid);
+    const collecting = ['scrape', 'crawl'].includes(run.depth);
+    const dashboard = make('div', 'collection-dashboard'), dashboardHead = make('header', 'collection-head');
+    const dashboardTitle = make('div', 'collection-title'), dashboardTarget = make('p', 'collection-target');
+    const metrics = make('div', 'collection-metrics'), tabs = make('div', 'collection-tabs');
+    const panels = {}, tabButtons = {}, labels = ['Overview', 'Pages', 'Media', 'Contacts', 'Data'];
+    let selectedTab = 'Overview';
+    dashboardTitle.append(make('span', 'collection-eyebrow', run.depth === 'crawl' ? 'SITE CRAWL' : 'PAGE EXTRACTION'),
+      make('h2', '', 'Collection'));
+    dashboardHead.append(dashboardTitle, dashboardTarget);
+    tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Collection views');
+    for (const label of labels) {
+      const key = label.toLowerCase(), tab = make('button', 'collection-tab', label);
+      tab.type = 'button'; tab.setAttribute('role', 'tab'); tab.id = `collection-${key}-${Math.random().toString(36).slice(2)}`;
+      const panel = make('section', 'collection-panel');
+      panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', tab.id);
+      tab.onclick = () => selectTab(label);
+      tab.onkeydown = event => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+        event.preventDefault(); const step = event.key === 'ArrowRight' ? 1 : -1;
+        const next = labels[(labels.indexOf(selectedTab) + step + labels.length) % labels.length];
+        selectTab(next); tabButtons[next].focus();
+      };
+      tabs.append(tab); panels[label] = panel; tabButtons[label] = tab;
+    }
+    function selectTab(label) {
+      selectedTab = label;
+      for (const name of labels) {
+        tabButtons[name].setAttribute('aria-selected', String(name === label));
+        tabButtons[name].tabIndex = name === label ? 0 : -1;
+        panels[name].hidden = name !== label;
+      }
+    }
+    panels.Overview.append(body);
+    dashboard.append(dashboardHead, metrics, tabs, ...labels.map(label => panels[label]));
+    selectTab('Overview');
     const summary = make('summary'), sources = make('ol'), actions = make('div', 'turn-actions');
     const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'Research approach');
     const traceBody = make('p'); trace.append(traceTitle, traceBody); trace.hidden = true;
@@ -124,6 +157,7 @@
       if (!citation) return;
       const card = [...sources.children].find(item => item.dataset.sourceId === citation.dataset.citationId);
       if (!card) return;
+      if (collecting) selectTab('Overview');
       details.open = true;
       const capture = card.querySelector('details');
       if (capture) capture.open = true;
@@ -136,7 +170,7 @@
     });
     const exportMenu = make('details', 'export-menu');
     exportMenu.append(make('summary', '', 'Export'));
-    for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(['scrape','crawl'].includes(run.depth) ? [['json', 'Data JSON']] : [])]) {
+    for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(collecting ? [['json', 'Data JSON'], ['csv', 'Inventory CSV']] : [])]) {
       exportMenu.append(button(label, () => {
         if (!/^[a-f0-9]{32}$/.test(run.id || '')) throw Error('Saved answer unavailable');
         const link = document.createElement('a');
@@ -145,7 +179,7 @@
         document.body.append(link); link.click(); link.remove(); exportMenu.open = false;
       }));
     }
-    actions.append(copy, exportMenu, save); response.append(status, body, assetDetails, details, trace, actions); root.append(question, response); thread.append(root);
+    actions.append(copy, exportMenu, save); response.append(status, collecting ? dashboard : body, details, trace, actions); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
       status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
@@ -182,23 +216,7 @@
         sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
-      assetGrid.replaceChildren();
-      const media = [], emails = new Set();
-      for (const source of run.sources || []) {
-        for (const item of source.assets || []) if (media.length < 60 && !media.some(existing => existing.url === item.url)) media.push(item);
-        for (const email of source.emails || []) if (emails.size < 30) emails.add(email);
-      }
-      for (const item of media) {
-        const card = make('div', 'asset-card'), link = ZearchRender.sourceLink({url:item.url,title:item.label || item.kind}, item.label || item.url);
-        if (['image','logo','favicon'].includes(item.kind)) {
-          const img = document.createElement('img'); img.src = item.url; img.alt = item.label || item.kind;
-          img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; card.append(img);
-        }
-        card.append(link, make('small', '', item.kind)); assetGrid.append(card);
-      }
-      if (emails.size) assetGrid.append(make('p', '', 'Public emails: ' + [...emails].join(' · ')));
-      assetDetails.hidden = !['scrape','crawl'].includes(run.depth) || (!media.length && !emails.size);
-      assetSummary.textContent = `Assets & contacts · ${media.length} links${emails.size ? ' · ' + emails.size + ' emails' : ''}`;
+      if (collecting) renderCollection();
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
         const lines = [];
@@ -213,6 +231,79 @@
         if (Number.isInteger(run.estimated_cost)) lines.push(`Estimated provider cost: $${(run.estimated_cost / 1000000).toFixed(6)}`);
         traceBody.textContent = lines.join('\n');
       }
+    }
+    function renderCollection() {
+      const pages = (run.sources || []).filter(source => source.url);
+      const media = [], emails = new Map();
+      for (const page of pages) {
+        for (const item of page.assets || []) {
+          if (media.length < 80 && item?.url && !media.some(existing => existing.url === item.url)) media.push(item);
+        }
+        for (const email of page.emails || []) if (emails.size < 50 && typeof email === 'string' && !emails.has(email)) emails.set(email, page);
+      }
+      let domain = run.target_url || pages[0]?.url || '';
+      try { domain = new URL(domain).hostname; } catch { domain = 'Captured website'; }
+      dashboardTarget.textContent = `${domain} · ${run.status === 'complete' ? 'Captured collection' : 'Collecting evidence'}`;
+      metrics.replaceChildren();
+      for (const [value, label] of [[pages.length, 'Pages'], [media.length, 'Media'], [emails.size, 'Contacts']]) {
+        const metric = make('div', 'collection-metric');
+        metric.append(make('strong', '', String(value)), make('span', '', label)); metrics.append(metric);
+      }
+      tabButtons.Pages.textContent = `Pages ${pages.length}`;
+      tabButtons.Media.textContent = `Media ${media.length}`;
+      tabButtons.Contacts.textContent = `Contacts ${emails.size}`;
+      const pagePanel = panels.Pages, mediaPanel = panels.Media, contactPanel = panels.Contacts, dataPanel = panels.Data;
+      pagePanel.replaceChildren(); mediaPanel.replaceChildren(); contactPanel.replaceChildren(); dataPanel.replaceChildren();
+      pagePanel.append(make('h3', 'collection-section-title', 'Captured pages'));
+      if (!pages.length) pagePanel.append(make('p', 'collection-empty', 'Pages will appear here as they are captured.'));
+      for (const page of pages) {
+        const card = make('article', 'collection-page'), top = make('div', 'collection-page-top');
+        top.append(make('span', 'collection-index', String(page.n || pages.indexOf(page) + 1).padStart(2, '0')),
+          ZearchRender.sourceLink(page, page.title || page.url));
+        card.append(top);
+        if (page.description) card.append(make('p', '', page.description));
+        card.append(make('small', 'collection-url', page.url));
+        const tags = [];
+        if (page.assets?.length) tags.push(`${page.assets.length} media`);
+        if (page.emails?.length) tags.push(`${page.emails.length} contacts`);
+        if (page.retrieved_at) tags.push(`Captured ${new Date(page.retrieved_at * 1000).toLocaleString()}`);
+        if (tags.length) card.append(make('small', 'collection-page-meta', tags.join(' · ')));
+        pagePanel.append(card);
+      }
+      mediaPanel.append(make('h3', 'collection-section-title', 'Images & video'));
+      if (!media.length) mediaPanel.append(make('p', 'collection-empty', 'No media links were found in these pages.'));
+      const gallery = make('div', 'collection-gallery');
+      for (const item of media) {
+        const card = make('article', 'collection-media-card');
+        const frame = make('div', 'collection-media-frame');
+        if (['image','logo','favicon'].includes(item.kind) && /^https?:\/\//i.test(item.url)) {
+          const img = document.createElement('img'); img.src = item.url; img.alt = item.label || `${item.kind} from ${domain}`;
+          img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.onerror = () => { img.remove(); frame.textContent = 'Preview unavailable'; };
+          frame.append(img);
+        } else frame.textContent = item.kind === 'video' ? 'Video' : 'Asset';
+        card.append(frame, make('small', 'collection-kind', item.kind || 'media'),
+          ZearchRender.sourceLink({url:item.url,title:item.label || item.url}, item.label || item.url));
+        gallery.append(card);
+      }
+      mediaPanel.append(gallery);
+      contactPanel.append(make('h3', 'collection-section-title', 'Public contact details'));
+      if (!emails.size) contactPanel.append(make('p', 'collection-empty', 'No public email addresses were found in these pages.'));
+      for (const [email, page] of emails) {
+        const row = make('div', 'collection-contact');
+        row.append(make('strong', '', email), make('small', '', `Found on ${page.title || page.url}`)); contactPanel.append(row);
+      }
+      dataPanel.append(make('h3', 'collection-section-title', 'Dataset'));
+      const note = make('p', 'collection-data-note', 'The collection keeps page text, metadata, media links, public contacts, source URLs, and capture identifiers together. Jev checks the evidence used in the answer above.');
+      dataPanel.append(note);
+      const fields = make('dl', 'collection-fields');
+      for (const [key, value] of [['Target', run.target_url || '—'], ['Scope', run.depth === 'crawl' ? 'Bounded site crawl' : 'Single page'],
+        ['Pages captured', String(pages.length)], ['Media links', String(media.length)], ['Public emails', String(emails.size)]]) {
+        fields.append(make('dt', '', key), make('dd', '', value));
+      }
+      dataPanel.append(fields);
+      const exportHint = make('p', 'collection-data-note', run.status === 'complete' ?
+        'Use Export below to download the full JSON dataset or a flat CSV inventory.' : 'Exports become available when the collection finishes.');
+      dataPanel.append(exportHint);
     }
     update(); return { run, update, status, body, root };
   }
