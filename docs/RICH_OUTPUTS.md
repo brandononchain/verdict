@@ -7,7 +7,7 @@ Zearch answers can be more than prose, but the medium never bypasses research ve
 - Text, headings, lists, compact tables, language-labeled code blocks and expandable Details use a safe Markdown subset. HTML and model-authored links are text, not executable elements.
 - A complete, Jev-checked two-column table with 2–20 nonnegative numeric values, a single unit and a resolvable citation on every value can toggle to a bar chart. The source table stays available. This is a display transform of checked numbers, not an independent model answer or generated dataset.
 - Code is displayed, never run. Its explanatory text and fenced block form one Jev verification unit. Unsupported code falls back to selected evidence or an abstention.
-- Private notes enter the evidence set only after the user's per-query opt-in; they never enter the public web query.
+- Private notes and documents enter the evidence set only after the user's per-query opt-in; they never enter the public web query.
 
 ## Versioned artifact envelope for the next slices
 

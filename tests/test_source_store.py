@@ -106,5 +106,18 @@ class SourceStoreTests(unittest.TestCase):
         db.save('alice', ids[0][1], status='complete', answer='Reintroduced claim', sources=[dict(self.source, text='New copy')])
         self.assertEqual(db.get_run('alice', ids[0][1])['status'], 'redacted')
 
+    def test_tombstone_redacts_descendant_without_original_source(self):
+        limits = dict(global_calls=20,user_calls=10,global_budget=1000000,user_budget=1000000)
+        parent='a'*32; child='b'*32
+        db.reserve('alice',parent,'parent-request','Question',None,'test',100,limits)
+        db.save('alice',parent,status='complete',answer='Claim [1]',sources=[dict(self.source)])
+        db.reserve('alice',child,'child-request','Follow up',parent,'test',100,limits)
+        db.save('alice',child,status='complete',answer='Derived claim [1]',sources=[{
+            'n':1,'url':'https://different.example/page','text':'Other source'}])
+        self.assertEqual(source_store.tombstone('https://example.org/article'),2)
+        self.assertEqual(db.get_run('alice',child)['status'],'redacted')
+        db.save('alice',child,status='complete',answer='Reintroduced derived claim')
+        self.assertEqual(db.get_run('alice',child)['status'],'redacted')
+
 
 if __name__ == '__main__': unittest.main()
