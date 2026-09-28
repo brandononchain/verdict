@@ -11,6 +11,8 @@ import research
 import research_store as db
 import web_ingest
 import workspace_store as workspace
+import writer
+import jev_research as jev
 
 
 class WebIngestTests(unittest.TestCase):
@@ -112,6 +114,33 @@ class WebIngestTests(unittest.TestCase):
         workspace.delete_run(owner,run['id'])
         after=Handler(path,alice); artifact.handle(after)
         self.assertEqual(after.status,404)
+
+    def test_crawl_abstention_returns_captured_findings_when_writer_unavailable(self):
+        source={'n':1,'url':'https://example.com/','canonical_url':'https://example.com/',
+                'title':'Example home','domain':'example.com',
+                'text':'The site offers a desktop workspace for AI teammates and product teams.',
+                'excerpt':'The site offers a desktop workspace for AI teammates and product teams.',
+                'retrieved_at':1750000000,'content_type':'extracted_page'}
+        body={'query':'Summarize this site','request_id':uuid.uuid4().hex,
+              'depth':'crawl','target_url':'https://example.com/'}
+        abstain={'selected':None,'selected_probability':.7,'sufficiency_probability':.4,
+                 'conflict_probability':.1,'gate':'abstain','evidence_ids':[],
+                 'relevant_ids':[1],'model':'jev-test'}
+        with patch.object(research,'ready',return_value=True), \
+             patch.object(web_ingest,'collect',return_value=([source],{
+                 'queries':[],'search_calls':0,'extract_calls':0,'crawl_calls':1,
+                 'crawl_pages':1,'failed_pages':0,'candidate_urls':[source['url']],
+                 'selected_urls':[source['url']],'ranking':'bounded crawl'})), \
+             patch.object(jev,'judge',return_value=(abstain,None,{'input_tokens':10},[
+                 {'id':'1','passage':source['text'],'span_start':0,'span_end':len(source['text'])}])), \
+             patch.object(writer,'compose',side_effect=writer.WriterError('unavailable')):
+            run,_,history=research.prepare('alice',body)
+            list(research.run('alice',run,history))
+        saved=db.get_run('alice',run['id'])
+        self.assertEqual(saved['status'],'complete')
+        self.assertEqual(saved['usage']['answer_format'],'captured_excerpts')
+        self.assertIn('desktop workspace for AI teammates',saved['answer'])
+        self.assertIn('[1]',saved['answer'])
 
 
 if __name__ == '__main__': unittest.main()

@@ -40,8 +40,12 @@ def passage_span(query, text):
         segments.append((chunk.strip(), boundary + leading, len(text) - (len(chunk) - len(chunk.rstrip()))))
     if not segments:
         return '', 0, 0
-    anchor = max(range(len(segments)), key=lambda i: (
-        len(terms.intersection(re.findall(r'\w+', segments[i][0].lower()))), -len(segments[i][0])))
+    overlap = [len(terms.intersection(re.findall(r'\w+', item[0].lower()))) for item in segments]
+    # Broad summary prompts contain few page-specific terms. Do not choose
+    # the shortest fragment when every segment ties at zero overlap.
+    anchor = (max(range(len(segments)), key=lambda i: (overlap[i], -len(segments[i][0])))
+              if max(overlap) else next((i for i, item in enumerate(segments)
+                                         if len(item[0]) >= 35), 0))
     # Many questions have two parts. A single highest-overlap sentence may say
     # what a term means while the immediately following sentence explains the
     # action. Keep the original context together, within Jev's evidence bound.
@@ -55,7 +59,7 @@ def passage_span(query, text):
     return selected.strip(), segments[anchor][1], end
 
 
-def state_and_questions(query, sources):
+def state_and_questions(query, sources, mode='standard'):
     candidates = []
     for source in sources[:8]:
         excerpt, start, end = passage_span(query, source.get('text', ''))
@@ -69,14 +73,18 @@ def state_and_questions(query, sources):
     state = {'user_question': query, 'candidates': candidates}
     if len(json.dumps(state, ensure_ascii=False).encode()) > MAX_STATE_BYTES:
         raise JevError('Evidence exceeded the Jev input limit')
+    overview = mode in ('scrape', 'crawl')
     criteria = {candidate['id']: candidate['title'] + ' — ' + candidate['passage'][:100] for candidate in candidates}
-    criteria['none'] = 'None of these passages directly addresses the question.'
+    criteria['none'] = ('None of these passages contains relevant facts.' if overview
+                        else 'None of these passages directly addresses the question.')
     questions = {
         'best_passage': {'type': 'choice', 'instructions':
-            'Which `candidates` passage most directly answers `user_question`? Choose none if none directly answers it.',
+            ('Which `candidates` passage contains the most useful directly relevant facts for `user_question`? Choose none if none is relevant.' if overview else
+             'Which `candidates` passage most directly answers `user_question`? Choose none if none directly answers it.'),
             'criteria': criteria},
         'sufficient': {'type': 'noul', 'instructions':
-            'Does at least one `candidates` passage contain enough explicit information to answer `user_question` without outside knowledge?'},
+            ('Can the captured `candidates` collectively support at least one useful factual statement addressing `user_question`, without implying coverage of unseen pages?' if overview else
+             'Does at least one `candidates` passage contain enough explicit information to answer `user_question` without outside knowledge?')},
         'conflict': {'type': 'noul', 'instructions':
             'Do the `candidates` passages explicitly disagree on a fact needed to answer `user_question`?'}
     }
@@ -104,8 +112,8 @@ def call(state, questions):
         raise JevError('The Jev service could not complete this judgment') from exc
 
 
-def judge(query, sources):
-    state, questions, candidates = state_and_questions(query, sources)
+def judge(query, sources, mode='standard'):
+    state, questions, candidates = state_and_questions(query, sources, mode)
     raw = call(state, questions)
     if not isinstance(raw, dict) or not isinstance(raw.get('answers'), dict):
         raise JevError('Jev returned an invalid decision')
@@ -131,13 +139,43 @@ def judge(query, sources):
         'gate': 'answer' if can_answer and conflict < .65 else 'review' if can_answer else 'abstain',
         'model': raw.get('model', os.environ.get('JEV_MODEL', 'jev-latest'))}
     relevant = []
-    if can_answer and conflict < .65:
-        for candidate in candidates:
-            value = answers.get('relevant_' + candidate['id'], {}).get('noul')
-            if type(value) in (int, float) and math.isfinite(value) and value >= .65 and candidate['id'] != choice:
-                relevant.append(int(candidate['id']))
+    for candidate in candidates:
+        value = answers.get('relevant_' + candidate['id'], {}).get('noul')
+        if type(value) in (int, float) and math.isfinite(value) and value >= .65 and candidate['id'] != choice:
+            relevant.append(int(candidate['id']))
     judgment['evidence_ids'] = ([int(choice)] + relevant[:3]) if judgment['gate'] == 'answer' else []
+    judgment['relevant_ids'] = relevant[:4]
     return judgment, selected, raw.get('usage') or {}, candidates
+
+
+def supported_prefix(draft, check):
+    """Keep only the initial independently approved Markdown units."""
+    accepted = []
+    for part, probability in zip(units(draft), check.get('probabilities', [])):
+        if type(probability) not in (int, float) or probability < .75:
+            break
+        accepted.append(part)
+    return '\n\n'.join(accepted)
+
+
+def captured_overview(candidates, sources):
+    """Honest extractive fallback for a URL collection when synthesis fails."""
+    by_id = {str(s['n']): s for s in sources}
+    lines = []
+    for candidate in candidates:
+        source = by_id.get(candidate['id'])
+        if not source:
+            continue
+        excerpt = re.sub(r'\s+', ' ', candidate['passage']).strip()[:260]
+        if not excerpt:
+            continue
+        title = re.sub(r'[\r\n]+', ' ', str(source.get('title') or source.get('domain') or 'Page'))[:100]
+        lines.append(f'- **{title}** — {excerpt} [{candidate["id"]}]')
+        if len(lines) == 3:
+            break
+    if not lines:
+        return 'No readable passage was available from the captured pages.'
+    return 'From the captured pages:\n\n' + '\n'.join(lines)
 
 
 def verify(query, answer, sources, selected_ids):

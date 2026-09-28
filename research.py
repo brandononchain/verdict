@@ -300,7 +300,7 @@ def run(owner, record, history):
         yield {"type": "sources", "sources": sources}
         yield {'type': 'status', 'text': 'Jev is judging the evidence'}
         import jev_research
-        judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, query, sources)
+        judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, query, sources, mode)
         by_number = {source['n']: source for source in sources}
         for candidate in candidates:
             source = by_number.get(int(candidate['id']))
@@ -317,8 +317,15 @@ def run(owner, record, history):
         # even when the full retrieved snippets support a concise answer. Let
         # the writer try those sources, but publish only after Jev verifies its
         # actual paragraphs against the cited full evidence.
-        draft_ids = judgment['evidence_ids'] if judgment['gate'] == 'answer' else (
-            [source['n'] for source in sources[:4]] if judgment['gate'] == 'abstain' else [])
+        if judgment['gate'] == 'answer':
+            draft_ids = judgment['evidence_ids']
+        elif judgment['gate'] == 'abstain':
+            draft_ids = (([judgment['selected']] if judgment.get('selected') else []) +
+                         [n for n in judgment.get('relevant_ids', []) if n != judgment.get('selected')])[:4]
+            if not draft_ids:
+                draft_ids = [source['n'] for source in sources[:4]]
+        else:
+            draft_ids = []
         if draft_ids:
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
@@ -336,9 +343,20 @@ def run(owner, record, history):
                 else:
                     usage['draft_rejected'] = True
                     usage['draft_fallback_reason'] = 'unsupported_draft'
+                    supported = jev_research.supported_prefix(draft, check)
+                    if supported:
+                        answer = supported
+                        usage['answer_format'] = 'jev_verified_partial_prose'
+                        usage['draft_source_ids'] = draft_ids
             except (writer.WriterError, jev_research.JevError) as exc:
                 usage['draft_rejected'] = True
                 usage['draft_fallback_reason'] = 'writer_error' if isinstance(exc, writer.WriterError) else 'verification_error'
+        if mode in ('scrape', 'crawl') and (judgment['gate'] == 'abstain'
+                or judgment['gate'] == 'review') and usage['answer_format'] == 'jev_selected_excerpt':
+            answer = jev_research.captured_overview(candidates, sources)
+            if judgment['gate'] == 'review':
+                answer += '\n\nThe captured pages may disagree on a needed fact. Check the sources before relying on these excerpts.'
+            usage['answer_format'] = 'captured_excerpts'
         _, removed = source_store.excluded(sources)
         if removed:
             answer = 'This answer is unavailable because a source was removed.'
