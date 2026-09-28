@@ -67,6 +67,8 @@ def migrate():
         workspace_store.migrate(conn)
         import source_store
         source_store.migrate(conn)
+        import source_revalidation
+        source_revalidation.migrate(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS research_owner_created ON research_runs(owner, created)")
         conn.execute("""CREATE TABLE IF NOT EXISTS research_budgets (
             bucket TEXT NOT NULL, day TEXT NOT NULL, calls BIGINT NOT NULL,
