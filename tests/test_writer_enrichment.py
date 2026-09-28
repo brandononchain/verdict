@@ -97,16 +97,15 @@ class CollaborationTests(unittest.TestCase):
         self.assertEqual(usage['input_tokens'],12)
 
     def test_enrichment_replaces_page_but_preserves_original_on_failure(self):
-        with patch.dict(os.environ,{'ZEARCH_ENRICHMENT_ENABLED':'1','CONTEXT_DEV_API_KEY':'key'}), \
-             patch.object(enrichment,'open_provider',return_value=Response({
-                 'markdown':{'data':'Rendered article. ' * 10},
-                 'metadata':{'title':'Rendered'}})):
+        with patch.dict(os.environ,{'ZEARCH_ENRICHMENT_ENABLED':'1','TAVILY_API_KEY':'key'}), \
+             patch.object(enrichment,'_request',return_value={'results':[{
+                 'raw_content':'Rendered article. ' * 10, 'title':'Rendered'}]}):
             rows,report=enrichment.enrich([dict(self.sources[0])])
         self.assertEqual(rows[0]['content_type'],'extracted_page')
         self.assertEqual(rows[0]['title'],'Rendered')
         self.assertEqual(report['scrape_calls'],1)
-        with patch.dict(os.environ,{'ZEARCH_ENRICHMENT_ENABLED':'1','CONTEXT_DEV_API_KEY':'key'}), \
-             patch.object(enrichment,'open_provider',side_effect=OSError('offline')):
+        with patch.dict(os.environ,{'ZEARCH_ENRICHMENT_ENABLED':'1','TAVILY_API_KEY':'key'}), \
+             patch.object(enrichment,'_request',side_effect=OSError('offline')):
             rows,report=enrichment.enrich([dict(self.sources[0])])
         self.assertEqual(rows[0]['text'],self.sources[0]['text'])
         self.assertEqual(report['enriched_pages'],0)

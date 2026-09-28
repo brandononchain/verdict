@@ -1,21 +1,13 @@
-"""Owner-scoped, on-demand rendered screenshot and styleguide capture.
-
-Context.dev is an optional rendering provider. A normal research request never
-calls it; the user explicitly requests a visual capture on a completed run.
-"""
+"""Owner-scoped visual jobs rendered by Zearch's Railway browser worker."""
 import base64
 import json
 import os
-import re
 import time
-import urllib.parse
-import urllib.request
-
 import research_store as db
-from research import NoRedirect, open_provider
+import workspace_store as workspace
+from web_ingest import target
 
 MAX_IMAGE = 1_500_000
-MAX_JSON = 400_000
 
 
 def migrate(conn):
@@ -29,16 +21,18 @@ def migrate(conn):
 
 
 def configured():
-    return bool(os.environ.get('CONTEXT_DEV_API_KEY'))
+    return os.environ.get('ZEARCH_VISUAL_CAPTURE_ENABLED') == '1'
 
 
 def public(row):
     if not row:
         return None
+    screenshot = row['screenshot']
     return {'status': row['status'], 'captured': row['captured'], 'error': row['error'],
-            'retryable': row['status'] in ('failed', 'partial') or (row['status'] == 'running' and row['lease_until'] < time.time()),
-            'screenshot': bool(row['screenshot']),
-            'image_type': row['screenshot'].split(';',1)[0][5:] if row['screenshot'] else None,
+            'retryable': row['status'] in ('failed', 'partial') or
+            (row['status'] == 'running' and row['lease_until'] < time.time()),
+            'screenshot': bool(screenshot),
+            'image_type': screenshot.split(';', 1)[0][5:] if screenshot else None,
             'styleguide': json.loads(row['styleguide']) if row['styleguide'] else None}
 
 
@@ -57,103 +51,84 @@ def screenshot_bytes(owner, rid):
     return mime[5:-7], base64.b64decode(payload, validate=True)
 
 
-def reserve(owner, rid):
+def capture(owner, rid):
+    """Queue a capture; never open a browser in a web request."""
     if not configured():
-        raise ValueError('Visual capture requires CONTEXT_DEV_API_KEY in Vercel')
+        raise ValueError('Visual worker is not enabled')
     run = db.get_run(owner, rid)
     if not run or run['status'] != 'complete' or run.get('depth') not in ('scrape', 'crawl') or not run.get('target_url'):
         raise ValueError('Choose a completed page or site collection')
+    target(run['target_url'])
     now = int(time.time())
     day = time.strftime('%Y-%m-%d', time.gmtime(now))
     with db.connection() as (conn, marker):
+        workspace.lock_owner(conn, marker, '__scheduler__')
         row = db.execute(conn, marker, 'SELECT * FROM collection_visuals WHERE owner=? AND run_id=?', (owner, rid)).fetchone()
         if row and row['status'] == 'complete':
-            return run, False
-        if row and row['status'] == 'running' and row['lease_until'] >= now:
-            raise ValueError('Visual capture is already running; inspect the saved result before retrying')
+            return public(row)
+        if row and (row['status'] == 'queued' or
+                    row['status'] == 'running' and row['lease_until'] >= now):
+            return public(row)
         for bucket, cap in (('visual:global', int(os.environ.get('ZEARCH_DAILY_VISUAL_GLOBAL', '40'))),
                             ('visual:user:' + owner, int(os.environ.get('ZEARCH_DAILY_VISUAL_USER', '3')))):
             db.execute(conn, marker, '''INSERT INTO collection_visual_budgets(bucket,day,calls) VALUES(?,?,0)
                 ON CONFLICT(bucket,day) DO NOTHING''', (bucket, day))
-            if marker == '%s':
-                db.execute(conn, marker, 'SELECT bucket FROM collection_visual_budgets WHERE bucket=? AND day=? FOR UPDATE', (bucket, day)).fetchone()
             used = db.execute(conn, marker, 'SELECT calls FROM collection_visual_budgets WHERE bucket=? AND day=?', (bucket, day)).fetchone()['calls']
             if used >= cap:
                 raise ValueError('Visual capture allowance reached for today')
             db.execute(conn, marker, 'UPDATE collection_visual_budgets SET calls=calls+1 WHERE bucket=? AND day=?', (bucket, day))
         db.execute(conn, marker, '''INSERT INTO collection_visuals(run_id,owner,status,captured,lease_until)
-            VALUES(?,?,'running',?,?) ON CONFLICT(run_id) DO UPDATE SET status='running',captured=excluded.captured,
-            lease_until=excluded.lease_until,error=NULL''', (rid, owner, now, now + 120))
-    return run, True
+            VALUES(?,?,'queued',?,0) ON CONFLICT(run_id) DO UPDATE SET status='queued',captured=excluded.captured,
+            lease_until=0,error=NULL''', (rid, owner, now))
+    return get(owner, rid)
 
 
-def _json_response(response, limit=MAX_JSON):
-    raw = response.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError('Rendering provider response exceeded its limit')
-    value = json.loads(raw)
-    if not isinstance(value, dict):
-        raise ValueError('Rendering provider returned an invalid response')
-    return value
-
-
-def _capture_image(url, key):
-    with open_provider('https://api.context.dev/v1/web/scrape',
-        {'url': url, 'formats': {'screenshot': True}, 'maxAgeMs': 0}, key, timeout=55) as response:
-        data = _json_response(response, 2_400_000)
-    output = data.get('screenshot') or {}
-    value = output.get('data') if output.get('success') else None
-    if not isinstance(value, str):
-        raise ValueError('Screenshot capture returned no image')
-    match = re.fullmatch(r'data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)', value)
-    if not match or len(match[2]) > (MAX_IMAGE * 4 // 3 + 8):
-        raise ValueError('Screenshot format or size is unsupported')
-    raw = base64.b64decode(match[2], validate=True)
-    valid = ((match[1] == 'image/png' and raw.startswith(b'\x89PNG\r\n\x1a\n')) or
-             (match[1] == 'image/jpeg' and raw.startswith(b'\xff\xd8\xff')) or
-             (match[1] == 'image/webp' and raw.startswith(b'RIFF') and raw[8:12] == b'WEBP'))
-    if not raw or len(raw) > MAX_IMAGE or not valid:
-        raise ValueError('Screenshot data is invalid')
-    return value
-
-
-def _capture_style(url, key):
-    endpoint = 'https://api.context.dev/v1/web/styleguide?' + urllib.parse.urlencode({'directUrl': url, 'maxAgeMs': 0})
-    request = urllib.request.Request(endpoint, headers={'Authorization': 'Bearer ' + key, 'User-Agent': 'Zearch/1.0'})
-    with urllib.request.build_opener(NoRedirect()).open(request, timeout=50) as response:
-        data = _json_response(response)
-    style = data.get('styleguide')
-    if data.get('status') != 'ok' or not isinstance(style, dict):
-        raise ValueError('No styleguide was returned')
-    # Avoid storing arbitrary oversized CSS and provider metadata.
-    result = {k: style[k] for k in ('mode', 'colors', 'typography', 'elementSpacing', 'shadows', 'fontLinks', 'components') if k in style}
-    encoded = json.dumps(result, ensure_ascii=False)
-    if len(encoded.encode()) > 100_000:
-        raise ValueError('Styleguide exceeded its storage limit')
-    return encoded
-
-
-def capture(owner, rid):
-    run, fresh = reserve(owner, rid)
-    if not fresh:
-        return get(owner, rid)
+def claim():
+    if not configured():
+        return None
+    now = int(time.time())
     with db.connection() as (conn, marker):
-        prior = db.execute(conn, marker, 'SELECT screenshot,styleguide FROM collection_visuals WHERE owner=? AND run_id=?', (owner, rid)).fetchone()
-    screenshot, style = prior['screenshot'], prior['styleguide']
-    errors = []
-    key = os.environ['CONTEXT_DEV_API_KEY']
-    for name, action in (('Screenshot', _capture_image), ('Styleguide', _capture_style)):
-        if (name == 'Screenshot' and screenshot) or (name == 'Styleguide' and style):
-            continue
-        try:
-            value = action(run['target_url'], key)
-            if name == 'Screenshot': screenshot = value
-            else: style = value
-        except Exception:
-            errors.append(name + ' unavailable')
+        workspace.lock_owner(conn, marker, '__scheduler__')
+        db.execute(conn, marker, "UPDATE collection_visuals SET status='failed',error='Worker lease expired; retry explicitly' WHERE status='running' AND lease_until<?", (now,))
+        suffix = ' FOR UPDATE OF v SKIP LOCKED' if marker == '%s' else ''
+        row = db.execute(conn, marker, """SELECT v.run_id,v.owner,t.target_url FROM collection_visuals v
+            JOIN research_runs r ON r.id=v.run_id AND r.owner=v.owner
+            JOIN research_targets t ON t.run_id=v.run_id
+            WHERE v.status='queued' AND r.status='complete' ORDER BY v.captured,v.run_id LIMIT 1""" + suffix).fetchone()
+        if not row:
+            return None
+        job = dict(row)
+        job['lease_until'] = now + 180
+        db.execute(conn, marker, "UPDATE collection_visuals SET status='running',lease_until=? WHERE run_id=? AND status='queued'", (job['lease_until'], job['run_id']))
+        return job
+
+
+def finish(job, image=None, guide=None, error=None):
+    if image is not None:
+        if not isinstance(image, bytes) or len(image) > MAX_IMAGE or not image.startswith(b'\xff\xd8\xff'):
+            raise ValueError('Screenshot data is invalid')
+        screenshot = 'data:image/jpeg;base64,' + base64.b64encode(image).decode()
+    else:
+        screenshot = None
+    style = json.dumps(guide, ensure_ascii=False) if isinstance(guide, dict) else None
+    if style and len(style.encode()) > 100_000:
+        raise ValueError('Styleguide exceeded its storage limit')
     status = 'complete' if screenshot and style else 'partial' if screenshot or style else 'failed'
     with db.connection() as (conn, marker):
-        db.execute(conn, marker, '''UPDATE collection_visuals SET status=?,screenshot=?,styleguide=?,error=?,lease_until=0
-            WHERE owner=? AND run_id=? AND status='running' ''',
-            (status, screenshot, style, ', '.join(errors) or None, owner, rid))
-    return get(owner, rid)
+        db.execute(conn, marker, '''UPDATE collection_visuals SET status=?,screenshot=COALESCE(?,screenshot),
+            styleguide=COALESCE(?,styleguide),error=?,lease_until=0 WHERE owner=? AND run_id=?
+            AND status='running' AND lease_until=? AND lease_until>=?''',
+            (status, screenshot, style, error, job['owner'], job['run_id'], job['lease_until'], int(time.time())))
+
+
+def work_once():
+    job = claim()
+    if not job:
+        return False
+    try:
+        from visual_browser import render
+        image, style = render(job['target_url'])
+        finish(job, image, style)
+    except Exception:
+        finish(job, error='Browser capture failed; retry explicitly')
+    return True

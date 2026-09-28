@@ -29,7 +29,7 @@ Railway's public TCP proxy incurs network egress and direct connections consume 
 | `ZEARCH_SEARCH_USD_PER_CALL` | Defaults to `0.008` for Tavily basic search; override for your effective rate |
 | `ZEARCH_RESEARCH_ENABLED` | Set to `1` with the other required variables; the first request initializes the schema |
 
-The four pricing inputs must be positive, finite values. Operational limits have defaults in `.env.example`; set them deliberately before broader access. Optional rendered-page enrichment needs `ZEARCH_ENRICHMENT_ENABLED=1`, `CONTEXT_DEV_API_KEY`, and `ZEARCH_SCRAPE_USD_PER_CALL`. Keep it off until those are available. Discovery jobs need a separately provisioned recurring worker; enabling the web flag alone does not run the worker.
+The four pricing inputs must be positive, finite values. Operational limits have defaults in `.env.example`; set them deliberately before broader access. Optional Tavily page enrichment needs `ZEARCH_ENRICHMENT_ENABLED=1` and `ZEARCH_SCRAPE_USD_PER_CALL`. Discovery jobs need a separately provisioned recurring worker; enabling the web flag alone does not run the worker.
 
 `.env.example` is only a list of names, not a secret store. This Python app does not automatically load `.env` files for local development; export values into the process environment. Do not send credentials in chat or commit them to Git.
 

@@ -1,0 +1,9 @@
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
+WORKDIR /app
+COPY requirements.txt requirements.worker.txt ./
+RUN pip install --no-cache-dir -r requirements.worker.txt && useradd -m -u 10001 zearch
+COPY . .
+RUN chown -R zearch:zearch /app
+USER zearch
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "discovery.py"]

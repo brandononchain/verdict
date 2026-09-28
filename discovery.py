@@ -160,4 +160,5 @@ if __name__ == '__main__':
         raise SystemExit('Run python discovery.py; each invocation claims at most one job')
     db.ensure_schema()
     import collection_batch
-    print('Processed one job.' if work_once() or collection_batch.work_once() else 'No eligible work.')
+    import collection_visual
+    print('Processed one job.' if work_once() or collection_batch.work_once() or collection_visual.work_once() else 'No eligible work.')

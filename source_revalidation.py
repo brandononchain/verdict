@@ -63,7 +63,7 @@ def enqueue(url, now=None):
 def claim(now=None):
     if os.environ.get('ZEARCH_REVALIDATION_ENABLED') != '1':
         return None
-    if not os.environ.get('CONTEXT_DEV_API_KEY'):
+    if not os.environ.get('TAVILY_API_KEY'):
         raise ValueError('Revalidation provider key is not configured')
     price, max_usd, max_calls = price_and_limits()
     if not max_calls or max_usd < price:
@@ -124,7 +124,7 @@ def work_once():
         return False
     try:
         import enrichment
-        content, metadata = enrichment.extract(job['url'], os.environ['CONTEXT_DEV_API_KEY'])
+        content, metadata = enrichment.extract(job['url'])
         source = {'url': job['url'], 'text': content, 'content_type': 'extracted_page',
                   'retrieved_at': int(time.time()), 'title': str(metadata.get('title') or urlsplit(job['url']).hostname)[:300],
                   'description': str(metadata.get('description') or '')[:500],

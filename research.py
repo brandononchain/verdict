@@ -30,7 +30,7 @@ def configuration():
     if os.environ.get("ZEARCH_WRITER_MODEL") != "gpt-5.4-mini":
         required.append("ZEARCH_WRITER_INPUT_USD_PER_MILLION")
     if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') == '1':
-        required += ['CONTEXT_DEV_API_KEY', 'ZEARCH_SCRAPE_USD_PER_CALL']
+        required += ['ZEARCH_SCRAPE_USD_PER_CALL']
     if os.environ.get("VERCEL"):
         required.append("DATABASE_URL")
     missing = [key for key in required if not os.environ.get(key)]

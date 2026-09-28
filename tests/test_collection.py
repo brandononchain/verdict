@@ -68,22 +68,22 @@ class CollectionTests(unittest.TestCase):
 
     def test_visual_capture_is_explicit_owner_scoped_and_metered(self):
         rid = self.collected()
-        png = b'\x89PNG\r\n\x1a\n' + b'test'
-        url = 'data:image/png;base64,'+base64.b64encode(png).decode()
-        with patch.dict(os.environ, {'CONTEXT_DEV_API_KEY':'test','ZEARCH_DAILY_VISUAL_USER':'1'}), \
-             patch.object(visuals,'_capture_image',return_value=url) as shot, \
-             patch.object(visuals,'_capture_style',return_value=json.dumps({'colors':{'accent':'#ffffff'}})) as guide:
+        jpeg = b'\xff\xd8\xff' + b'test'
+        with patch.dict(os.environ, {'ZEARCH_VISUAL_CAPTURE_ENABLED':'1','ZEARCH_DAILY_VISUAL_USER':'1'}), \
+             patch('visual_browser.render', return_value=(jpeg, {'colors':{'accent':'#ffffff'}})) as render:
             self.assertIsNone(visuals.get('alice',rid))
             result=visuals.capture('alice',rid)
+            self.assertEqual(result['status'],'queued')
+            self.assertIsNone(visuals.get('bob',rid))
+            self.assertTrue(visuals.work_once())
+            result = visuals.get('alice',rid)
             self.assertEqual(result['status'],'complete')
             self.assertTrue(result['screenshot'])
             self.assertEqual(result['styleguide']['colors']['accent'],'#ffffff')
-            self.assertEqual(visuals.screenshot_bytes('alice',rid),('image/png',png))
-            self.assertIsNone(visuals.get('bob',rid))
+            self.assertEqual(visuals.screenshot_bytes('alice',rid),('image/jpeg',jpeg))
             self.assertIsNone(visuals.screenshot_bytes('bob',rid))
             visuals.capture('alice',rid)
-            self.assertEqual(shot.call_count,1)
-            self.assertEqual(guide.call_count,1)
+            self.assertEqual(render.call_count,1)
             second=self.collected(url='https://example.com/b')
             with self.assertRaisesRegex(ValueError,'allowance'):
                 visuals.capture('alice',second)
@@ -109,20 +109,18 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(allowed.status,200)
         self.assertIsNone(json.loads(allowed.wfile.getvalue())['visual'])
 
-    def test_provider_screenshot_rejects_wrong_type_and_oversize(self):
-        class Response:
-            def __init__(self, output): self.output=output
-            def __enter__(self): return self
-            def __exit__(self,*_): pass
-            def read(self, _): return json.dumps({'screenshot':{'success':True,'data':self.output}}).encode()
-        valid = 'data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nabc').decode()
-        with patch.object(visuals,'open_provider',return_value=Response(valid)) as provider:
-            self.assertEqual(visuals._capture_image('https://example.com','secret'),valid)
-            self.assertEqual(provider.call_args.args[1]['formats'],{'screenshot':True})
-            self.assertEqual(provider.call_args.args[1]['maxAgeMs'],0)
-        with patch.object(visuals,'open_provider',return_value=Response('data:image/png;base64,'+base64.b64encode(b'<script>').decode())):
+    def test_browser_capture_rejects_private_destinations_and_invalid_images(self):
+        from visual_browser import public_host
+        self.assertFalse(public_host('http://example.com'))
+        self.assertFalse(public_host('https://127.0.0.1'))
+        with patch('visual_browser.socket.getaddrinfo', return_value=[(2, 1, 0, '', ('10.0.0.1',443))]):
+            self.assertFalse(public_host('https://example.com'))
+        rid = self.collected()
+        with patch.dict(os.environ, {'ZEARCH_VISUAL_CAPTURE_ENABLED':'1'}):
+            visuals.capture('alice',rid)
+            job = visuals.claim()
             with self.assertRaisesRegex(ValueError,'invalid'):
-                visuals._capture_image('https://example.com','secret')
+                visuals.finish(job,b'<script>',{})
 
     def test_cancel_batch_does_not_cancel_running_page(self):
         with patch.dict(os.environ, {'ZEARCH_DISCOVERY_ENABLED':'1'}), patch.object(research,'ready',return_value=True):
