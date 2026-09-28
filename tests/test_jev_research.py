@@ -85,6 +85,13 @@ class JevResearchTests(unittest.TestCase):
                     'A Retry-After header may say how long to wait before another request.')
         self.assertEqual(jev.passage('What does HTTP 429 mean and how should a client respond?', evidence), evidence)
 
+    def test_passage_offsets_resolve_in_original_capture(self):
+        text = 'Repeated introduction.\nRepeated introduction.\nHTTP 429 asks clients to slow down.\nRetry-After gives a delay.'
+        passage, start, end = jev.passage_span('HTTP 429 clients slow down', text)
+        self.assertEqual(text[start:end].split(), passage.split())
+        self.assertEqual(start, text.index('HTTP 429'))
+        self.assertLessEqual(len(passage), 450)
+
     def test_verification_uses_only_each_paragraphs_citations(self):
         captured = {}
         def fake_call(state, questions):

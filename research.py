@@ -125,6 +125,7 @@ def open_provider(url, payload, key, timeout=20):
 
 def search(query):
     import retrieval
+    from provenance import publication_date
     payload = {"query": query[:4000], "search_depth": "basic", "max_results": 8,
                "include_answer": False, "include_raw_content": "text",
                "include_published_date": True}
@@ -153,14 +154,16 @@ def search(query):
         if not text:
             break
         remaining -= len(text)
+        captured_at = int(time.time())
+        published = publication_date(row.get('published_date'), captured_at)
         sources.append({"n": len(sources) + 1, "url": url,
                         "title": str(row.get("title") or url)[:300],
                         "domain": urllib.parse.urlsplit(url).hostname,
                         "text": text, "excerpt": text[:450],
-                        "retrieved_at": int(time.time()),
-                        "published_date": str(row.get('published_date') or '')[:80],
+                        "retrieved_at": captured_at,
+                        "published_date": published,
                         "retrieval_provider": "tavily",
-                        "published_date_provenance": "provider_metadata" if row.get('published_date') else "unknown",
+                        "published_date_provenance": "provider_metadata" if published else "unknown",
                         "provider_score": row.get('score'),
                         "content_type": "page" if row.get("raw_content") else "snippet"})
         if len(sources) == 8:
@@ -258,6 +261,14 @@ def run(owner, record, history):
         yield {'type': 'status', 'text': 'Jev is judging the evidence'}
         import jev_research
         judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, query, sources)
+        by_number = {source['n']: source for source in sources}
+        for candidate in candidates:
+            source = by_number.get(int(candidate['id']))
+            if source is not None:
+                source['evidence_span'] = [candidate['span_start'], candidate['span_end']]
+                source['excerpt'] = candidate['passage']
+        db.save(owner, rid, status='streaming', sources=sources)
+        yield {'type': 'sources', 'sources': sources}
         usage['input_tokens'] = model_usage.get('input_tokens', 0)
         usage['judgment'] = judgment
         answer = jev_research.format_answer(judgment, selected, candidates, sources)

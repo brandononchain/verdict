@@ -29,8 +29,8 @@ The gates below are ordered by dependency. A milestone is complete only when its
 ## M7 implementation slices
 
 1. **M7.1: Query and source provenance (implemented).** Persist canonical URLs, all bounded queries that found a source, provider and reported publication provenance, ranking factors, and selection reasons. Source cards distinguish reported publication from page capture time. No additional provider calls.
-2. **M7.2: Retrieval quality.** Measure relevant-source recall and primary-source coverage on the completed M6 cohort; introduce a second provider or hybrid semantic reranker only if a measured failure justifies it within the existing spend reservation.
-3. **M7.3: Freshness and authority.** Validate timestamp handling and source authority on current cases, capture exact source spans, and compare against the M6 baseline before accepting M7.
+2. **M7.2: Retrieval quality (instrumented, awaiting review).** New runs retain the canonical provider candidate URL inventory and ranked URL set. An optional [human candidate review](../evals/REVIEW.md) measures recall within that candidate pool, selected precision, and matched publisher share by mode. Compare completed M6 and M7 cohorts before tuning. Introduce a second provider or hybrid semantic reranker only if a measured failure justifies it within the existing spend reservation.
+3. **M7.3: Freshness and authority (safeguards implemented, acceptance pending).** Publication metadata is parsed into a plausible UTC date or treated as unknown; page capture remains separate. Source cards show the bounded passage Jev inspected, with character offsets into the captured source text. Review current cases and compare source quality, freshness, and abstention against the M6 baseline before accepting M7.
 
 ## Design and economics rules
 

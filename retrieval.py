@@ -148,6 +148,9 @@ def retrieve(query, history, depth, search):
             except Exception as exc:
                 failed += 1
                 failure_kinds[type(exc).__name__] += 1
-    return rank(query, results), {'queries': queries, 'search_calls': len(queries),
+    candidate_urls = list(dict.fromkeys(canonical(row['url']) for row in results if row.get('url')))
+    selected = rank(query, results)
+    return selected, {'queries': queries, 'search_calls': len(queries),
         'failed_searches': failed, 'search_failure_kinds': dict(failure_kinds),
+        'candidate_urls': candidate_urls, 'selected_urls': [row['canonical_url'] for row in selected if row.get('canonical_url')],
         'ranking': 'lexical relevance, source provenance, provider score, deduplication and domain diversity'}
