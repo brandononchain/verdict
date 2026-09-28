@@ -73,8 +73,37 @@
     if (rows.some(row => !row) || new Set(rows.map(row => row.unit)).size !== 1) return null;
     return rows;
   }
+  function marketChart(source) {
+    const chart = source?.chart, points = chart?.points;
+    if (chart?.kind !== 'price_series' || chart.unit !== 'USD' ||
+        !Number.isInteger(chart.captured_at) || chart.captured_at < 1 || chart.captured_at > 4102444800 ||
+        !Array.isArray(points) || points.length < 2 || points.length > 30 ||
+        !points.every((p, i) => Array.isArray(p) && p.length === 2 &&
+          Number.isInteger(p[0]) && Number.isFinite(p[1]) && p[1] > 0 &&
+          (i === 0 || p[0] > points[i - 1][0]))) return null;
+    const prices = points.map(p => p[1]), low = Math.min(...prices), high = Math.max(...prices);
+    const spread = Math.max(high - low, high * .001);
+    const coords = points.map((p, i) => `${20 + i * 560 / (points.length - 1)},${160 - (p[1] - low + spread * .08) * 135 / (spread * 1.16)}`).join(' ');
+    const figure = document.createElement('figure'); figure.className = 'market-figure';
+    const heading = document.createElement('figcaption'); heading.textContent = 'BTC-USD · 24-hour price context';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 600 180'); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', `Hourly Coinbase Exchange closes from $${low.toLocaleString()} to $${high.toLocaleString()} USD. Snapshot, not a streaming chart.`);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', coords); line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', '#dedede'); line.setAttribute('stroke-width', '2.5');
+    line.setAttribute('stroke-linejoin', 'round'); line.setAttribute('stroke-linecap', 'round');
+    svg.append(line);
+    const foot = document.createElement('small');
+    foot.textContent = `Coinbase Exchange hourly closes · snapshot ${new Date(chart.captured_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC · last trade above may differ from the last hourly close.`;
+    figure.append(heading, svg, foot); return figure;
+  }
   function render(node, text, sources = [], complete = false) {
     node.replaceChildren(); let target = node;
+    if (complete) {
+      const market = sources.find(s => s.content_type === 'market_ticker' && s.chart);
+      if (market) { const visual = marketChart(market); if (visual) node.append(visual); }
+    }
     for (const block of blocks(text)) {
       let item;
       if (block.type === 'heading') {
@@ -121,7 +150,7 @@
       target.append(item);
     }
   }
-  const api = { blocks, chartData, render, sourceLink };
+  const api = { blocks, chartData, marketChart, render, sourceLink };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ZearchRender = api;
 })(typeof window === 'undefined' ? {} : window);

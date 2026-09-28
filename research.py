@@ -63,7 +63,7 @@ def rates():
 def reservation(depth='standard'):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     # Two Jev judgments, one bounded draft, at most three page extractions.
-    provider_credits = 2 if depth == 'crawl' else 1 if depth == 'scrape' else 3 if depth in ('deep', 'compare') else 1
+    provider_credits = 3 if depth == 'crawl' else 1 if depth == 'scrape' else 3 if depth in ('deep', 'compare') else 1
     optional_scrapes = 0 if depth in ('scrape', 'crawl') else 3
     return math.ceil(200_000 * jev_rate + 20_000 * writer_in +
         900 * writer_out + (search_rate * provider_credits + scrape_rate * optional_scrapes) * 1_000_000)
@@ -264,7 +264,7 @@ def run(owner, record, history):
         if mode in ('scrape', 'crawl'):
             yield {'type': 'status', 'text': 'Reading the page' if mode == 'scrape' else 'Crawling up to five pages'}
             import web_ingest
-            sources, report = measured('retrieval', web_ingest.collect, record['target_url'], mode)
+            sources, report = measured('retrieval', web_ingest.collect, record['target_url'], mode, query)
         else:
             yield {"type": "status", "text": "Searching the web"}
             import retrieval

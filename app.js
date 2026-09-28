@@ -110,6 +110,8 @@
     const root = make('article', 'turn'), question = make('div', 'user-message');
     const response = make('section', 'assistant-message'), status = make('p', 'research-status');
     const body = make('div', 'research-prose'), details = make('details', 'research-evidence');
+    const assetDetails = make('details', 'asset-evidence'), assetSummary = make('summary');
+    const assetGrid = make('div', 'asset-grid'); assetDetails.append(assetSummary, assetGrid);
     const summary = make('summary'), sources = make('ol'), actions = make('div', 'turn-actions');
     const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'Research approach');
     const traceBody = make('p'); trace.append(traceTitle, traceBody); trace.hidden = true;
@@ -143,7 +145,7 @@
         document.body.append(link); link.click(); link.remove(); exportMenu.open = false;
       }));
     }
-    actions.append(copy, exportMenu, save); response.append(status, body, details, trace, actions); root.append(question, response); thread.append(root);
+    actions.append(copy, exportMenu, save); response.append(status, body, assetDetails, details, trace, actions); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
       status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
@@ -180,6 +182,23 @@
         sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
+      assetGrid.replaceChildren();
+      const media = [], emails = new Set();
+      for (const source of run.sources || []) {
+        for (const item of source.assets || []) if (media.length < 60 && !media.some(existing => existing.url === item.url)) media.push(item);
+        for (const email of source.emails || []) if (emails.size < 30) emails.add(email);
+      }
+      for (const item of media) {
+        const card = make('div', 'asset-card'), link = ZearchRender.sourceLink({url:item.url,title:item.label || item.kind}, item.label || item.url);
+        if (['image','logo','favicon'].includes(item.kind)) {
+          const img = document.createElement('img'); img.src = item.url; img.alt = item.label || item.kind;
+          img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; card.append(img);
+        }
+        card.append(link, make('small', '', item.kind)); assetGrid.append(card);
+      }
+      if (emails.size) assetGrid.append(make('p', '', 'Public emails: ' + [...emails].join(' · ')));
+      assetDetails.hidden = !['scrape','crawl'].includes(run.depth) || (!media.length && !emails.size);
+      assetSummary.textContent = `Assets & contacts · ${media.length} links${emails.size ? ' · ' + emails.size + ' emails' : ''}`;
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
         const lines = [];
@@ -221,7 +240,7 @@
     if (active) { active.abort(); return; }
     const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
     const targetUrl = collecting ? $('target-url').value.trim() : null;
-    const question = query.value.trim() || (mode === 'scrape' ? 'Summarize this page and extract its key facts.' : mode === 'crawl' ? 'Summarize the main topics and supported findings across this site.' : '');
+    const question = query.value.trim() || (mode === 'scrape' ? 'Summarize this page and extract its key facts.' : mode === 'crawl' ? 'Summarize the core product and main sections from the captured pages of this site.' : '');
     if (!question || (collecting && !targetUrl)) return;
     version++; active = new AbortController(); showThread();
     const view = turn({ query: question, target_url: targetUrl, depth: mode, answer: '', sources: [], status: 'pending' });
