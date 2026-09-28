@@ -113,6 +113,7 @@
         if (run.usage.answer_format) lines.push(`Answer path: ${run.usage.answer_format}`);
         if (run.usage.draft_fallback_reason) lines.push(`Draft fallback: ${run.usage.draft_fallback_reason.replaceAll('_', ' ')}`);
         if (run.usage.total_ms != null) lines.push(`Research time: ${(run.usage.total_ms / 1000).toFixed(1)}s`);
+        if (Number.isInteger(run.estimated_cost)) lines.push(`Estimated provider cost: $${(run.estimated_cost / 1000000).toFixed(6)}`);
         traceBody.textContent = lines.join('\n');
       }
     }
