@@ -5,18 +5,28 @@ import os
 import time
 
 from research import open_provider, safe_url
+import source_store
 
 MAX_PAGES = 3
 
 
 def enrich(sources):
     if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') != '1':
-        return sources, {'scrape_calls': 0, 'enriched_pages': 0}
+        return sources, {'scrape_calls': 0, 'enriched_pages': 0, 'cache_hits': 0, 'cache_errors': 0}
     key = os.environ['CONTEXT_DEV_API_KEY']
-    calls = improved = 0
+    calls = improved = cache_hits = cache_errors = 0
     for source in sources[:MAX_PAGES]:
         if source.get('note_id') or not safe_url(source.get('url')):
             continue
+        try:
+            cached = source_store.lookup(source['url'])
+            if cached:
+                source_store.apply_hit(source, cached)
+                cache_hits += 1
+                continue
+        except Exception:
+            # The optional shared cache never blocks a fresh provider attempt.
+            cache_errors += 1
         calls += 1
         try:
             with open_provider('https://api.context.dev/v1/web/scrape', {
@@ -43,8 +53,13 @@ def enrich(sources):
                 description = metadata.get('description')
                 if isinstance(description, str):
                     source['description'] = description[:500]
+            try:
+                source_store.save(source)
+            except Exception:
+                cache_errors += 1
             improved += 1
         except (OSError, ValueError, KeyError, TypeError):
             # A failed extraction never replaces the original searchable snippet.
             pass
-    return sources, {'scrape_calls': calls, 'enriched_pages': improved}
+    return sources, {'scrape_calls': calls, 'enriched_pages': improved,
+                     'cache_hits': cache_hits, 'cache_errors': cache_errors}
