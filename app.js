@@ -507,6 +507,7 @@
       })); li.append(actions); $('investigations-list').append(li);
     }
     $('batch-form').querySelector('button').disabled = !data.discovery_enabled;
+    $('batch-disabled').hidden = Boolean(data.discovery_enabled);
     for (const batch of data.batches || []) {
       const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
       li.append(make('p', 'workspace-title', `${batch.items.filter(x => x.status === 'complete').length}/${batch.items.length} pages · ${batch.status}`));
