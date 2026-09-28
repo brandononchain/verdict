@@ -24,7 +24,7 @@ class SourceStoreTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {'ZEARCH_DB_PATH': self.tmp.name + '/research.sqlite3',
-            'ZEARCH_ENRICHMENT_ENABLED': '1', 'CONTEXT_DEV_API_KEY': 'test'})
+            'ZEARCH_ENRICHMENT_ENABLED': '1', 'TAVILY_API_KEY': 'test'})
         self.env.start()
         db.migrate()
         self.policy = Path(self.tmp.name) / 'policy.json'
@@ -46,7 +46,7 @@ class SourceStoreTests(unittest.TestCase):
             'reviewed_at': '2026-09-28', 'ttl_seconds': 3600}}}))
 
     def test_default_policy_never_reuses_extractions(self):
-        with patch.object(enrichment, 'open_provider', return_value=Response()) as provider:
+        with patch.object(enrichment, '_request', return_value={'results':[{'raw_content':'Extracted article. ' * 20,'title':'Extracted title'}]}) as provider:
             enrichment.enrich([dict(self.source)])
             enrichment.enrich([dict(self.source)])
         self.assertEqual(provider.call_count, 2)
@@ -54,7 +54,7 @@ class SourceStoreTests(unittest.TestCase):
 
     def test_allowed_cache_hit_expiry_and_tombstone(self):
         self.allow()
-        with patch.object(enrichment, 'open_provider', return_value=Response()) as provider:
+        with patch.object(enrichment, '_request', return_value={'results':[{'raw_content':'Extracted article. ' * 20,'title':'Extracted title'}]}) as provider:
             first, first_report = enrichment.enrich([dict(self.source)])
             second, second_report = enrichment.enrich([dict(self.source)])
         self.assertEqual(provider.call_count, 1)

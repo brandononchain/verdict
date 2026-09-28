@@ -16,7 +16,7 @@ class RevalidationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {'ZEARCH_DB_PATH': self.tmp.name + '/research.sqlite3',
             'ZEARCH_REVALIDATION_ENABLED': '1', 'ZEARCH_SCRAPE_USD_PER_CALL': '.01',
-            'CONTEXT_DEV_API_KEY': 'test',
+            'TAVILY_API_KEY': 'test',
             'ZEARCH_DAILY_REVALIDATION_CALLS': '3', 'ZEARCH_DAILY_REVALIDATION_USD': '.03'})
         self.env.start()
         db.migrate()
@@ -84,7 +84,7 @@ class RevalidationTests(unittest.TestCase):
         worker.enqueue(self.url, now=100)
         with patch.dict(os.environ, {'ZEARCH_DAILY_REVALIDATION_CALLS': '0'}):
             self.assertIsNone(worker.claim(now=100))
-        with patch.dict(os.environ, {'CONTEXT_DEV_API_KEY': ''}):
+        with patch.dict(os.environ, {'TAVILY_API_KEY': ''}):
             with self.assertRaises(ValueError): worker.claim(now=100)
         self.assertEqual(worker.report()['daily_reservations'], [])
 

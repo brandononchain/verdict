@@ -335,7 +335,7 @@
           if (typeof value !== 'string') continue;
           const chip = make('div', 'collection-color');
           const swatch = make('span', 'collection-swatch');
-          if (/^#[0-9a-f]{3,8}$/i.test(value)) swatch.style.backgroundColor = value;
+          if (/^#[0-9a-f]{3,8}$/i.test(value) || /^rgba?\([\d\s.,%]+\)$/i.test(value)) swatch.style.backgroundColor = value;
           chip.append(swatch, make('small', '', `${name} · ${value}`)); palette.append(chip);
         }
         visualSection.append(palette);
@@ -346,12 +346,21 @@
       }
       if (visual?.error) visualSection.append(make('p', 'collection-data-note', visual.error));
       if (!visual?.screenshot && !guide) visualSection.append(make('p', 'collection-data-note',
-        visualConfigured ? 'Capture a rendered page and its design tokens.' : 'Rendered capture is available when the visual provider is configured.'));
+        visual?.status === 'queued' ? 'Queued for Zearch’s browser worker.' :
+        visual?.status === 'running' ? 'Rendering the page in Zearch’s browser worker…' :
+        visualConfigured ? 'Capture a rendered page and its design tokens.' : 'Visual capture is available when the Zearch browser worker is enabled.'));
       if (visualConfigured && run.status === 'complete' && (!visual || visual.retryable)) {
-        visualSection.append(button(visual ? 'Retry visual capture' : 'Capture screenshot & styleguide', async () => {
+        visualSection.append(button(visual ? 'Retry visual capture' : 'Queue visual capture', async () => {
           const response = await fetch('/api/collection?id=' + run.id, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
           const data = await response.json(); if (!response.ok) throw Error(data.error || 'Capture unavailable');
           visual = data; renderCollection();
+        }));
+      }
+      if (visual?.status === 'queued' || visual?.status === 'running') {
+        visualSection.append(button('Refresh capture status', async () => {
+          const response = await fetch('/api/collection?id=' + run.id);
+          const data = await response.json(); if (!response.ok) throw Error(data.error || 'Capture unavailable');
+          visual = data.visual; renderCollection();
         }));
       }
       dataPanel.append(visualSection);

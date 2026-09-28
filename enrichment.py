@@ -1,34 +1,28 @@
 """Optional bounded page extraction; search snippets remain usable on provider failure."""
 import hashlib
-import json
 import os
 import time
 
-from research import open_provider, safe_url
+from research import safe_url
+from web_ingest import _request
 import source_store
 
 MAX_PAGES = 3
 
 
-def extract(url, key):
-    with open_provider('https://api.context.dev/v1/web/scrape', {
-            'url': url, 'formats': {'markdown': True},
-            'sharedParams': {'mainContentOnly': True}}, key, timeout=15) as response:
-        raw = response.read(500_001)
-    if len(raw) > 500_000:
-        raise ValueError('Extraction exceeded the response bound')
-    data = json.loads(raw)
-    markdown = data.get('markdown') or {}
-    content = markdown.get('data') if isinstance(markdown, dict) else None
+def extract(url):
+    data = _request('extract', {'urls': url, 'extract_depth': 'basic', 'format': 'markdown'})
+    results = data.get('results') or []
+    row = results[0] if results and isinstance(results[0], dict) else {}
+    content = row.get('raw_content')
     if not isinstance(content, str) or len(content.strip()) < 100:
         raise ValueError('Extraction did not contain useful page text')
-    return content[:4000], data.get('metadata') if isinstance(data.get('metadata'), dict) else {}
+    return content[:4000], {'title': row.get('title'), 'description': row.get('description')}
 
 
 def enrich(sources):
     if os.environ.get('ZEARCH_ENRICHMENT_ENABLED') != '1':
         return sources, {'scrape_calls': 0, 'enriched_pages': 0, 'cache_hits': 0, 'cache_errors': 0}
-    key = os.environ['CONTEXT_DEV_API_KEY']
     calls = improved = cache_hits = cache_errors = 0
     for source in sources[:MAX_PAGES]:
         if source.get('note_id') or not safe_url(source.get('url')):
@@ -44,7 +38,7 @@ def enrich(sources):
             cache_errors += 1
         calls += 1
         try:
-            content, metadata = extract(source['url'], key)
+            content, metadata = extract(source['url'])
             source['text'] = content
             source['excerpt'] = source['text'][:450]
             source['content_type'] = 'extracted_page'
