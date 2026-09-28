@@ -303,7 +303,7 @@
       const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
       li.append(make('p', 'workspace-title', item.query));
       const changes = item.last_changes;
-      const summary = changes.check ? `${changes.added.length} new sources · ${changes.changed.length} changed excerpts · ${changes.removed.length} removed sources. Text changes do not necessarily mean facts changed.` : 'No refresh comparison yet.';
+      const summary = changes.check ? `${changes.added.length} new sources · ${changes.changed.length} changed excerpts · ${changes.removed.length} removed sources.${changes.answer_changed ? ' Answer changed; review the saved runs before relying on it.' : ''} No verified fact-change alert was sent.` : 'No refresh comparison yet.';
       li.append(make('p', 'hint', summary));
       if (item.job) li.append(make('p', 'hint', item.job.error || `Refresh ${item.job.status}`));
       if (item.last_run) actions.append(button('Open latest', () => { if (!active) { $('workspace').close(); location.hash = 'r/' + item.last_run; } }));

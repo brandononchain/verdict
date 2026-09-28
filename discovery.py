@@ -6,7 +6,9 @@ require a new explicit refresh. Request IDs prevent duplicate reservation.
 import hashlib
 import json
 import os
+import sys
 import time
+import unicodedata
 import uuid
 import research
 import research_store as db
@@ -96,13 +98,19 @@ def tick():
 
 
 def changes(previous, current):
+    def normalized(value):
+        return ' '.join(unicodedata.normalize('NFKC', value or '').split())
     def snapshot(run):
-        return {s['url']: hashlib.sha256(' '.join(s['text'].split()).encode()).hexdigest()
-                for s in (run or {}).get('sources', []) if s.get('url')}
+        return {s['url']: hashlib.sha256(normalized(s.get('text')).encode()).hexdigest()
+                for s in (run or {}).get('sources', []) if s.get('url') and isinstance(s.get('text'), str)}
     old, new = snapshot(previous), snapshot(current)
+    before = normalized((previous or {}).get('answer'))
+    after = normalized((current or {}).get('answer'))
     return {'added': sorted(new.keys() - old.keys()), 'removed': sorted(old.keys() - new.keys()),
             'changed': sorted(k for k in new.keys() & old.keys() if old[k] != new[k]),
-            'check': 'Retrieved text changed; this is not a verified change in the underlying facts.'}
+            'answer_changed': bool(previous and before != after),
+            'review_status': 'pending' if previous and before != after else 'none',
+            'check': 'Source and answer differences are review candidates, not verified fact changes. No notification was sent.'}
 
 
 def finish(job, run=None, error=None):
@@ -139,5 +147,7 @@ def work_once():
 
 if __name__ == '__main__':
     if not enabled():
-        raise SystemExit('Set ZEARCH_DISCOVERY_ENABLED=1 after configuring a recurring worker invocation')
+        raise SystemExit('Set ZEARCH_DISCOVERY_ENABLED=1 after configuring the worker and spend caps')
+    if len(sys.argv) != 1:
+        raise SystemExit('Run python discovery.py; each invocation claims at most one job')
     print('Processed one job.' if work_once() else 'No eligible work.')

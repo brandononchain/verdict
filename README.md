@@ -47,9 +47,9 @@ The M10 presentation slice can show language-labeled code blocks and toggle a tw
 
 ## Discovery worker
 
-Save a completed answer as an investigation. Refresh jobs search the saved question against the public web without private notes or prior conversational context. Text diffs show changed source content, not proven changes in underlying facts.
+Save a completed answer as an investigation. Refresh jobs search the saved question against the public web without private notes or prior conversational context. The saved comparison records normalized source-text differences and whether the answer wording changed. Both are review candidates, not verified fact changes; no notification is sent.
 
-Install a recurring external invocation of `python discovery.py` with the same database, secret, Jev/search/writer keys and pricing inputs as production; then enable `ZEARCH_DISCOVERY_ENABLED=1` on worker and web. Each invocation schedules due investigations and claims at most one queued job. Daily/weekly schedules expire 29 days after creation. Expired worker leases become failed without automatic paid retries; stale interactive runs are reconciled. No scheduler or notification service is provisioned by this repository.
+For M11.1, create a separate Railway service from this repository and set its Config File Path to `/railway.discovery.json`. That file supplies the `python discovery.py` start command and a five-minute UTC cron schedule; the process exits after one claim. Connect the service to the same Railway Postgres `DATABASE_URL` and set the same research secrets, provider keys, model IDs, token rates and conservative daily budget variables used by the web deployment. Keep `ZEARCH_DISCOVERY_ENABLED` unset while configuring and validating the service. After a manual capped job and a due-window run have been observed, set `ZEARCH_DISCOVERY_ENABLED=1` on both worker and Vercel web deployment to expose schedule controls. Railway service creation and runtime settings are external activation steps; the repository does not create the service itself. Each invocation schedules due investigations and claims at most one queued job. Daily/weekly schedules expire 29 days after creation. Expired worker leases become failed without automatic paid retries; stale interactive runs are reconciled. Notification delivery remains disabled.
 
 ## Tests and evaluation
 

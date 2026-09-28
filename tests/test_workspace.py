@@ -140,6 +140,20 @@ class WorkspaceTests(unittest.TestCase):
             saved=workspace.saved('alice')[0]
             self.assertEqual(saved['job']['status'],'complete')
             self.assertEqual(saved['last_changes']['changed'],['https://example.com/'])
+            self.assertFalse(saved['last_changes']['answer_changed'])
+            self.assertEqual(saved['last_changes']['review_status'],'none')
+
+    def test_discovery_differences_are_review_candidates(self):
+        previous={'answer':'Price is 10 [1]', 'sources':[{'url':'https://example.com/', 'text':'Price 10\n credits'}]}
+        same={'answer':'Price is 10   [1]', 'sources':[{'url':'https://example.com/', 'text':'Price 10 credits'}]}
+        self.assertEqual(discovery.changes(previous,same)['changed'],[])
+        self.assertFalse(discovery.changes(previous,same)['answer_changed'])
+        updated={'answer':'Price is 12 [1]', 'sources':[{'url':'https://example.com/', 'text':'Price 12 credits'}]}
+        result=discovery.changes(previous,updated)
+        self.assertEqual(result['changed'],['https://example.com/'])
+        self.assertTrue(result['answer_changed'])
+        self.assertEqual(result['review_status'],'pending')
+        self.assertIn('No notification was sent',result['check'])
 
     def test_stale_worker_cannot_publish(self):
         iid=workspace.save_investigation('alice',self.completed())
