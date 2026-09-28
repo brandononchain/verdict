@@ -62,6 +62,10 @@ class ResearchTests(unittest.TestCase):
         self.assertIn('writer',usage['stage_ms'])
         self.assertIn('jev_verification',usage['stage_ms'])
         self.assertGreaterEqual(usage['total_ms'],0)
+        source=events[-1]['run']['sources'][0]
+        start,end=source['evidence_span']
+        self.assertEqual(source['text'][start:end],source['excerpt'])
+        self.assertEqual(sum(event['type']=='sources' for event in events),2)
     def test_close_does_not_overwrite_complete(self):
         run,_=self.reserve()
         with self.pipeline():

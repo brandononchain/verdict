@@ -186,6 +186,8 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(result[0]['canonical_url'],'https://example.com/a')
         self.assertIn('found by multiple queries',result[0]['selection_reasons'])
         self.assertEqual(report['search_calls'],3)
+        self.assertEqual(report['candidate_urls'],['https://example.com/a'])
+        self.assertEqual(report['selected_urls'],['https://example.com/a'])
 
     def test_partial_search_failure_is_visible(self):
         def search(q):

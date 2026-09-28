@@ -17,31 +17,50 @@ class JevError(Exception):
 
 def passage(query, text):
     """Deterministic bounded extract from retrieved content, not authored prose."""
+    return passage_span(query, text)[0]
+
+
+def passage_span(query, text):
+    """Return the extract and its exact character range in the captured text."""
     import retrieval
     terms = set(retrieval.tokens(query))
-    segments = [s.strip() for s in re.split(r'(?<=[.!?])\s+|\n+', text) if s.strip()]
+    segments = []
+    boundary = 0
+    for separator in re.finditer(r'(?<=[.!?])\s+|\n+', text):
+        chunk = text[boundary:separator.start()]
+        if chunk.strip():
+            leading = len(chunk) - len(chunk.lstrip())
+            segments.append((chunk.strip(), boundary + leading, separator.start() - (len(chunk) - len(chunk.rstrip()))))
+        boundary = separator.end()
+    chunk = text[boundary:]
+    if chunk.strip():
+        leading = len(chunk) - len(chunk.lstrip())
+        segments.append((chunk.strip(), boundary + leading, len(text) - (len(chunk) - len(chunk.rstrip()))))
     if not segments:
-        return ''
+        return '', 0, 0
     anchor = max(range(len(segments)), key=lambda i: (
-        len(terms.intersection(re.findall(r'\w+', segments[i].lower()))), -len(segments[i])))
+        len(terms.intersection(re.findall(r'\w+', segments[i][0].lower()))), -len(segments[i][0])))
     # Many questions have two parts. A single highest-overlap sentence may say
     # what a term means while the immediately following sentence explains the
     # action. Keep the original context together, within Jev's evidence bound.
-    selected = segments[anchor][:450]
-    for next_sentence in segments[anchor + 1:anchor + 3]:
+    selected = segments[anchor][0][:450]
+    end = segments[anchor][1] + len(selected)
+    for next_sentence, _, next_end in segments[anchor + 1:anchor + 3]:
         if len(selected) + len(next_sentence) + 1 > 450:
             break
         selected += ' ' + next_sentence
-    return selected.strip()
+        end = next_end
+    return selected.strip(), segments[anchor][1], end
 
 
 def state_and_questions(query, sources):
     candidates = []
     for source in sources[:8]:
-        excerpt = passage(query, source.get('text', ''))
+        excerpt, start, end = passage_span(query, source.get('text', ''))
         if excerpt:
             candidates.append({'id': str(source['n']), 'title': source.get('title', '')[:180],
             'domain': source.get('domain', 'private'), 'passage': excerpt,
+                'span_start': start, 'span_end': end,
                 'provenance': 'private note' if source.get('note_id') else 'web page'})
     if not candidates:
         raise JevError('No readable evidence was found')

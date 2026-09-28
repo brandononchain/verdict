@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from evals import run, review, quality_gate
+from evals import run, review, quality_gate, retrieval_quality
 
 
 class EvaluationWorkflowTests(unittest.TestCase):
@@ -60,3 +60,18 @@ class EvaluationWorkflowTests(unittest.TestCase):
         rows[0]['scores']['citation_support']='fail'
         policy['thresholds']['standard']['min_pass_rate']['citation_support']=1
         self.assertEqual(quality_gate.evaluate(rows, policy)['status'], 'HOLD')
+
+    def test_retrieval_quality_requires_human_candidate_judgments(self):
+        case=run.corpus()['cases'][0]
+        card=dict(version='m6.2-v1',case_id=case['id'],mode=case['mode'],temporal=case['temporal'],
+                  status='complete',reviewer='human',reviewed_at='2026-09-28T00:00:00Z',
+                  citations_opened=True, scores={key:'pass' for key in review.DIMENSIONS},
+                  failure_stage='none',source_relevance_reviewed=True,
+                  candidate_urls=['https://example.org/a','https://example.org/b'],
+                  selected_urls=['https://example.org/a'],primary_selected_urls=['https://example.org/a'],
+                  relevant_candidate_urls=['https://example.org/a','https://example.org/b'])
+        result=retrieval_quality.report([card])['by_mode'][case['mode']]
+        self.assertEqual(result['candidate_recall'],.5)
+        self.assertEqual(result['matched_publisher_share'],1)
+        card['relevant_candidate_urls']=['https://example.org/outside']
+        with self.assertRaises(ValueError): retrieval_quality.report([card])

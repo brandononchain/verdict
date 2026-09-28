@@ -97,7 +97,7 @@
       for (const source of run.sources || []) {
         const li = make('li');
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
-        li.append(make('p', '', source.excerpt));
+        li.append(make('p', '', source.evidence_span ? `Jev inspected: ${source.excerpt}` : source.excerpt));
         const provenance = [];
         if (source.source_tier === 'primary') provenance.push('Matched publisher domain');
         if (source.published_date && source.published_date_provenance === 'provider_metadata') provenance.push(`Reported publication: ${source.published_date}`);
