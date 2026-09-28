@@ -9,7 +9,7 @@
   const form = $('composer'), query = $('query'), thread = $('thread'), empty = $('empty');
   const fine = document.querySelector('.fineprint'), dock = document.querySelector('.dock-inner');
   let parent = null, active = null, available = false, version = 0, history = [], workspaceReady = false;
-  let workspaceData = { notes: [], documents: [], investigations: [], history: [] };
+  let workspaceData = { notes: [], documents: [], investigations: [], batches: [], history: [] };
   let accountData = { enabled: false, account: null };
   const notice = make('p', 'research-notice', 'Checking research availability…');
   notice.setAttribute('role', 'status'); empty.append(notice);
@@ -116,6 +116,7 @@
     const metrics = make('div', 'collection-metrics'), tabs = make('div', 'collection-tabs');
     const panels = {}, tabButtons = {}, labels = ['Overview', 'Pages', 'Media', 'Contacts', 'Data'];
     let selectedTab = 'Overview';
+    let visual = null, visualConfigured = false, visualLoaded = false;
     dashboardTitle.append(make('span', 'collection-eyebrow', run.depth === 'crawl' ? 'SITE CRAWL' : 'PAGE EXTRACTION'),
       make('h2', '', 'Collection'));
     dashboardHead.append(dashboardTitle, dashboardTarget);
@@ -168,6 +169,9 @@
     const save = button('Save investigation', async () => {
       await api('save_investigation', { id: run.id }); toast('Investigation saved'); await loadWorkspace(false);
     });
+    const monitor = button('Monitor daily', async () => {
+      await api('monitor_collection', { id: run.id }); monitor.hidden = true; toast('Daily monitor saved'); await loadWorkspace(false);
+    });
     const exportMenu = make('details', 'export-menu');
     exportMenu.append(make('summary', '', 'Export'));
     for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(collecting ? [['json', 'Data JSON'], ['csv', 'Inventory CSV']] : [])]) {
@@ -179,7 +183,7 @@
         document.body.append(link); link.click(); link.remove(); exportMenu.open = false;
       }));
     }
-    actions.append(copy, exportMenu, save); response.append(status, collecting ? dashboard : body, details, trace, actions); root.append(question, response); thread.append(root);
+    actions.append(copy, exportMenu, save, monitor); response.append(status, collecting ? dashboard : body, details, trace, actions); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
       status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
@@ -187,6 +191,7 @@
       actions.hidden = !run.answer || !['complete', 'error', 'interrupted'].includes(run.status);
       exportMenu.hidden = run.status !== 'complete';
       save.hidden = run.status !== 'complete' || ['scrape','crawl'].includes(run.depth); sources.replaceChildren();
+      monitor.hidden = !collecting || run.status !== 'complete';
       for (const source of run.sources || []) {
         const li = make('li');
         li.dataset.sourceId = String(source.n);
@@ -217,6 +222,12 @@
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
       if (collecting) renderCollection();
+      if (collecting && run.status === 'complete' && run.id && !visualLoaded) {
+        visualLoaded = true;
+        fetch('/api/collection?id=' + run.id).then(response => response.json()).then(data => {
+          visual = data.visual; visualConfigured = Boolean(data.configured); renderCollection();
+        }).catch(() => {});
+      }
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
         const lines = [];
@@ -301,6 +312,49 @@
         fields.append(make('dt', '', key), make('dd', '', value));
       }
       dataPanel.append(fields);
+      const decision = run.usage?.judgment;
+      if (decision?.gate) {
+        const jev = make('div', 'collection-decision');
+        jev.append(make('strong', '', `Jev evidence · ${decision.gate}`),
+          make('small', '', 'Choice probability and sufficiency are separate judgments; neither turns a source into a verified fact.'));
+        dataPanel.append(jev);
+      }
+      const visualSection = make('section', 'collection-visual');
+      visualSection.append(make('h3', 'collection-section-title', 'Visual capture'));
+      if (visual?.screenshot) {
+        const shot = document.createElement('img'); shot.src = '/api/collection?id=' + run.id + '&image=1';
+        shot.alt = `Captured viewport of ${domain}`; shot.loading = 'lazy'; visualSection.append(shot);
+        const shotLink = make('a', 'collection-download', 'Download screenshot');
+        shotLink.href = shot.src; shotLink.download = 'zearch-' + run.id + (visual.image_type === 'image/jpeg' ? '.jpg' : visual.image_type === 'image/webp' ? '.webp' : '.png'); visualSection.append(shotLink);
+      }
+      const guide = visual?.styleguide;
+      if (guide && typeof guide === 'object') {
+        const colors = guide.colors && typeof guide.colors === 'object' ? Object.entries(guide.colors).slice(0, 12) : [];
+        const palette = make('div', 'collection-palette');
+        for (const [name, value] of colors) {
+          if (typeof value !== 'string') continue;
+          const chip = make('div', 'collection-color');
+          const swatch = make('span', 'collection-swatch');
+          if (/^#[0-9a-f]{3,8}$/i.test(value)) swatch.style.backgroundColor = value;
+          chip.append(swatch, make('small', '', `${name} · ${value}`)); palette.append(chip);
+        }
+        visualSection.append(palette);
+        const typography = guide.typography;
+        if (typography?.p?.fontFamily) visualSection.append(make('p', 'collection-data-note', `Body type: ${typography.p.fontFamily}`));
+        const headingFont = typography?.headings?.h1?.fontFamily;
+        if (headingFont) visualSection.append(make('p', 'collection-data-note', `Heading type: ${headingFont}`));
+      }
+      if (visual?.error) visualSection.append(make('p', 'collection-data-note', visual.error));
+      if (!visual?.screenshot && !guide) visualSection.append(make('p', 'collection-data-note',
+        visualConfigured ? 'Capture a rendered page and its design tokens.' : 'Rendered capture is available when the visual provider is configured.'));
+      if (visualConfigured && run.status === 'complete' && (!visual || visual.retryable)) {
+        visualSection.append(button(visual ? 'Retry visual capture' : 'Capture screenshot & styleguide', async () => {
+          const response = await fetch('/api/collection?id=' + run.id, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+          const data = await response.json(); if (!response.ok) throw Error(data.error || 'Capture unavailable');
+          visual = data; renderCollection();
+        }));
+      }
+      dataPanel.append(visualSection);
       const exportHint = make('p', 'collection-data-note', run.status === 'complete' ?
         'Use Export below to download the full JSON dataset or a flat CSV inventory.' : 'Exports become available when the collection finishes.');
       dataPanel.append(exportHint);
@@ -399,7 +453,7 @@
   function renderWorkspace() {
     const data = workspaceData, allowance = data.allowance;
     $('workspace-status').textContent = allowance ? `${allowance.plan} · ${allowance.used}/${allowance.daily_limit} daily runs used · resets ${allowance.reset}. Provider spending caps also apply.` : '';
-    $('notes-list').replaceChildren(); $('documents-list').replaceChildren(); $('research-list').replaceChildren(); $('investigations-list').replaceChildren();
+    $('notes-list').replaceChildren(); $('documents-list').replaceChildren(); $('research-list').replaceChildren(); $('investigations-list').replaceChildren(); $('batches-list').replaceChildren();
     for (const note of data.notes) {
       const li = make('li'); li.append(make('span', '', note.title), button('Delete note', async () => {
         if (!window.confirm('Delete this stored note and redact retained answers that used it?')) return;
@@ -425,7 +479,8 @@
     }
     for (const item of data.investigations) {
       const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
-      li.append(make('p', 'workspace-title', item.query));
+      li.append(make('p', 'workspace-title', `${item.depth === 'scrape' || item.depth === 'crawl' ? 'Site monitor' : 'Investigation'} · ${item.query}`));
+      if (item.target_url) li.append(make('p', 'hint', item.target_url));
       const changes = item.last_changes;
       const summary = changes.check ? `${changes.added.length} new sources · ${changes.changed.length} changed excerpts · ${changes.removed.length} removed sources.${changes.answer_changed ? ' Answer changed; review the saved runs before relying on it.' : ''} No verified fact-change alert was sent.` : 'No refresh comparison yet.';
       li.append(make('p', 'hint', summary));
@@ -451,7 +506,21 @@
         await api('delete_investigation', { id: item.id }); await loadWorkspace();
       })); li.append(actions); $('investigations-list').append(li);
     }
-    for (const id of ['notes-list', 'documents-list', 'research-list', 'investigations-list']) {
+    $('batch-form').querySelector('button').disabled = !data.discovery_enabled;
+    for (const batch of data.batches || []) {
+      const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
+      li.append(make('p', 'workspace-title', `${batch.items.filter(x => x.status === 'complete').length}/${batch.items.length} pages · ${batch.status}`));
+      for (const item of batch.items) {
+        const row = make('div', 'batch-row'); row.append(make('span', '', item.target_url), make('small', '', item.error || item.status));
+        if (item.run_id) row.append(button('Open', () => { $('workspace').close(); location.hash = 'r/' + item.run_id; }));
+        li.append(row);
+      }
+      if (['queued','running'].includes(batch.status)) actions.append(button('Cancel queued', async () => {
+        await api('cancel_batch', { id: batch.id }); await loadWorkspace();
+      }));
+      li.append(actions); $('batches-list').append(li);
+    }
+    for (const id of ['notes-list', 'documents-list', 'research-list', 'investigations-list', 'batches-list']) {
       if (!$(id).children.length) $(id).append(make('li', 'hint', 'Nothing saved here yet.'));
     }
   }
@@ -473,6 +542,14 @@
     try {
       await api('add_note', { title: $('note-title').value, body: $('note-body').value });
       $('note-form').reset(); await loadWorkspace(); toast('Note saved');
+    } catch (error) { toast(error.message); } finally { submit.disabled = false; }
+  };
+  $('batch-form').onsubmit = async event => {
+    event.preventDefault(); const submit = event.submitter; submit.disabled = true;
+    try {
+      const urls = $('batch-urls').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      await api('create_batch', { urls, query: $('batch-query').value });
+      $('batch-form').reset(); await loadWorkspace(); toast('Batch queued');
     } catch (error) { toast(error.message); } finally { submit.disabled = false; }
   };
   $('note-file').onchange = async () => {

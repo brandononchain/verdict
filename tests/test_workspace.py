@@ -141,7 +141,7 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(saved['job']['status'],'complete')
             self.assertEqual(saved['last_changes']['changed'],['https://example.com/'])
             self.assertFalse(saved['last_changes']['answer_changed'])
-            self.assertEqual(saved['last_changes']['review_status'],'none')
+        self.assertEqual(saved['last_changes']['review_status'],'pending')
 
     def test_discovery_differences_are_review_candidates(self):
         previous={'answer':'Price is 10 [1]', 'sources':[{'url':'https://example.com/', 'text':'Price 10\n credits'}]}

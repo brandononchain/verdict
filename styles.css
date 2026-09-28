@@ -376,6 +376,19 @@ a { color: inherit; }
 .collection-fields dt,.collection-fields dd { margin:0; padding:10px 0; border-bottom:1px solid #404040; overflow-wrap:anywhere; }
 .collection-fields dt { color:var(--muted); }
 .collection-fields dd { color:var(--ink-2); }
+.collection-visual { border-top:1px solid #404040; padding-top:19px; }
+.collection-visual > img { display:block; width:100%; max-height:360px; object-fit:contain; object-position:top center; border:1px solid #404040; border-radius:10px; background:#202020; }
+.collection-download { display:inline-block; margin:9px 0 18px; color:var(--ink-2); font-size:12px; }
+.collection-palette { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin:8px 0 15px; }
+.collection-color { display:flex; align-items:center; gap:8px; min-width:0; padding:6px; border:1px solid #414141; border-radius:8px; }
+.collection-swatch { width:24px; height:24px; flex:none; border:1px solid #666; border-radius:5px; }
+.collection-color small { overflow:hidden; color:var(--ink-2); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+#batch-form { display:grid; gap:8px; margin:10px 0; }
+#batch-form input { width:100%; padding:9px; border:1px solid var(--line-strong); border-radius:8px; background:var(--rail); }
+#batch-form button { justify-self:start; }
+.batch-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:7px 0; border-top:1px solid var(--line); font-size:12px; }
+.batch-row span { flex:1; min-width:160px; overflow-wrap:anywhere; }
+.batch-row small { color:var(--muted); }
 
 /* Conversation layout: keep the URL under its prompt on narrow screens. */
 .user-message { flex-direction:column; align-items:flex-end; gap:5px; }

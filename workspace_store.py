@@ -24,11 +24,17 @@ def migrate(conn):
         depth TEXT NOT NULL, interval_hours BIGINT NOT NULL DEFAULT 0,
         next_run BIGINT NOT NULL, expires BIGINT NOT NULL, last_run TEXT,
         last_changes TEXT NOT NULL DEFAULT '{}', created BIGINT NOT NULL)""")
+    conn.execute('''CREATE TABLE IF NOT EXISTS investigation_targets (
+        investigation_id TEXT PRIMARY KEY, target_url TEXT NOT NULL)''')
     conn.execute("""CREATE TABLE IF NOT EXISTS discovery_jobs (
         id TEXT PRIMARY KEY, investigation_id TEXT NOT NULL, owner TEXT NOT NULL,
         status TEXT NOT NULL, created BIGINT NOT NULL, lease_until BIGINT NOT NULL DEFAULT 0,
         lease_token TEXT, run_id TEXT, error TEXT)""")
     conn.execute('CREATE INDEX IF NOT EXISTS discovery_status ON discovery_jobs(status,created)')
+    import collection_batch
+    collection_batch.migrate(conn)
+    import collection_visual
+    collection_visual.migrate(conn)
 
 
 def lock_owner(conn, marker, owner):
@@ -162,7 +168,7 @@ def has_workspace(owner):
     if not owner:
         return False
     with db.connection() as (conn, marker):
-        for table in ('research_runs', 'knowledge_notes', 'knowledge_documents', 'investigations'):
+        for table in ('research_runs', 'knowledge_notes', 'knowledge_documents', 'investigations', 'collection_batches'):
             if db.execute(conn, marker, f'SELECT 1 FROM {table} WHERE owner=? LIMIT 1', (owner,)).fetchone():
                 return True
     return False
@@ -199,10 +205,20 @@ def export_page(owner, cursor=None):
         documents = [dict(row) for row in db.execute(conn, marker,
             'SELECT id,filename,kind,content_hash,byte_count,text,created FROM knowledge_documents WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
         investigations = [dict(row) for row in db.execute(conn, marker,
-            'SELECT id,query,depth,interval_hours,next_run,expires,last_run,last_changes,created FROM investigations WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
+            '''SELECT i.id,i.query,i.depth,i.interval_hours,i.next_run,i.expires,i.last_run,i.last_changes,i.created,t.target_url
+               FROM investigations i LEFT JOIN investigation_targets t ON t.investigation_id=i.id
+               WHERE i.owner=? ORDER BY i.created DESC,i.id''', (owner,)).fetchall()] if first else []
+        batches = []
+        if first:
+            # Use the same transaction for the owner-scoped export snapshot.
+            for batch in db.execute(conn, marker, 'SELECT id,query,status,created FROM collection_batches WHERE owner=? ORDER BY created DESC LIMIT 20', (owner,)).fetchall():
+                entry = dict(batch)
+                entry['items'] = [dict(r) for r in db.execute(conn, marker,
+                    'SELECT position,target_url,status,run_id,error FROM collection_batch_items WHERE batch_id=? ORDER BY position', (entry['id'],)).fetchall()]
+                batches.append(entry)
         account = db.execute(conn, marker, 'SELECT email,created FROM zearch_accounts WHERE id=?', (owner[5:],)).fetchone() if first and owner.startswith('acct:') else None
         return {'version': 1, 'account': dict(account) if account else None,
-                'notes': notes, 'documents': documents, 'investigations': investigations,
+                'notes': notes, 'documents': documents, 'investigations': investigations, 'batches': batches,
                 'runs': runs, 'next_cursor': runs[-1]['id'] if len(rows) == 5 else None}
 
 
@@ -217,9 +233,15 @@ def delete_workspace(owner):
 def erase_private(conn, marker, owner):
     active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone()
     worker = db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (owner,)).fetchone()
-    if active or worker:
+    batch = db.execute(conn, marker, """SELECT 1 FROM collection_batch_items p JOIN collection_batches b ON b.id=p.batch_id
+        WHERE b.owner=? AND p.status='running' LIMIT 1""", (owner,)).fetchone()
+    if active or worker or batch:
         raise ValueError('Wait for active research to finish before deleting your workspace')
     db.execute(conn, marker, 'DELETE FROM discovery_jobs WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM investigation_targets WHERE investigation_id IN (SELECT id FROM investigations WHERE owner=?)', (owner,))
+    db.execute(conn, marker, 'DELETE FROM collection_batch_items WHERE batch_id IN (SELECT id FROM collection_batches WHERE owner=?)', (owner,))
+    db.execute(conn, marker, 'DELETE FROM collection_batches WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM collection_visuals WHERE owner=?', (owner,))
     db.execute(conn, marker, 'DELETE FROM investigations WHERE owner=?', (owner,))
     db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=?', (owner,))
     db.execute(conn, marker, 'DELETE FROM knowledge_documents WHERE owner=?', (owner,))
@@ -247,8 +269,13 @@ def claim_workspace(anonymous_owner, account_id):
             raise ValueError('Wait for browser research to finish before claiming it')
         if db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (anonymous_owner,)).fetchone():
             raise ValueError('Wait for browser refreshes to finish before claiming it')
+        if db.execute(conn, marker, """SELECT 1 FROM collection_batch_items p JOIN collection_batches b ON b.id=p.batch_id
+            WHERE b.owner=? AND p.status='running' LIMIT 1""", (anonymous_owner,)).fetchone():
+            raise ValueError('Wait for the active batch page before claiming it')
         for table in ('research_runs', 'knowledge_notes', 'knowledge_documents', 'investigations', 'discovery_jobs'):
             db.execute(conn, marker, f'UPDATE {table} SET owner=? WHERE owner=?', (owner, anonymous_owner))
+        db.execute(conn, marker, 'UPDATE collection_batches SET owner=? WHERE owner=?', (owner, anonymous_owner))
+        db.execute(conn, marker, 'UPDATE collection_visuals SET owner=? WHERE owner=?', (owner, anonymous_owner))
         rows = db.execute(conn, marker, 'SELECT day,calls,reserved FROM research_budgets WHERE bucket=? AND day<>?',
                           ('user:' + anonymous_owner, 'workspace')).fetchall()
         for row in rows:
@@ -284,9 +311,11 @@ def delete_run(owner, rid):
             db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL,last_changes=? WHERE owner=? AND last_run=?', ('{}', owner, child))
         db.execute(conn, marker, 'UPDATE research_runs SET parent_id=NULL WHERE owner=? AND parent_id=?', (owner, rid))
         db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL WHERE owner=? AND last_run=?', (owner, rid))
+        db.execute(conn, marker, 'UPDATE collection_batch_items SET run_id=NULL,error=? WHERE run_id=?', ('Saved page was deleted', rid))
         db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id=?', (rid,))
         db.execute(conn, marker, 'DELETE FROM research_targets WHERE run_id=?', (rid,))
         db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=? AND id=?', (owner, rid))
+        db.execute(conn, marker, 'DELETE FROM collection_visuals WHERE owner=? AND run_id=?', (owner, rid))
         return True
 
 
@@ -302,7 +331,8 @@ def allowance(owner):
 
 def saved(owner):
     with db.connection() as (conn, marker):
-        rows = db.execute(conn, marker, 'SELECT * FROM investigations WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()
+        rows = db.execute(conn, marker, '''SELECT i.*,t.target_url FROM investigations i
+            LEFT JOIN investigation_targets t ON t.investigation_id=i.id WHERE i.owner=? ORDER BY i.created DESC,i.id''', (owner,)).fetchall()
         result = []
         for row in rows:
             item = dict(row); item.pop('owner'); item['last_changes'] = json.loads(item['last_changes'])
@@ -316,14 +346,23 @@ def save_investigation(owner, rid):
     now = int(time.time())
     with db.connection() as (conn, marker):
         lock_owner(conn, marker, owner)
-        run = db.execute(conn, marker, 'SELECT r.query,r.status,o.depth FROM research_runs r LEFT JOIN research_options o ON o.run_id=r.id WHERE r.owner=? AND r.id=?', (owner, rid)).fetchone()
+        run = db.execute(conn, marker, '''SELECT r.query,r.status,o.depth,t.target_url FROM research_runs r
+            LEFT JOIN research_options o ON o.run_id=r.id LEFT JOIN research_targets t ON t.run_id=r.id
+            WHERE r.owner=? AND r.id=?''', (owner, rid)).fetchone()
         if not run or run['status'] != 'complete':
             raise ValueError('Save a completed answer as an investigation')
-        if run['depth'] not in (None, 'standard', 'deep', 'compare'):
-            raise ValueError('Scheduled investigations currently support Search, Deep research and Compare')
+        if run['depth'] not in (None, 'standard', 'deep', 'compare', 'scrape', 'crawl'):
+            raise ValueError('Unsupported investigation mode')
+        if run['depth'] in ('scrape', 'crawl') and not run['target_url']:
+            raise ValueError('Collection target is missing')
+        existing = db.execute(conn, marker, 'SELECT id FROM investigations WHERE owner=? AND last_run=?', (owner, rid)).fetchone()
+        if existing:
+            return existing['id']
         count = db.execute(conn, marker, 'SELECT COUNT(*) AS n FROM investigations WHERE owner=?', (owner,)).fetchone()['n']
         if count >= 20:
             raise ValueError('Your workspace supports up to 20 investigations')
         ident = uuid.uuid4().hex
         db.execute(conn, marker, "INSERT INTO investigations(id,owner,query,depth,next_run,expires,last_run,created) VALUES(?,?,?,?,?,?,?,?)", (ident, owner, run['query'], run['depth'] or 'standard', now, now + 29 * 86400, rid, now))
+        if run['target_url']:
+            db.execute(conn, marker, 'INSERT INTO investigation_targets(investigation_id,target_url) VALUES(?,?)', (ident, run['target_url']))
         return ident
