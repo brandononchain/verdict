@@ -147,11 +147,11 @@
         <form id="document-form"><label for="document-file">Private document</label><input id="document-file" type="file" accept=".txt,.md,.docx" required />
           <button class="ghost-btn" type="submit">Import document</button></form><ul id="documents-list" class="workspace-list"></ul>
       </section>
-      <section><h3>Investigations</h3><p class="hint">Refreshes search the public web. Private notes and previous conversation context are not included. Schedules expire after 29 days.</p><ul id="investigations-list" class="workspace-list"></ul></section>
+      <section><h3>Investigations</h3><p class="hint">Refresh the saved search or monitored site. Private notes and previous conversation context are not included. Schedules expire after 29 days.</p><ul id="investigations-list" class="workspace-list"></ul></section>
       <section><h3>Collection batches</h3><p class="hint">Queue 2–10 public HTTPS pages. The Railway worker captures one page per run and each page uses your research allowance.</p>
         <form id="batch-form"><label for="batch-urls">Page URLs, one per line</label><textarea id="batch-urls" rows="4" placeholder="https://example.com/page-one&#10;https://example.com/page-two"></textarea>
           <label for="batch-query">Question for each page (optional)</label><input id="batch-query" maxlength="2000" placeholder="Summarize and extract key facts" />
-          <button class="ghost-btn" type="submit">Queue batch</button></form><ul id="batches-list" class="workspace-list"></ul></section>
+          <button class="ghost-btn" type="submit">Queue batch</button></form><p id="batch-disabled" class="hint" hidden>Batch processing becomes available when the Railway discovery worker is enabled.</p><ul id="batches-list" class="workspace-list"></ul></section>
       <section><h3>Saved research</h3><p class="hint">Delete removes an answer from the server and redacts follow-ups derived from it.</p><ul id="research-list" class="workspace-list"></ul></section>
       <section><h3>Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; research allowance remains spent for today.</p>
         <div class="turn-actions"><button class="ghost-btn" id="export-workspace" type="button">Download data</button><button class="ghost-btn" id="delete-workspace" type="button">Delete workspace</button></div>
