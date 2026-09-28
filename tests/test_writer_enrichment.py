@@ -74,6 +74,21 @@ class CollaborationTests(unittest.TestCase):
                  'usage':{'input_tokens':1,'output_tokens':1}})):
             with self.assertRaises(writer.WriterError):writer.compose('How?',self.sources,[1])
 
+    def test_cited_code_is_verified_with_explanation(self):
+        answer = 'This query selects matching rows. [1]\n\n```sql\nSELECT * FROM records;\n```'
+        with patch.dict(os.environ,{'ZEARCH_WRITER_MODEL':'writer','OPENAI_API_KEY':'key'}), \
+             patch.object(writer,'open_provider',return_value=Response({'status':'completed',
+                 'output':[{'type':'message','content':[{'type':'output_text','text':answer}]}],
+                 'usage':{'input_tokens':10,'output_tokens':20}})):
+            self.assertEqual(writer.compose('Show SQL',self.sources,[1])[0], answer)
+        def judged(state, questions):
+            self.assertEqual(len(state['checks']), 1)
+            self.assertIn('SELECT *', state['checks'][0]['paragraph'])
+            self.assertEqual(set(questions), {'supported_0','attributed_0'})
+            return {'answers':{'supported_0':{'noul':.9},'attributed_0':{'noul':.9}}}
+        with patch.object(jev,'call',side_effect=judged):
+            self.assertTrue(jev.verify('Show SQL',answer,self.sources,[1])[0])
+
     def test_jev_rejects_unsupported_paragraph(self):
         with patch.object(jev,'call',return_value={'model':'jev','answers':{
              'supported_0':{'noul':.2},'attributed_0':{'noul':.9}},'usage':{'input_tokens':12}}):
