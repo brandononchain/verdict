@@ -84,7 +84,8 @@ def render(url):
                         route.abort()
                     else:
                         route.continue_()
-                page.route('**/*', guard)
+                context.route('**/*', guard)
+                context.on('page', lambda popup: popup.close() if popup != page else None)
                 page.goto(url, wait_until='domcontentloaded', timeout=30_000)
                 page.wait_for_timeout(1000)
                 image = page.screenshot(type='jpeg', quality=72, full_page=False,
