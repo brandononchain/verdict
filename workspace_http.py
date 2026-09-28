@@ -2,6 +2,7 @@
 import json
 from urllib.parse import urlsplit, parse_qs
 import discovery
+import collection_batch
 import research_http as http
 import research_store as db
 import workspace_store as store
@@ -22,7 +23,7 @@ def handle(handler, mutate=False):
             return http.send_json(handler, 200, {'history': store.history(owner), 'notes': store.notes(owner),
                 'documents': store.documents(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),
-                'discovery_enabled': discovery.enabled()}, cookie)
+                'batches': collection_batch.list_for(owner), 'discovery_enabled': discovery.enabled()}, cookie)
         length = int(handler.headers.get('Content-Length', '0'))
         if not 1 <= length <= 200000 or not handler.headers.get('Content-Type', '').startswith('application/json'):
             raise ValueError('Expected a JSON request up to 200 KB')
@@ -31,7 +32,7 @@ def handle(handler, mutate=False):
             raise ValueError('Expected an object')
         action = body.get('action')
         ident = body.get('id')
-        if action not in ('add_note', 'add_document', 'delete_workspace') and (not isinstance(ident, str) or len(ident) != 32):
+        if action not in ('add_note', 'add_document', 'create_batch', 'delete_workspace') and (not isinstance(ident, str) or len(ident) != 32):
             raise ValueError('Invalid record identifier')
         if action == 'add_note':
             result = store.add_note(owner, body.get('title'), body.get('body'))
@@ -45,6 +46,18 @@ def handle(handler, mutate=False):
             result = store.delete_run(owner, ident)
         elif action == 'save_investigation':
             result = store.save_investigation(owner, ident)
+        elif action == 'monitor_collection':
+            if not discovery.enabled():
+                raise ValueError('The Railway discovery worker must be enabled before scheduling monitors')
+            run = db.get_run(owner, ident)
+            if not run or run.get('depth') not in ('scrape', 'crawl'):
+                raise ValueError('Choose a completed page or site collection')
+            result = store.save_investigation(owner, ident)
+            discovery.schedule(owner, result, 24)
+        elif action == 'create_batch':
+            result = collection_batch.create(owner, body.get('urls'), body.get('query'))
+        elif action == 'cancel_batch':
+            result = collection_batch.cancel(owner, ident)
         elif action == 'refresh':
             result = discovery.enqueue(owner, ident)
         elif action == 'schedule':

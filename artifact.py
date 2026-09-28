@@ -25,11 +25,12 @@ def brief_text(run):
     return '\n'.join(lines) + '\n'
 
 
-def data_json(run):
+def data_json(run, visual=None):
     if run.get('depth') not in ('scrape', 'crawl'):
         raise ValueError('No collected-page dataset')
-    return json.dumps({'schema_version': 1, 'kind': run['depth'], 'target_url': run['target_url'],
+    return json.dumps({'schema_version': 2, 'kind': run['depth'], 'target_url': run['target_url'],
         'question': run['query'], 'answer': run['answer'], 'run_id': run['id'],
+        'visual': visual,
         'pages': [{'url': s.get('url'), 'title': s.get('title'), 'description': s.get('description'),
                    'captured_at': s.get('retrieved_at'), 'source_version_id': s.get('source_version_id'),
                    'text': s.get('text'), 'assets': s.get('assets') or [], 'emails': s.get('emails') or []}
@@ -182,7 +183,8 @@ def handle(handler):
         if kind == 'pdf':
             payload, content_type = brief_pdf(run), 'application/pdf'
         elif kind == 'json':
-            payload, content_type = data_json(run), 'application/json; charset=utf-8'
+            import collection_visual
+            payload, content_type = data_json(run, collection_visual.get(owner, rid)), 'application/json; charset=utf-8'
         elif kind == 'csv':
             payload, content_type = data_csv(run), 'text/csv; charset=utf-8'
         else:

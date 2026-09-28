@@ -60,6 +60,7 @@ def remove(owner, iid):
         if active:
             raise ValueError('Wait for the active refresh to finish before removing it')
         db.execute(conn, marker, 'DELETE FROM discovery_jobs WHERE owner=? AND investigation_id=?', (owner, iid))
+        db.execute(conn, marker, 'DELETE FROM investigation_targets WHERE investigation_id=?', (iid,))
         return db.execute(conn, marker, 'DELETE FROM investigations WHERE owner=? AND id=?', (owner, iid)).rowcount > 0
 
 
@@ -85,7 +86,10 @@ def tick():
                 db.execute(conn, marker, "INSERT INTO discovery_jobs(id,investigation_id,owner,status,created) VALUES(?,?,?,'queued',?)", (uuid.uuid4().hex, item['id'], item['owner'], now))
             db.execute(conn, marker, 'UPDATE investigations SET next_run=? WHERE id=?', (now + item['interval_hours'] * 3600, item['id']))
         suffix = ' FOR UPDATE OF j SKIP LOCKED' if marker == '%s' else ''
-        row = db.execute(conn, marker, "SELECT j.*,i.query,i.depth,i.last_run,i.expires FROM discovery_jobs j JOIN investigations i ON i.id=j.investigation_id WHERE j.status='queued' ORDER BY j.created,j.id LIMIT 1" + suffix).fetchone()
+        row = db.execute(conn, marker, """SELECT j.*,i.query,i.depth,i.last_run,i.expires,t.target_url
+            FROM discovery_jobs j JOIN investigations i ON i.id=j.investigation_id
+            LEFT JOIN investigation_targets t ON t.investigation_id=i.id
+            WHERE j.status='queued' ORDER BY j.created,j.id LIMIT 1""" + suffix).fetchone()
         if not row:
             return None
         job = dict(row)
@@ -106,10 +110,13 @@ def changes(previous, current):
     old, new = snapshot(previous), snapshot(current)
     before = normalized((previous or {}).get('answer'))
     after = normalized((current or {}).get('answer'))
-    return {'added': sorted(new.keys() - old.keys()), 'removed': sorted(old.keys() - new.keys()),
-            'changed': sorted(k for k in new.keys() & old.keys() if old[k] != new[k]),
-            'answer_changed': bool(previous and before != after),
-            'review_status': 'pending' if previous and before != after else 'none',
+    added = sorted(new.keys() - old.keys())
+    removed = sorted(old.keys() - new.keys())
+    changed = sorted(k for k in new.keys() & old.keys() if old[k] != new[k])
+    answer_changed = bool(previous and before != after)
+    return {'added': added, 'removed': removed, 'changed': changed,
+            'answer_changed': answer_changed,
+            'review_status': 'pending' if previous and (added or removed or changed or answer_changed) else 'none',
             'check': 'Source and answer differences are review candidates, not verified fact changes. No notification was sent.'}
 
 
@@ -128,7 +135,8 @@ def work_once():
     if not job:
         return False
     try:
-        record, fresh, history = research.prepare(job['owner'], {'query': job['query'], 'request_id': 'discovery-' + job['id'], 'depth': job['depth']})
+        record, fresh, history = research.prepare(job['owner'], {'query': job['query'], 'request_id': 'discovery-' + job['id'],
+            'depth': job['depth'], **({'target_url': job['target_url']} if job['target_url'] else {})})
         job['run_id'] = record['id']
         with db.connection() as (conn, marker):
             db.execute(conn, marker, 'UPDATE discovery_jobs SET run_id=? WHERE id=? AND lease_token=?', (record['id'], job['id'], job['lease_token']))
@@ -150,4 +158,6 @@ if __name__ == '__main__':
         raise SystemExit('Set ZEARCH_DISCOVERY_ENABLED=1 after configuring the worker and spend caps')
     if len(sys.argv) != 1:
         raise SystemExit('Run python discovery.py; each invocation claims at most one job')
-    print('Processed one job.' if work_once() else 'No eligible work.')
+    db.ensure_schema()
+    import collection_batch
+    print('Processed one job.' if work_once() or collection_batch.work_once() else 'No eligible work.')

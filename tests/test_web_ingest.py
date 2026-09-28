@@ -130,7 +130,8 @@ class WebIngestTests(unittest.TestCase):
         self.assertEqual([row['type'] for row in rows],['page','logo','email'])
         self.assertEqual(rows[1]['value'],source['assets'][0]['url'])
         self.assertEqual(rows[2]['value'],'hello@example.com')
-        with self.assertRaises(ValueError): workspace.save_investigation('alice',saved['id'])
+        iid=workspace.save_investigation('alice',saved['id'])
+        self.assertEqual(workspace.saved('alice')[0]['target_url'],body['target_url'])
         self.assertTrue(workspace.delete_run('alice',saved['id']))
         self.assertIsNone(db.get_run('alice',saved['id']))
 
