@@ -48,21 +48,57 @@ class WebIngestTests(unittest.TestCase):
             sources, report=web_ingest.collect('https://example.com/','crawl')
             self.assertEqual(len(sources),2)
             self.assertEqual(report['crawl_calls'],1)
-            self.assertEqual(report['failed_pages'],1)
-            self.assertEqual(call.call_args.args[1]['limit'],5)
-            self.assertFalse(call.call_args.args[1]['allow_external'])
-            self.assertEqual(call.call_args.args[1]['select_domains'],['^example\\.com$'])
+            self.assertEqual(report['failed_pages'],2)
+            crawl_payload=next(c.args[1] for c in call.call_args_list if c.args[0]=='crawl')
+            self.assertEqual(crawl_payload['limit'],5)
+            self.assertFalse(crawl_payload['allow_external'])
+            self.assertEqual(crawl_payload['select_domains'],['^example\\.com$'])
+            self.assertTrue(crawl_payload['include_images'])
+            self.assertEqual(report['extract_calls'],1)
+            self.assertEqual(call.call_count,2)
         with patch.object(web_ingest,'_request',return_value={'results':rows}) as call:
             sources, report=web_ingest.collect('https://example.com/','scrape')
             self.assertEqual([s['url'] for s in sources],['https://example.com/'])
             self.assertEqual(report['extract_calls'],1)
             self.assertEqual(call.call_args.args[1]['urls'],'https://example.com/')
+            self.assertTrue(call.call_args.args[1]['include_favicon'])
+
+    def test_broad_crawl_keeps_home_and_skips_status_and_extracts_assets(self):
+        home={'url':'https://example.com/','title':'Home','raw_content':
+              'We build useful tools for teams. ![Brand logo](/assets/logo.svg) Contact hello@example.com. ' * 2,
+              'images':['https://cdn.example.net/graphic.png'],'favicon':'https://example.com/favicon.ico'}
+        status={'url':'https://example.com/status','title':'Status',
+                'raw_content':'No service-affecting failures were reported this month. ' * 2}
+        product={'url':'https://example.com/product','title':'Product',
+                 'raw_content':'The product helps teams work together. [Demo](https://youtu.be/abc123) ' * 2}
+        def respond(endpoint, _):
+            return {'results':[home]} if endpoint == 'extract' else {'results':[status,product,home]}
+        with patch.object(web_ingest,'_request',side_effect=respond) as call:
+            sources, report=web_ingest.collect('https://example.com/','crawl','Summarize the site')
+        self.assertEqual([s['title'] for s in sources],['Home','Product'])
+        self.assertIn('exclude_paths',next(c.args[1] for c in call.call_args_list if c.args[0]=='crawl'))
+        self.assertNotIn('![',sources[0]['text'])
+        self.assertIn('hello@example.com',sources[0]['emails'])
+        self.assertEqual({a['kind'] for a in sources[0]['assets']},{'image','favicon','logo'})
+        self.assertEqual(sources[1]['assets'][0]['kind'],'video')
+        self.assertEqual(report['crawl_pages'],2)
+        self.assertGreater(research.reservation('crawl'),research.reservation('scrape'))
+
+    def test_asset_manifest_discards_unsafe_urls(self):
+        found, emails, _ = web_ingest.assets({'images':['http://127.0.0.1/a.png',
+            'javascript:alert(1)','https://cdn.example.net/image.png']},
+            '![logo](file:///etc/passwd) [clip](https://youtu.be/example) admin@example.org.',
+            'https://example.com/')
+        self.assertEqual([item['kind'] for item in found],['image','video'])
+        self.assertEqual(emails,['admin@example.org'])
 
     def test_jev_writer_flow_dataset_export_and_deletion(self):
         source={'n':1,'url':'https://example.com/page','canonical_url':'https://example.com/page',
                 'text':'Evidence answers the Question. '*5,'excerpt':'Evidence answers the Question.',
                 'title':'Example page','domain':'example.com','retrieved_at':1750000000,
-                'content_type':'extracted_page','retrieval_provider':'tavily_extract'}
+                'content_type':'extracted_page','retrieval_provider':'tavily_extract',
+                'description':'A public page','assets':[{'kind':'logo','url':'https://example.com/logo.svg','label':'Logo'}],
+                'emails':['hello@example.com']}
         body={'query':'Question','request_id':uuid.uuid4().hex,'depth':'scrape','target_url':'https://example.com/page'}
         with patch.object(research,'ready',return_value=True), patch.object(web_ingest,'collect',return_value=(
                 [source],{'queries':[],'search_calls':0,'extract_calls':1,'crawl_calls':0,'failed_pages':0,
@@ -86,6 +122,9 @@ class WebIngestTests(unittest.TestCase):
         data=json.loads(artifact.data_json(saved))
         self.assertEqual(data['pages'][0]['text'],source['text'])
         self.assertEqual(data['target_url'],body['target_url'])
+        self.assertEqual(data['pages'][0]['assets'][0]['kind'],'logo')
+        self.assertEqual(data['pages'][0]['emails'],['hello@example.com'])
+        self.assertEqual(data['pages'][0]['description'],'A public page')
         with self.assertRaises(ValueError): workspace.save_investigation('alice',saved['id'])
         self.assertTrue(workspace.delete_run('alice',saved['id']))
         self.assertIsNone(db.get_run('alice',saved['id']))

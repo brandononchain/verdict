@@ -18,7 +18,7 @@ class Node {
   replaceChildren(...nodes) { this.children=nodes; }
   setAttribute() {}
 }
-global.document={createElement:tag=>new Node(tag),createTextNode:text=>({tag:'#text',textContent:text})};
+global.document={createElement:tag=>new Node(tag),createElementNS:(_,tag)=>new Node(tag),createTextNode:text=>({tag:'#text',textContent:text})};
 const root=new Node('div');
 render(root,'<img src=x onerror=alert(1)> [1]\n\n## Details\n\n**More**',[{n:1,url:'javascript:alert(1)',title:'Unsafe'}],true);
 const walk=node=>[node,...(node.children||[]).flatMap(walk)];
@@ -29,4 +29,8 @@ assert(walk(root).some(n=>n.tag==='strong'&&n.textContent==='More'));
 render(root, '| Year | Users |\n| --- | --- |\n| 2024 | 10 [1] |\n| 2025 | 20 [1] |', [{n:1}], true);
 assert(walk(root).some(n=>n.tag==='button'&&n.textContent==='View chart'));
 assert(walk(root).some(n=>n.tag==='div'&&n.className==='chart-fill'));
+render(root, 'A fresh quote. [1]', [{n:1,content_type:'market_ticker',url:'https://api.exchange.coinbase.com/products/BTC-USD/ticker',
+  chart:{kind:'price_series',unit:'USD',captured_at:1790000000,points:[[1789992800,100],[1789996400,105]]}}], true);
+assert(walk(root).some(n=>n.tag==='svg'));
+assert(walk(root).some(n=>n.tag==='polyline'));
 console.log('Renderer parsing, disclosure and unsafe-link tests passed');

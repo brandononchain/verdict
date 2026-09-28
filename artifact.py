@@ -29,8 +29,9 @@ def data_json(run):
         raise ValueError('No collected-page dataset')
     return json.dumps({'schema_version': 1, 'kind': run['depth'], 'target_url': run['target_url'],
         'question': run['query'], 'answer': run['answer'], 'run_id': run['id'],
-        'pages': [{'url': s.get('url'), 'title': s.get('title'), 'captured_at': s.get('retrieved_at'),
-                   'source_version_id': s.get('source_version_id'), 'text': s.get('text')}
+        'pages': [{'url': s.get('url'), 'title': s.get('title'), 'description': s.get('description'),
+                   'captured_at': s.get('retrieved_at'), 'source_version_id': s.get('source_version_id'),
+                   'text': s.get('text'), 'assets': s.get('assets') or [], 'emails': s.get('emails') or []}
                   for s in run['sources'] if s.get('url')]}, ensure_ascii=False, indent=2).encode('utf-8')
 
 
