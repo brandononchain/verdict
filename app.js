@@ -100,9 +100,16 @@
         li.append(make('p', '', source.excerpt)); sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
-      if (run.usage?.queries) {
+      if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
-        traceBody.textContent = `${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.\n${run.usage.queries.join('\n')}`;
+        const lines = [];
+        if (run.usage.queries) lines.push(`${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.`, ...run.usage.queries);
+        if (run.usage.market_data) lines.push(`Market data: ${run.usage.market_data}`);
+        if (run.usage.judgment) lines.push(`Jev evidence decision: ${run.usage.judgment.gate}`);
+        if (run.usage.answer_format) lines.push(`Answer path: ${run.usage.answer_format}`);
+        if (run.usage.draft_fallback_reason) lines.push(`Draft fallback: ${run.usage.draft_fallback_reason.replaceAll('_', ' ')}`);
+        if (run.usage.total_ms != null) lines.push(`Research time: ${(run.usage.total_ms / 1000).toFixed(1)}s`);
+        traceBody.textContent = lines.join('\n');
       }
     }
     update(); return { run, update, status, body, root };
