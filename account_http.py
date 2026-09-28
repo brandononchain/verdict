@@ -3,6 +3,7 @@ import json
 from urllib.parse import urlsplit
 
 import account_store as accounts
+import billing_store
 import research_http as http
 import research_store as db
 import workspace_store as workspace
@@ -50,6 +51,7 @@ def handle(handler, mutate=False):
                     conn.execute('SELECT pg_advisory_xact_lock(91270420)')
                 workspace.lock_owner(conn, marker, owner)
                 workspace.erase_private(conn, marker, owner)
+                billing_store.erase_account(conn, marker, account['id'])
                 db.execute(conn, marker, 'DELETE FROM workspace_claims WHERE account_id=?', (account['id'],))
                 db.execute(conn, marker, 'DELETE FROM account_challenges WHERE email=?', (account['email'],))
                 db.execute(conn, marker, 'DELETE FROM account_sessions WHERE account_id=?', (account['id'],))

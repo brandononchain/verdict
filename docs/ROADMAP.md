@@ -58,6 +58,12 @@ The gates below are ordered by dependency. A milestone is complete only when its
 2. **M11.2: Reviewed fact changes (pending).** Compare attributed claims with Jev against both captured versions, record a human-review decision for meaningful changes, and deliver only approved updates to opted-in account owners. Keep source-copy changes, answer rephrasing and uncertain claims out of notification delivery.
 3. **M11.3: Delivery and lifecycle (pending).** Add per-investigation notification opt-in, reliable outbox and duplicate suppression, pause/cancel/expiry checks at send time, unsubscribe, and delivery audit. Test worker restart, overlap, allowance exhaustion and source deletion on hosted infrastructure.
 
+## M12 implementation slices
+
+1. **M12.1: Account credit foundation (implemented, disabled).** Railway Postgres and local SQLite create account entitlements, a separate append-only credit ledger, materialized balance and run reservations. Internal-only grants have a global unique event reference; reserve and settle are transactional and idempotent, refunds cannot exceed reservations, and account deletion purges unused beta records. Concurrent zero-balance and cross-account tests pass. No browser endpoint, checkout, pricing or credit-to-cost conversion exists, and research still uses its existing operational caps.
+2. **M12.2: Measured economics and policy (pending).** Reconcile provider usage and invoices, collect two weeks of invitation-beta mode/cost/retention data, select a credit conversion and refund policy, and specify Explore, Plus and Team entitlements with profitable caps.
+3. **M12.3: Payments and entitlements (pending).** Verify signed checkout webhooks, order and deduplicate lifecycle events, provision grants once, integrate credit reservation/settlement atomically with research, and provide customer checkout/portal and a transparent meter. Exercise cancellations, refunds, top-ups and zero-balance concurrency end to end before enabling charges.
+
 ## Design and economics rules
 
 - The answer appears first. Sources, research approach, and richer detail remain inspectable without overwhelming the reading path.
