@@ -126,17 +126,28 @@
     <div class="sheet-body">
       <header><h2>Your workspace</h2><button class="icon-btn" id="workspace-close" aria-label="Close workspace">×</button></header>
       <p id="workspace-status" role="status"></p>
-      <p class="hint">Private to this browser session. Account sync and paid plans are not enabled yet.</p>
-      <section><h3>Knowledge</h3><p class="hint">Add plain text notes or .txt/.md files. Selected excerpts go to Jev and the writing provider when “Use my notes” is on. Deleting a note does not erase answers already generated from it.</p>
+      <p id="workspace-identity" class="hint">Private to this browser session. Account sync is not configured yet.</p>
+      <section id="account-section" hidden><h3>Account</h3><p id="account-status" class="hint"></p>
+        <form id="account-email-form"><label for="account-email">Email</label><input id="account-email" type="email" autocomplete="email" required maxlength="254" />
+          <button class="ghost-btn" type="submit">Send sign-in code</button></form>
+        <form id="account-code-form" hidden><label for="account-code">Eight-digit code</label><input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" required maxlength="8" />
+          <button class="solid-btn" type="submit">Sign in</button></form>
+        <div class="turn-actions"><button id="claim-workspace" class="ghost-btn" type="button" hidden>Move this browser’s research into account</button>
+          <button id="account-signout" class="ghost-btn" type="button" hidden>Sign out</button>
+          <button id="account-delete" class="ghost-btn" type="button" hidden>Delete account</button></div>
+      </section>
+      <section><h3>Knowledge</h3><p class="hint">Add notes and private .txt, .md or .docx documents. Relevant excerpts go to Jev and the writing provider only when “Use my notes” is on. Deleting knowledge redacts retained answers that used it.</p>
         <form id="note-form"><label for="note-title">Title</label><input id="note-title" maxlength="120" required />
           <label for="note-body">Text</label><textarea id="note-body" maxlength="40000" rows="5" required></textarea>
           <label for="note-file">Or import a text file</label><input id="note-file" type="file" accept=".txt,.md,text/plain,text/markdown" />
           <button class="solid-btn" type="submit">Save note</button>
         </form><ul id="notes-list" class="workspace-list"></ul>
+        <form id="document-form"><label for="document-file">Private document</label><input id="document-file" type="file" accept=".txt,.md,.docx" required />
+          <button class="ghost-btn" type="submit">Import document</button></form><ul id="documents-list" class="workspace-list"></ul>
       </section>
       <section><h3>Investigations</h3><p class="hint">Refreshes search the public web. Private notes and previous conversation context are not included. Schedules expire after 29 days.</p><ul id="investigations-list" class="workspace-list"></ul></section>
       <section><h3>Saved research</h3><p class="hint">Delete removes an answer from the server. Existing follow-ups retain their own answers.</p><ul id="research-list" class="workspace-list"></ul></section>
-      <section><h3>Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for this browser session; research allowance remains spent for today.</p>
+      <section><h3>Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; research allowance remains spent for today.</p>
         <div class="turn-actions"><button class="ghost-btn" id="export-workspace" type="button">Download data</button><button class="ghost-btn" id="delete-workspace" type="button">Delete workspace</button></div>
       </section>
     </div>

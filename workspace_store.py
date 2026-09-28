@@ -12,6 +12,11 @@ def migrate(conn):
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, title TEXT NOT NULL,
         body TEXT NOT NULL, created BIGINT NOT NULL)""")
     conn.execute('CREATE INDEX IF NOT EXISTS knowledge_owner ON knowledge_notes(owner)')
+    conn.execute('''CREATE TABLE IF NOT EXISTS knowledge_documents (
+        id TEXT PRIMARY KEY, owner TEXT NOT NULL, filename TEXT NOT NULL,
+        kind TEXT NOT NULL, content_hash TEXT NOT NULL, byte_count BIGINT NOT NULL,
+        text TEXT NOT NULL, created BIGINT NOT NULL)''')
+    conn.execute('CREATE INDEX IF NOT EXISTS documents_owner ON knowledge_documents(owner)')
     conn.execute("""CREATE TABLE IF NOT EXISTS investigations (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, query TEXT NOT NULL,
         depth TEXT NOT NULL, interval_hours BIGINT NOT NULL DEFAULT 0,
@@ -29,6 +34,9 @@ def lock_owner(conn, marker, owner):
     db.execute(conn, marker, "INSERT INTO research_budgets(bucket,day,calls,reserved) VALUES(?, 'workspace',0,0) ON CONFLICT(bucket,day) DO NOTHING", ('user:' + owner,))
     if marker == '%s':
         db.execute(conn, marker, "SELECT bucket FROM research_budgets WHERE bucket=? AND day='workspace' FOR UPDATE", ('user:' + owner,)).fetchone()
+    if owner.startswith('acct:') and not db.execute(conn, marker,
+            'SELECT 1 FROM zearch_accounts WHERE id=?', (owner[5:],)).fetchone():
+        raise ValueError('Account is no longer available')
 
 
 def notes(owner, include_body=False):
@@ -53,7 +61,68 @@ def add_note(owner, title, body):
 
 def delete_note(owner, nid):
     with db.connection() as (conn, marker):
-        return db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=? AND id=?', (owner, nid)).rowcount > 0
+        lock_owner(conn, marker, owner)
+        if not db.execute(conn, marker, 'SELECT 1 FROM knowledge_notes WHERE owner=? AND id=?', (owner, nid)).fetchone():
+            return False
+        block_active(conn, marker, owner)
+        db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=? AND id=?', (owner, nid))
+        redact_private(conn, marker, owner, 'note_id', nid)
+        return True
+
+
+def block_active(conn, marker, owner):
+    if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone():
+        raise ValueError('Wait for active research to finish before deleting knowledge')
+
+
+def redact_private(conn, marker, owner, field, ident):
+    rows = db.execute(conn, marker, 'SELECT id,parent_id,sources FROM research_runs WHERE owner=?', (owner,)).fetchall()
+    affected = {row['id'] for row in rows if any(source.get(field) == ident for source in json.loads(row['sources']))}
+    # Follow-ups can repeat facts from a private source without carrying that
+    # source in their own snapshot. Remove the descendants as well.
+    while True:
+        more = {row['id'] for row in rows if row['parent_id'] in affected}
+        if more.issubset(affected): break
+        affected.update(more)
+    for row in rows:
+        if row['id'] in affected:
+            db.execute(conn, marker, '''UPDATE research_runs SET status='redacted',answer=?,sources='[]',
+                usage='{"redacted_knowledge":true}',error=NULL,updated=? WHERE owner=? AND id=?''',
+                ('This answer is unavailable because private knowledge was deleted.', int(time.time()), owner, row['id']))
+            db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL,last_changes=? WHERE owner=? AND last_run=?', ('{}', owner, row['id']))
+
+
+def documents(owner):
+    with db.connection() as (conn, marker):
+        return [dict(row) for row in db.execute(conn, marker, '''SELECT id,filename,kind,content_hash,byte_count,created
+            FROM knowledge_documents WHERE owner=? ORDER BY created DESC,id''', (owner,)).fetchall()]
+
+
+def add_document(owner, filename, encoded):
+    from document_ingest import extract
+    text, meta = extract(filename, encoded)
+    with db.connection() as (conn, marker):
+        lock_owner(conn, marker, owner)
+        if db.execute(conn, marker, 'SELECT COUNT(*) AS n FROM knowledge_documents WHERE owner=?', (owner,)).fetchone()['n'] >= 20:
+            raise ValueError('Your workspace supports up to 20 documents')
+        item = dict(id=uuid.uuid4().hex, filename=meta['filename'], kind=meta['kind'],
+                    content_hash=meta['sha256'], byte_count=meta['bytes'], created=int(time.time()))
+        db.execute(conn, marker, '''INSERT INTO knowledge_documents(id,owner,filename,kind,content_hash,byte_count,text,created)
+            VALUES(?,?,?,?,?,?,?,?)''', (item['id'], owner, item['filename'], item['kind'],
+            item['content_hash'], item['byte_count'], text, item['created']))
+        return item
+
+
+def delete_document(owner, ident):
+    with db.connection() as (conn, marker):
+        lock_owner(conn, marker, owner)
+        found = db.execute(conn, marker, 'SELECT id FROM knowledge_documents WHERE owner=? AND id=?', (owner, ident)).fetchone()
+        if not found:
+            return False
+        block_active(conn, marker, owner)
+        db.execute(conn, marker, 'DELETE FROM knowledge_documents WHERE owner=? AND id=?', (owner, ident))
+        redact_private(conn, marker, owner, 'document_id', ident)
+        return True
 
 
 def knowledge(owner, query):
@@ -66,7 +135,18 @@ def knowledge(owner, query):
             score = len(terms.intersection(tokens(note['title'] + ' ' + text)))
             if score:
                 chunks.append((score, {'note_id': note['id'], 'title': note['title'], 'text': text,
-                    'domain': 'Private knowledge', 'content_type': 'note', 'excerpt': text[:450]}))
+                    'domain': 'Private knowledge', 'source_tier': 'private', 'content_type': 'note', 'excerpt': text[:450]}))
+    with db.connection() as (conn, marker):
+        docs = db.execute(conn, marker, 'SELECT id,filename,text,content_hash FROM knowledge_documents WHERE owner=?', (owner,)).fetchall()
+    for document in docs:
+        for at in range(0, len(document['text']), 2000):
+            text = document['text'][at:at + 2400]
+            score = len(terms.intersection(tokens(document['filename'] + ' ' + text)))
+            if score:
+                chunks.append((score, {'document_id': document['id'], 'note_id': document['id'],
+                    'title': document['filename'], 'text': text, 'domain': 'Private document',
+                    'document_hash': document['content_hash'],
+                    'source_tier': 'private', 'content_type': 'document', 'excerpt': text[:450]}))
     chunks.sort(key=lambda item: -item[0])
     return [row for _, row in chunks[:3]]
 
@@ -74,6 +154,16 @@ def knowledge(owner, query):
 def history(owner):
     with db.connection() as (conn, marker):
         return [dict(row) for row in db.execute(conn, marker, 'SELECT id,query,status,created FROM research_runs WHERE owner=? ORDER BY created DESC,id DESC LIMIT 100', (owner,)).fetchall()]
+
+
+def has_workspace(owner):
+    if not owner:
+        return False
+    with db.connection() as (conn, marker):
+        for table in ('research_runs', 'knowledge_notes', 'knowledge_documents', 'investigations'):
+            if db.execute(conn, marker, f'SELECT 1 FROM {table} WHERE owner=? LIMIT 1', (owner,)).fetchone():
+                return True
+    return False
 
 
 def export_page(owner, cursor=None):
@@ -102,9 +192,13 @@ def export_page(owner, cursor=None):
         first = cursor is None
         notes = [dict(row) for row in db.execute(conn, marker,
             'SELECT id,title,body,created FROM knowledge_notes WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
+        documents = [dict(row) for row in db.execute(conn, marker,
+            'SELECT id,filename,kind,content_hash,byte_count,text,created FROM knowledge_documents WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
         investigations = [dict(row) for row in db.execute(conn, marker,
             'SELECT id,query,depth,interval_hours,next_run,expires,last_run,last_changes,created FROM investigations WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
-        return {'version': 1, 'notes': notes, 'investigations': investigations,
+        account = db.execute(conn, marker, 'SELECT email,created FROM zearch_accounts WHERE id=?', (owner[5:],)).fetchone() if first and owner.startswith('acct:') else None
+        return {'version': 1, 'account': dict(account) if account else None,
+                'notes': notes, 'documents': documents, 'investigations': investigations,
                 'runs': runs, 'next_cursor': runs[-1]['id'] if len(rows) == 5 else None}
 
 
@@ -112,15 +206,53 @@ def delete_workspace(owner):
     """Erase this session's private records, retaining metering to prevent cap resets."""
     with db.connection() as (conn, marker):
         lock_owner(conn, marker, owner)
-        active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone()
-        worker = db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (owner,)).fetchone()
-        if active or worker:
-            raise ValueError('Wait for active research to finish before deleting your workspace')
-        db.execute(conn, marker, 'DELETE FROM discovery_jobs WHERE owner=?', (owner,))
-        db.execute(conn, marker, 'DELETE FROM investigations WHERE owner=?', (owner,))
-        db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=?', (owner,))
-        db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id IN (SELECT id FROM research_runs WHERE owner=?)', (owner,))
-        db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=?', (owner,))
+        erase_private(conn, marker, owner)
+        return True
+
+
+def erase_private(conn, marker, owner):
+    active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone()
+    worker = db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (owner,)).fetchone()
+    if active or worker:
+        raise ValueError('Wait for active research to finish before deleting your workspace')
+    db.execute(conn, marker, 'DELETE FROM discovery_jobs WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM investigations WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM knowledge_documents WHERE owner=?', (owner,))
+    db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id IN (SELECT id FROM research_runs WHERE owner=?)', (owner,))
+    db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=?', (owner,))
+
+
+def claim_workspace(anonymous_owner, account_id):
+    """Explicitly attach the current browser's anonymous data to an authenticated account."""
+    if not anonymous_owner or not isinstance(account_id, str):
+        raise ValueError('A browser workspace and account are required')
+    owner = 'acct:' + account_id
+    if anonymous_owner == owner:
+        raise ValueError('Invalid workspace claim')
+    with db.connection() as (conn, marker):
+        for subject in sorted((anonymous_owner, owner)):
+            lock_owner(conn, marker, subject)
+        prior = db.execute(conn, marker, 'SELECT account_id FROM workspace_claims WHERE anonymous_owner=?', (anonymous_owner,)).fetchone()
+        if prior:
+            if prior['account_id'] != account_id:
+                raise ValueError('This browser workspace belongs to another account')
+            return False
+        if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (anonymous_owner,)).fetchone():
+            raise ValueError('Wait for browser research to finish before claiming it')
+        if db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (anonymous_owner,)).fetchone():
+            raise ValueError('Wait for browser refreshes to finish before claiming it')
+        for table in ('research_runs', 'knowledge_notes', 'knowledge_documents', 'investigations', 'discovery_jobs'):
+            db.execute(conn, marker, f'UPDATE {table} SET owner=? WHERE owner=?', (owner, anonymous_owner))
+        rows = db.execute(conn, marker, 'SELECT day,calls,reserved FROM research_budgets WHERE bucket=? AND day<>?',
+                          ('user:' + anonymous_owner, 'workspace')).fetchall()
+        for row in rows:
+            db.execute(conn, marker, '''INSERT INTO research_budgets(bucket,day,calls,reserved) VALUES(?,?,?,?)
+                ON CONFLICT(bucket,day) DO UPDATE SET calls=research_budgets.calls+excluded.calls,
+                reserved=research_budgets.reserved+excluded.reserved''',
+                ('user:' + owner, row['day'], row['calls'], row['reserved']))
+        db.execute(conn, marker, 'INSERT INTO workspace_claims(anonymous_owner,account_id,created) VALUES(?,?,?)',
+                   (anonymous_owner, account_id, int(time.time())))
         return True
 
 
@@ -132,6 +264,19 @@ def delete_run(owner, rid):
             return False
         if row['status'] in ('pending', 'streaming'):
             raise ValueError('Wait for this research to finish before deleting it')
+        rows = db.execute(conn, marker, 'SELECT id,parent_id,status FROM research_runs WHERE owner=?', (owner,)).fetchall()
+        descendants = {rid}
+        while True:
+            more = {item['id'] for item in rows if item['parent_id'] in descendants}
+            if more.issubset(descendants): break
+            descendants.update(more)
+        if any(item['id'] in descendants and item['status'] in ('pending','streaming') for item in rows):
+            raise ValueError('Wait for follow-up research to finish before deleting this answer')
+        for child in descendants - {rid}:
+            db.execute(conn, marker, '''UPDATE research_runs SET status='redacted',answer=?,sources='[]',
+                usage='{"redacted_parent":true}',error=NULL,updated=? WHERE owner=? AND id=?''',
+                ('This answer is unavailable because earlier research was deleted.', int(time.time()), owner, child))
+            db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL,last_changes=? WHERE owner=? AND last_run=?', ('{}', owner, child))
         db.execute(conn, marker, 'UPDATE research_runs SET parent_id=NULL WHERE owner=? AND parent_id=?', (owner, rid))
         db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL WHERE owner=? AND last_run=?', (owner, rid))
         db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id=?', (rid,))

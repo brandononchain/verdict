@@ -36,6 +36,7 @@ code, pre { font-family: var(--f-mono); }
 a { color: inherit; }
 :focus-visible { outline: 2px solid #9a91e8; outline-offset: 2px; border-radius: 7px; }
 .hidden { display: none !important; }
+[hidden] { display:none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .shell { display: grid; grid-template-columns: var(--rail-width) minmax(0,1fr); height: 100dvh; }
@@ -309,6 +310,10 @@ a { color: inherit; }
 .workspace-sheet h3 { font-size:15px; }
 .workspace-sheet textarea { width:100%; resize:vertical; background:var(--rail); border:1px solid var(--line); border-radius:8px; padding:10px; }
 #note-form { display:grid; gap:10px; }
+#account-email-form,#account-code-form { display:grid; gap:8px; max-width:380px; margin:12px 0; }
+#document-form { display:grid; gap:8px; max-width:380px; margin:18px 0 8px; }
+#document-form button { justify-self:start; }
+#account-email-form button,#account-code-form button { justify-self:start; }
 #note-form .solid-btn { justify-self:start; }
 .workspace-list { list-style:none; padding:0; }
 .workspace-list li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px 0; border-bottom:1px solid var(--line); }

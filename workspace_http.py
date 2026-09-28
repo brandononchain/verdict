@@ -20,6 +20,7 @@ def handle(handler, mutate=False):
             if params.get('export') == ['1']:
                 return http.send_json(handler, 200, store.export_page(owner, params.get('cursor', [None])[0]), cookie)
             return http.send_json(handler, 200, {'history': store.history(owner), 'notes': store.notes(owner),
+                'documents': store.documents(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),
                 'discovery_enabled': discovery.enabled()}, cookie)
         length = int(handler.headers.get('Content-Length', '0'))
@@ -30,12 +31,16 @@ def handle(handler, mutate=False):
             raise ValueError('Expected an object')
         action = body.get('action')
         ident = body.get('id')
-        if action not in ('add_note', 'delete_workspace') and (not isinstance(ident, str) or len(ident) != 32):
+        if action not in ('add_note', 'add_document', 'delete_workspace') and (not isinstance(ident, str) or len(ident) != 32):
             raise ValueError('Invalid record identifier')
         if action == 'add_note':
             result = store.add_note(owner, body.get('title'), body.get('body'))
+        elif action == 'add_document':
+            result = store.add_document(owner, body.get('filename'), body.get('content_base64'))
         elif action == 'delete_note':
             result = store.delete_note(owner, ident)
+        elif action == 'delete_document':
+            result = store.delete_document(owner, ident)
         elif action == 'delete_run':
             result = store.delete_run(owner, ident)
         elif action == 'save_investigation':

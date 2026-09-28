@@ -9,7 +9,8 @@
   const form = $('composer'), query = $('query'), thread = $('thread'), empty = $('empty');
   const fine = document.querySelector('.fineprint'), dock = document.querySelector('.dock-inner');
   let parent = null, active = null, available = false, version = 0, history = [], workspaceReady = false;
-  let workspaceData = { notes: [], investigations: [], history: [] };
+  let workspaceData = { notes: [], documents: [], investigations: [], history: [] };
+  let accountData = { enabled: false, account: null };
   const notice = make('p', 'research-notice', 'Checking research availability…');
   notice.setAttribute('role', 'status'); empty.append(notice);
   try {
@@ -64,6 +65,30 @@
     if (!response.ok) throw Error(data.error || 'Could not update your workspace');
     return data.result;
   }
+  async function accountApi(action, fields = {}) {
+    const response = await fetch('/api/account', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...fields }) });
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || 'Account unavailable');
+    return data;
+  }
+  async function loadAccount() {
+    try {
+      const response = await fetch('/api/account'), data = await response.json();
+      if (!response.ok) throw Error(data.error || 'Account unavailable');
+      accountData = data;
+      $('account-section').hidden = !data.enabled;
+      $('workspace-identity').textContent = data.account ? `Signed in as ${data.account.email}. Your research follows this account across devices.` :
+        data.enabled ? 'Private to this browser until you sign in. Move its research into your account explicitly.' :
+        'Private to this browser session. Account sync is not configured yet.';
+      $('account-status').textContent = data.account ? 'Account active' : 'Sign in with an email code';
+      $('account-email-form').hidden = Boolean(data.account);
+      $('account-code-form').hidden = Boolean(data.account);
+      $('claim-workspace').hidden = !data.account || !data.claim_available;
+      $('account-signout').hidden = !data.account;
+      $('account-delete').hidden = !data.account;
+    } catch (error) { $('account-section').hidden = true; }
+  }
   function button(label, callback, cls = 'ghost-btn') {
     const node = make('button', cls, label); node.type = 'button';
     node.onclick = async () => {
@@ -108,7 +133,7 @@
       for (const source of run.sources || []) {
         const li = make('li');
         li.dataset.sourceId = String(source.n);
-        li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
+        li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + (source.document_id ? ' · Private document' : ' · Private note')));
         li.append(make('p', '', source.evidence_span ? `Jev inspected: ${source.excerpt}` : source.excerpt));
         const provenance = [];
         if (source.source_tier === 'primary') provenance.push('Matched publisher domain');
@@ -238,19 +263,25 @@
   function renderWorkspace() {
     const data = workspaceData, allowance = data.allowance;
     $('workspace-status').textContent = allowance ? `${allowance.plan} · ${allowance.used}/${allowance.daily_limit} daily runs used · resets ${allowance.reset}. Provider spending caps also apply.` : '';
-    $('notes-list').replaceChildren(); $('research-list').replaceChildren(); $('investigations-list').replaceChildren();
+    $('notes-list').replaceChildren(); $('documents-list').replaceChildren(); $('research-list').replaceChildren(); $('investigations-list').replaceChildren();
     for (const note of data.notes) {
       const li = make('li'); li.append(make('span', '', note.title), button('Delete note', async () => {
-        if (!window.confirm('Delete this stored note? Existing answers containing it will remain until separately deleted.')) return;
+        if (!window.confirm('Delete this stored note and redact retained answers that used it?')) return;
         await api('delete_note', { id: note.id }); await loadWorkspace();
       })); $('notes-list').append(li);
+    }
+    for (const document of data.documents || []) {
+      const li = make('li'); li.append(make('span', '', document.filename), button('Delete document', async () => {
+        if (!window.confirm('Delete this document and redact retained answers that used it?')) return;
+        await api('delete_document', { id: document.id }); await loadWorkspace(); toast('Document deleted');
+      })); $('documents-list').append(li);
     }
     for (const item of data.history) {
       const li = make('li');
       li.append(button(item.query, () => { if (!active) { $('workspace').close(); location.hash = 'r/' + item.id; } }, 'workspace-title'));
       li.append(button('Delete answer', async () => {
         if (active) throw Error('Wait for the current research to finish');
-        if (!window.confirm('Delete this answer and its evidence from the server? Follow-up answers remain.')) return;
+        if (!window.confirm('Delete this answer and its evidence from the server? Follow-up answers derived from it will be redacted.')) return;
         await api('delete_run', { id: item.id });
         if (location.hash === '#r/' + item.id) home();
         await loadWorkspace();
@@ -284,7 +315,7 @@
         await api('delete_investigation', { id: item.id }); await loadWorkspace();
       })); li.append(actions); $('investigations-list').append(li);
     }
-    for (const id of ['notes-list', 'research-list', 'investigations-list']) {
+    for (const id of ['notes-list', 'documents-list', 'research-list', 'investigations-list']) {
       if (!$(id).children.length) $(id).append(make('li', 'hint', 'Nothing saved here yet.'));
     }
   }
@@ -299,7 +330,7 @@
       if (showErrors) $('workspace-status').textContent = error.message;
     }
   }
-  $('btn-workspace').onclick = () => { $('workspace').showModal(); closeRail(); loadWorkspace(); };
+  $('btn-workspace').onclick = () => { $('workspace').showModal(); closeRail(); loadWorkspace(); loadAccount(); };
   $('workspace-close').onclick = () => $('workspace').close();
   $('note-form').onsubmit = async event => {
     event.preventDefault(); const submit = event.submitter; submit.disabled = true;
@@ -315,15 +346,60 @@
     if (text.length > 40000 || text.includes('\0')) { toast('Use plain text up to 40,000 characters'); return; }
     $('note-body').value = text; if (!$('note-title').value) $('note-title').value = file.name.slice(0, 120);
   };
+  $('document-form').onsubmit = async event => {
+    event.preventDefault(); const file = $('document-file').files[0], submit = event.submitter;
+    if (!file || !/\.(txt|md|docx)$/i.test(file.name) || file.size > 128000) { toast('Choose a .txt, .md or .docx file under 128 KB'); return; }
+    submit.disabled = true;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer()); let binary = '';
+      for (let at = 0; at < bytes.length; at += 8192) binary += String.fromCharCode(...bytes.subarray(at, at + 8192));
+      await api('add_document', { filename: file.name, content_base64: btoa(binary) });
+      $('document-form').reset(); await loadWorkspace(); toast('Document imported');
+    } catch (error) { toast(error.message); } finally { submit.disabled = false; }
+  };
+  $('account-email-form').onsubmit = async event => {
+    event.preventDefault(); const submit = event.submitter; submit.disabled = true;
+    try {
+      await accountApi('request_code', { email: $('account-email').value });
+      $('account-code-form').hidden = false;
+      $('account-status').textContent = 'If delivery is available, check your email for the code.';
+      $('account-code').focus();
+    } catch (error) { toast(error.message); } finally { submit.disabled = false; }
+  };
+  $('account-code-form').onsubmit = async event => {
+    event.preventDefault(); const submit = event.submitter; submit.disabled = true;
+    try {
+      await accountApi('verify_code', { email: $('account-email').value, code: $('account-code').value });
+      $('account-code').value = ''; await loadAccount(); await loadWorkspace(); home(); toast('Signed in');
+    } catch (error) { toast(error.message); } finally { submit.disabled = false; }
+  };
+  $('claim-workspace').onclick = async () => {
+    if (active) { toast('Wait for current research to finish'); return; }
+    const control = $('claim-workspace'); control.disabled = true;
+    try { await accountApi('claim_workspace'); await loadWorkspace(); await loadAccount(); toast('Browser workspace moved to your account'); }
+    catch (error) { toast(error.message); } finally { control.disabled = false; }
+  };
+  $('account-signout').onclick = async () => {
+    if (active) { toast('Wait for current research to finish'); return; }
+    try { await accountApi('sign_out'); history = []; persistHistory(); home(); await loadAccount(); await loadWorkspace(); toast('Signed out'); }
+    catch (error) { toast(error.message); }
+  };
+  $('account-delete').onclick = async () => {
+    if (active) { toast('Wait for current research to finish'); return; }
+    if (!window.confirm('Permanently delete this account, its saved research, private knowledge and active sessions on every device?')) return;
+    try { await accountApi('delete_account'); history = []; persistHistory(); home(); await loadAccount(); await loadWorkspace(); toast('Account deleted'); }
+    catch (error) { toast(error.message); }
+  };
   $('export-workspace').onclick = async () => {
     const control = $('export-workspace'); control.disabled = true;
     try {
-      const exportData = { version: 1, exported_at: new Date().toISOString(), notes: [], investigations: [], runs: [] };
+      const exportData = { version: 1, exported_at: new Date().toISOString(), account: null, notes: [], documents: [], investigations: [], runs: [] };
       let cursor = null, pages = 0;
       do {
         const response = await fetch('/api/workspace?export=1' + (cursor ? '&cursor=' + cursor : ''));
         const page = await response.json(); if (!response.ok) throw Error(page.error || 'Could not export data');
-        exportData.notes.push(...page.notes); exportData.investigations.push(...page.investigations); exportData.runs.push(...page.runs);
+        if (!cursor) exportData.account = page.account;
+        exportData.notes.push(...page.notes); exportData.documents.push(...page.documents); exportData.investigations.push(...page.investigations); exportData.runs.push(...page.runs);
         cursor = page.next_cursor;
         if (++pages > 1000) throw Error('Export is too large to download in the browser');
       } while (cursor);
