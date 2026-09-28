@@ -297,6 +297,10 @@ a { color: inherit; }
 .answer-table th,.answer-table td { border-bottom:1px solid var(--line); padding:10px 14px; text-align:left; vertical-align:top; }
 .answer-code { margin:16px 0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--rail); }
 .answer-code-language { display:block; padding:9px 16px 0; color:var(--muted); font:11px/1.4 var(--f-mono); }
+.export-menu { position:relative; align-self:center; color:var(--ink-2); font-size:12px; }
+.export-menu summary { cursor:pointer; padding:6px 9px; }
+.export-menu[open] { z-index:2; }
+.export-menu[open] button { margin:3px; }
 .answer-code pre { border:0; margin:0; background:transparent; }
 .chart-toggle { margin:0 0 10px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--rail); color:var(--ink-2); cursor:pointer; font:12px/1.4 var(--f-sans); }
 .answer-chart { display:grid; gap:10px; padding:14px; border:1px solid var(--line); border-radius:12px; }

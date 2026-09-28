@@ -123,12 +123,24 @@
     const save = button('Save investigation', async () => {
       await api('save_investigation', { id: run.id }); toast('Investigation saved'); await loadWorkspace(false);
     });
-    actions.append(copy, save); response.append(status, body, details, trace, actions); root.append(question, response); thread.append(root);
+    const exportMenu = make('details', 'export-menu');
+    exportMenu.append(make('summary', '', 'Export'));
+    for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text']]) {
+      exportMenu.append(button(label, () => {
+        if (!/^[a-f0-9]{32}$/.test(run.id || '')) throw Error('Saved answer unavailable');
+        const link = document.createElement('a');
+        link.href = '/api/artifact?id=' + run.id + '&format=' + format;
+        link.download = 'zearch-' + run.id + '.' + format;
+        document.body.append(link); link.click(); link.remove(); exportMenu.open = false;
+      }));
+    }
+    actions.append(copy, exportMenu, save); response.append(status, body, details, trace, actions); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
       status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
       if (run.usage?.citation_warnings?.length) status.textContent = run.usage.citation_warnings.join(' ');
       actions.hidden = !run.answer || !['complete', 'error', 'interrupted'].includes(run.status);
+      exportMenu.hidden = run.status !== 'complete';
       save.hidden = run.status !== 'complete'; sources.replaceChildren();
       for (const source of run.sources || []) {
         const li = make('li');

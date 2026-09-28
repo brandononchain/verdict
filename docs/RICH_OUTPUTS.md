@@ -8,6 +8,7 @@ Zearch answers can be more than prose, but the medium never bypasses research ve
 - A complete, Jev-checked two-column table with 2–20 nonnegative numeric values, a single unit and a resolvable citation on every value can toggle to a bar chart. The source table stays available. This is a display transform of checked numbers, not an independent model answer or generated dataset.
 - Code is displayed, never run. Its explanatory text and fenced block form one Jev verification unit. Unsupported code falls back to selected evidence or an abstention.
 - Private notes and documents enter the evidence set only after the user's per-query opt-in; they never enter the public web query.
+- A completed saved answer can be exported as a bounded PDF or plain text research brief. Its owner-scoped endpoint includes the question, answer and source appendix with capture IDs where available. It does not independently verify the answer or include full captured pages. Deleted and redacted runs no longer export. The same browser-session ownership limit applies until account sign-in is enabled.
 
 ## Versioned artifact envelope for the next slices
 
@@ -19,7 +20,7 @@ Use server-created typed parts alongside the canonical answer text, not raw HTML
 | Code | Language, bounded plain text, cited explanation. Jev checks claimed behavior against evidence. | Syntax highlighting and copy only; never execute in the browser. |
 | Image | Separately generated or licensed asset, prompt/rights metadata and provenance. Factual labels need Jev-checked sources. | Scan, store privately, serve with explicit content type and owner ACL; label generated media. |
 | Video | Separately generated or licensed asset with job status, duration, rights and provenance. Any factual narration needs a checked script. | Async capped job; owner-scoped playback with safe media headers, no arbitrary embeds. |
-| Document | Server-rendered PDF or another explicit export type from checked text and artifacts. | Immutable version, downloadable owner-scoped file, source appendix and deletion propagation. |
+| Document | Future model-authored documents require a typed input, verified claims and explicit artifact version. The current PDF/text brief is a server-rendered copy of one saved checked answer. | Owner-scoped download and source appendix; deletion revokes current brief URLs. Durable authored files need immutable versions, storage ACLs and deletion propagation. |
 
 The writer does not receive arbitrary browsing, code execution, file write, or unrestricted media tools. Artifacts require separate reservations, provider cost accounting, content limits, retention controls, and failure states. If rendering or verification fails, keep a supported text answer when available and report that the artifact could not be produced. Do not present a generated illustration as a photograph or a simulated financial series as observed data.
 

@@ -624,6 +624,9 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/api/account':
             import account_http
             return account_http.handle(self)
+        if path == '/api/artifact':
+            import artifact
+            return artifact.handle(self)
         if path == "/api/workspace":
             import workspace_http
             return workspace_http.handle(self, mutate=self.command == "POST")
