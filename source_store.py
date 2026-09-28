@@ -90,8 +90,28 @@ def apply_hit(source, cached):
         published_date_provenance=cached['published_date_provenance'])
 
 
+def excluded(sources):
+    """Remove tombstoned public URLs before they become model evidence."""
+    from retrieval import canonical
+    keys = {canonical(source['url']) for source in sources if source.get('url')}
+    if not keys:
+        return sources, 0
+    import research_store as db
+    with db.connection() as (conn, marker):
+        placeholders = ','.join('?' for _ in keys)
+        blocked = {row['url'] for row in db.execute(conn, marker,
+            f'SELECT url FROM source_tombstones WHERE url IN ({placeholders})', tuple(keys)).fetchall()}
+    kept = [source for source in sources if not source.get('url') or canonical(source['url']) not in blocked]
+    for n, source in enumerate(kept, 1):
+        source['n'] = n
+    return kept, len(sources) - len(kept)
+
+
 def tombstone(url, now=None):
     from retrieval import canonical
+    from research import safe_url
+    if not safe_url(url):
+        raise ValueError('Invalid source URL')
     now = int(time.time()) if now is None else now
     import research_store as db
     with db.connection() as (conn, marker):
@@ -99,3 +119,44 @@ def tombstone(url, now=None):
         db.execute(conn, marker, 'DELETE FROM source_extract_cache WHERE url=?', (key,))
         db.execute(conn, marker, """INSERT INTO source_tombstones(url,deleted_at) VALUES(?,?)
             ON CONFLICT(url) DO UPDATE SET deleted_at=excluded.deleted_at""", (key, now))
+        db.execute(conn, marker, 'DELETE FROM source_revalidation_jobs WHERE url=?', (key,))
+        redacted = []
+        for row in db.execute(conn, marker, 'SELECT id,sources FROM research_runs').fetchall():
+            sources = json.loads(row['sources'])
+            if any(source.get('url') and canonical(source['url']) == key for source in sources):
+                db.execute(conn, marker, """UPDATE research_runs SET status='redacted',
+                    answer='This answer is unavailable because a source was removed.',
+                    sources='[]',usage='{"redacted_source":true}',error=NULL,updated=? WHERE id=?""",
+                    (now, row['id']))
+                redacted.append(row['id'])
+        for rid in redacted:
+            db.execute(conn, marker, """UPDATE investigations SET last_run=NULL,last_changes='{}',
+                interval_hours=0 WHERE last_run=?""", (rid,))
+        # A comparison may retain the URL even when its latest run did not cite it.
+        for row in db.execute(conn, marker, 'SELECT id,last_changes FROM investigations').fetchall():
+            changes = json.loads(row['last_changes'])
+            dirty = False
+            for field in ('added', 'removed', 'changed'):
+                if isinstance(changes.get(field), list):
+                    kept = [item for item in changes[field] if canonical(item) != key]
+                    dirty |= len(kept) != len(changes[field])
+                    changes[field] = kept
+            if dirty:
+                db.execute(conn, marker, 'UPDATE investigations SET last_changes=? WHERE id=?',
+                    (json.dumps(changes), row['id']))
+    return len(redacted)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Remove a public source from the owned cache and retained runs')
+    parser.add_argument('command', choices=('tombstone',))
+    parser.add_argument('url')
+    args = parser.parse_args()
+    import research_store as db
+    db.ensure_schema()
+    print(f'Redacted {tombstone(args.url)} retained runs')
+
+
+if __name__ == '__main__':
+    main()
