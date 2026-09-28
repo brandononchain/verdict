@@ -1,5 +1,6 @@
 """On-demand, owner-scoped research brief. No model call or persistent duplicate."""
 import io
+import json
 import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
@@ -21,6 +22,16 @@ def brief_text(run):
         if source.get('source_version_id'): lines.append('Capture: ' + source['source_version_id'])
     lines += ['', 'Check the captured evidence in Zearch before relying on important claims.']
     return '\n'.join(lines) + '\n'
+
+
+def data_json(run):
+    if run.get('depth') not in ('scrape', 'crawl'):
+        raise ValueError('No collected-page dataset')
+    return json.dumps({'schema_version': 1, 'kind': run['depth'], 'target_url': run['target_url'],
+        'question': run['query'], 'answer': run['answer'], 'run_id': run['id'],
+        'pages': [{'url': s.get('url'), 'title': s.get('title'), 'captured_at': s.get('retrieved_at'),
+                   'source_version_id': s.get('source_version_id'), 'text': s.get('text')}
+                  for s in run['sources'] if s.get('url')]}, ensure_ascii=False, indent=2).encode('utf-8')
 
 
 def brief_pdf(run):
@@ -134,15 +145,19 @@ def handle(handler):
     params = parse_qs(urlsplit(handler.path).query)
     rid = params.get('id', [''])[0]
     kind = params.get('format', ['pdf'])[0]
-    if not re.fullmatch(r'[a-f0-9]{32}', rid) or kind not in ('pdf', 'txt'):
+    if not re.fullmatch(r'[a-f0-9]{32}', rid) or kind not in ('pdf', 'txt', 'json'):
         return http.send_json(handler, 404, {'error': 'Document not found'})
     try:
         owner, _ = http.identity(handler.headers)
         run = db.get_run(owner, rid) if owner else None
         if not run or run['status'] != 'complete':
             return http.send_json(handler, 404, {'error': 'Document not found'})
+        if kind == 'json' and run.get('depth') not in ('scrape', 'crawl'):
+            return http.send_json(handler, 404, {'error': 'Document not found'})
         if kind == 'pdf':
             payload, content_type = brief_pdf(run), 'application/pdf'
+        elif kind == 'json':
+            payload, content_type = data_json(run), 'application/json; charset=utf-8'
         else:
             payload, content_type = brief_text(run).encode('utf-8'), 'text/plain; charset=utf-8'
         handler.send_response(200)

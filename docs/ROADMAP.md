@@ -64,6 +64,10 @@ The gates below are ordered by dependency. A milestone is complete only when its
 2. **M12.2: Measured economics and policy (pending).** Reconcile provider usage and invoices, collect two weeks of invitation-beta mode/cost/retention data, select a credit conversion and refund policy, and specify Explore, Plus and Team entitlements with profitable caps.
 3. **M12.3: Payments and entitlements (pending).** Verify signed checkout webhooks, order and deduplicate lifecycle events, provision grants once, integrate credit reservation/settlement atomically with research, and provide customer checkout/portal and a transparent meter. Exercise cancellations, refunds, top-ups and zero-balance concurrency end to end before enabling charges.
 
+## URL collection modes
+
+Scrape page and Crawl site are additional public research modes. The fetcher uses Tavily Extract or a same-host Crawl capped at five pages and depth one, then hands bounded saved snapshots to the existing Jev selection, optional OpenAI drafting and Jev paragraph verification path. The user can inspect page evidence and download the checked answer as PDF/text or the collected page set as JSON. Calls reserve one Extract credit or two Crawl credits before provider work, while global and owner daily caps remain in force. This is a bounded beta feature, not an owned broad crawler, robots/rights certification or proof of whole-site coverage. Human live review and provider invoice reconciliation remain acceptance gates before raising caps.
+
 ## Design and economics rules
 
 - The answer appears first. Sources, research approach, and richer detail remain inspectable without overwhelming the reading path.

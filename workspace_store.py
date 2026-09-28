@@ -8,6 +8,8 @@ import research_store as db
 def migrate(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS research_options (
         run_id TEXT PRIMARY KEY, depth TEXT NOT NULL, use_knowledge BIGINT NOT NULL)""")
+    conn.execute('''CREATE TABLE IF NOT EXISTS research_targets (
+        run_id TEXT PRIMARY KEY, target_url TEXT NOT NULL)''')
     conn.execute("""CREATE TABLE IF NOT EXISTS knowledge_notes (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, title TEXT NOT NULL,
         body TEXT NOT NULL, created BIGINT NOT NULL)""")
@@ -188,6 +190,8 @@ def export_page(owner, cursor=None):
             item = db.public(row)
             options = db.execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (item['id'],)).fetchone()
             item.update(dict(options) if options else {'depth': 'standard', 'use_knowledge': 0})
+            target = db.execute(conn, marker, 'SELECT target_url FROM research_targets WHERE run_id=?', (item['id'],)).fetchone()
+            item['target_url'] = target['target_url'] if target else None
             runs.append(item)
         first = cursor is None
         notes = [dict(row) for row in db.execute(conn, marker,
@@ -220,6 +224,7 @@ def erase_private(conn, marker, owner):
     db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=?', (owner,))
     db.execute(conn, marker, 'DELETE FROM knowledge_documents WHERE owner=?', (owner,))
     db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id IN (SELECT id FROM research_runs WHERE owner=?)', (owner,))
+    db.execute(conn, marker, 'DELETE FROM research_targets WHERE run_id IN (SELECT id FROM research_runs WHERE owner=?)', (owner,))
     db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=?', (owner,))
 
 
@@ -280,6 +285,7 @@ def delete_run(owner, rid):
         db.execute(conn, marker, 'UPDATE research_runs SET parent_id=NULL WHERE owner=? AND parent_id=?', (owner, rid))
         db.execute(conn, marker, 'UPDATE investigations SET last_run=NULL WHERE owner=? AND last_run=?', (owner, rid))
         db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id=?', (rid,))
+        db.execute(conn, marker, 'DELETE FROM research_targets WHERE run_id=?', (rid,))
         db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=? AND id=?', (owner, rid))
         return True
 
@@ -313,6 +319,8 @@ def save_investigation(owner, rid):
         run = db.execute(conn, marker, 'SELECT r.query,r.status,o.depth FROM research_runs r LEFT JOIN research_options o ON o.run_id=r.id WHERE r.owner=? AND r.id=?', (owner, rid)).fetchone()
         if not run or run['status'] != 'complete':
             raise ValueError('Save a completed answer as an investigation')
+        if run['depth'] not in (None, 'standard', 'deep', 'compare'):
+            raise ValueError('Scheduled investigations currently support Search, Deep research and Compare')
         count = db.execute(conn, marker, 'SELECT COUNT(*) AS n FROM investigations WHERE owner=?', (owner,)).fetchone()['n']
         if count >= 20:
             raise ValueError('Your workspace supports up to 20 investigations')

@@ -113,10 +113,12 @@ def get_run(owner, rid):
         if result:
             options = execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (rid,)).fetchone()
             result.update(dict(options) if options else {'depth': 'standard', 'use_knowledge': 0})
+            target = execute(conn, marker, 'SELECT target_url FROM research_targets WHERE run_id=?', (rid,)).fetchone()
+            result['target_url'] = target['target_url'] if target else None
         return result
 
 
-def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, depth="standard", use_knowledge=False):
+def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, depth="standard", use_knowledge=False, target_url=None):
     """All budgets and the pending run commit in one transaction, before any paid call."""
     now = int(time.time())
     day = time.strftime("%Y-%m-%d", time.gmtime(now))
@@ -132,11 +134,13 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, dep
         if previous:
             options = execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (previous['id'],)).fetchone()
             old = dict(options) if options else {'depth': 'standard', 'use_knowledge': 0}
-            if old['depth'] != depth or bool(old['use_knowledge']) != use_knowledge:
+            target = execute(conn, marker, 'SELECT target_url FROM research_targets WHERE run_id=?', (previous['id'],)).fetchone()
+            old_target = target['target_url'] if target else None
+            if old['depth'] != depth or bool(old['use_knowledge']) != use_knowledge or old_target != target_url:
                 raise ValueError('Request identifier belongs to different research options')
             if previous["query"] != query or previous["parent_id"] != parent_id:
                 raise ValueError("Request identifier already belongs to another question")
-            result = public(previous); result.update(old)
+            result = public(previous); result.update(old, target_url=old_target)
             return result, False
         if parent_id:
             parent = execute(conn, marker, "SELECT status FROM research_runs WHERE owner=? AND id=?", (owner, parent_id)).fetchone()
@@ -149,8 +153,10 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, dep
             execute(conn, marker, "UPDATE research_budgets SET calls=calls+1,reserved=reserved+? WHERE bucket=? AND day=?", (amount, bucket, day))
         execute(conn, marker, "INSERT INTO research_runs(id,owner,parent_id,query,status,model,created,updated,reserved,day,request_id) VALUES(?,?,?,?,'pending',?,?,?,?,?,?)", (rid, owner, parent_id, query, model, now, now, amount, day, request_id))
         execute(conn, marker, 'INSERT INTO research_options(run_id,depth,use_knowledge) VALUES(?,?,?)', (rid, depth, int(use_knowledge)))
+        if target_url:
+            execute(conn, marker, 'INSERT INTO research_targets(run_id,target_url) VALUES(?,?)', (rid, target_url))
         result = public(execute(conn, marker, "SELECT * FROM research_runs WHERE id=?", (rid,)).fetchone())
-        result.update(depth=depth, use_knowledge=int(use_knowledge))
+        result.update(depth=depth, use_knowledge=int(use_knowledge), target_url=target_url)
         return result, True
 
 

@@ -14,7 +14,7 @@ def report():
     with db.connection() as (conn, marker):
         rows=conn.execute('SELECT r.status,r.created,r.updated,r.estimated_cost,r.reserved,r.usage,r.sources,o.depth FROM research_runs r LEFT JOIN research_options o ON o.run_id=r.id').fetchall()
     output={}
-    for mode in ('standard','deep','compare'):
+    for mode in ('standard','deep','compare','scrape','crawl'):
         group=[r for r in rows if (r['depth'] or 'standard')==mode]
         done=[r for r in group if r['status']=='complete']
         costs=sorted(r['estimated_cost'] for r in done if r['estimated_cost'] is not None)

@@ -24,11 +24,19 @@
   }
   function closeRail() { $('shell').classList.remove('rail-open'); }
   function controls() {
-    $('decide').disabled = !active && !query.value.trim();
-    $('decide').querySelector('span').textContent = active ? 'Stop' : 'Search';
-    $('decide').setAttribute('aria-label', active ? 'Stop research' : 'Search');
+    const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
+    $('target-url').hidden = !collecting;
+    $('target-url').disabled = Boolean(active) || !collecting;
+    $('target-url').placeholder = mode === 'crawl' ? 'https://example.com (up to five pages)' : 'https://example.com/page';
+    query.placeholder = collecting ? 'What should Zearch extract? (optional)' : 'Ask a question or compare options…';
+    if (collecting) $('use-knowledge').checked = false;
+    $('use-knowledge').closest('label').hidden = collecting;
+    $('decide').disabled = !active && (collecting ? !$('target-url').value.trim() : !query.value.trim());
+    const action = mode === 'scrape' ? 'Scrape' : mode === 'crawl' ? 'Crawl' : 'Search';
+    $('decide').querySelector('span').textContent = active ? 'Stop' : action;
+    $('decide').setAttribute('aria-label', active ? 'Stop research' : action);
     $('decide').dataset.busy = String(Boolean(active));
-    $('depth').disabled = Boolean(active); $('use-knowledge').disabled = Boolean(active) || !workspaceReady;
+    $('depth').disabled = Boolean(active); $('use-knowledge').disabled = Boolean(active) || !workspaceReady || collecting;
     query.style.height = 'auto'; query.style.height = Math.min(query.scrollHeight, 180) + 'px';
   }
   function persistHistory() {
@@ -106,6 +114,7 @@
     const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'Research approach');
     const traceBody = make('p'); trace.append(traceTitle, traceBody); trace.hidden = true;
     question.append(make('div', 'user-bubble', run.query));
+    if (run.target_url) question.append(make('small', 'source-meta', run.target_url));
     response.setAttribute('aria-label', 'Zearch answer'); status.setAttribute('role', 'status');
     details.append(summary, sources);
     body.addEventListener('click', event => {
@@ -125,7 +134,7 @@
     });
     const exportMenu = make('details', 'export-menu');
     exportMenu.append(make('summary', '', 'Export'));
-    for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text']]) {
+    for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(['scrape','crawl'].includes(run.depth) ? [['json', 'Data JSON']] : [])]) {
       exportMenu.append(button(label, () => {
         if (!/^[a-f0-9]{32}$/.test(run.id || '')) throw Error('Saved answer unavailable');
         const link = document.createElement('a');
@@ -141,7 +150,7 @@
       if (run.usage?.citation_warnings?.length) status.textContent = run.usage.citation_warnings.join(' ');
       actions.hidden = !run.answer || !['complete', 'error', 'interrupted'].includes(run.status);
       exportMenu.hidden = run.status !== 'complete';
-      save.hidden = run.status !== 'complete'; sources.replaceChildren();
+      save.hidden = run.status !== 'complete' || ['scrape','crawl'].includes(run.depth); sources.replaceChildren();
       for (const source of run.sources || []) {
         const li = make('li');
         li.dataset.sourceId = String(source.n);
@@ -174,7 +183,8 @@
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
         const lines = [];
-        if (run.usage.queries) lines.push(`${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.`, ...run.usage.queries);
+        if (run.usage.extract_calls || run.usage.crawl_calls) lines.push(`${run.usage.crawl_calls ? 'Crawl' : 'Page extraction'} · ${run.usage.crawl_pages || sources.children.length} captured pages · ${run.usage.failed_pages || 0} failed. ${run.usage.ranking}.`);
+        else if (run.usage.queries) lines.push(`${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.`, ...run.usage.queries);
         if (run.usage.market_data) lines.push(`Market data: ${run.usage.market_data}`);
         if (run.usage.judgment) lines.push(`Jev evidence decision: ${run.usage.judgment.gate}`);
         if (run.usage.answer_format) lines.push(`Answer path: ${run.usage.answer_format}`);
@@ -209,9 +219,12 @@
   async function submit(event) {
     event.preventDefault();
     if (active) { active.abort(); return; }
-    const question = query.value.trim(); if (!question) return;
+    const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
+    const targetUrl = collecting ? $('target-url').value.trim() : null;
+    const question = query.value.trim() || (mode === 'scrape' ? 'Summarize this page and extract its key facts.' : mode === 'crawl' ? 'Summarize the main topics and supported findings across this site.' : '');
+    if (!question || (collecting && !targetUrl)) return;
     version++; active = new AbortController(); showThread();
-    const view = turn({ query: question, answer: '', sources: [], status: 'pending' });
+    const view = turn({ query: question, target_url: targetUrl, depth: mode, answer: '', sources: [], status: 'pending' });
     query.value = ''; controls(); let complete = false, paintPending = false;
     const paint = () => {
       if (paintPending) return;
@@ -235,7 +248,7 @@
     try {
       const response = await fetch('/api/research', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: active.signal,
-        body: JSON.stringify({ query: question, parent_id: parent, request_id: crypto.randomUUID(), depth: $('depth').value, use_knowledge: $('use-knowledge').checked })
+        body: JSON.stringify({ query: question, target_url: targetUrl, parent_id: parent, request_id: crypto.randomUUID(), depth: mode, use_knowledge: $('use-knowledge').checked })
       });
       if (!response.ok) { const data = await response.json(); throw Error(data.error || 'Research unavailable'); }
       if (response.headers.get('Content-Type')?.includes('application/json')) {
@@ -261,6 +274,7 @@
       const message = error.name === 'AbortError' ? 'Stopped · any partial answer is incomplete.' : error.message;
       if (!view.run.id) {
         view.root.remove(); query.value = question;
+        if (collecting) $('target-url').value = targetUrl;
         if (!thread.childElementCount) {
           empty.classList.remove('hidden'); empty.insertBefore(form, notice);
           empty.insertBefore(fine, notice); form.classList.add('home-composer');
@@ -430,6 +444,7 @@
     } catch (error) { toast(error.message); } finally { control.disabled = false; }
   };
   form.addEventListener('submit', submit); query.addEventListener('input', controls);
+  $('target-url').addEventListener('input', controls); $('depth').addEventListener('change', controls);
   query.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
   });

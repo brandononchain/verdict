@@ -91,6 +91,9 @@ a { color: inherit; }
 .composer:focus-within { box-shadow: 0 5px 28px #0004,0 0 0 1px #a69de322; }
 .composer textarea { display: block; width: 100%; min-height: 34px; max-height: 180px; resize: none; padding: 1px 2px 9px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 15px; line-height: 1.55; }
 .composer textarea::placeholder { color: #a3a3a3; }
+.composer .target-url { display:block; width:100%; margin:0 0 9px; padding:8px 10px; border:1px solid var(--line-strong); border-radius:10px; outline:0; background:var(--bg); color:var(--ink); font:13px var(--f-mono); }
+.composer .target-url[hidden] { display:none; }
+.composer .target-url:focus-visible { border-color:var(--ink-2); }
 .composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .composer-tools { display: flex; min-width: 0; align-items: center; gap: 13px; }
 .pb-pill { position: relative; display: flex; align-items: center; color: #c6c6c6; }

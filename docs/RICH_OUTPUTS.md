@@ -9,6 +9,7 @@ Zearch answers can be more than prose, but the medium never bypasses research ve
 - Code is displayed, never run. Its explanatory text and fenced block form one Jev verification unit. Unsupported code falls back to selected evidence or an abstention.
 - Private notes and documents enter the evidence set only after the user's per-query opt-in; they never enter the public web query.
 - A completed saved answer can be exported as a bounded PDF or plain text research brief. Its owner-scoped endpoint includes the question, answer and source appendix with capture IDs where available. It does not independently verify the answer or include full captured pages. Deleted and redacted runs no longer export. The same browser-session ownership limit applies until account sign-in is enabled.
+- Scrape page and Crawl site add a JSON data export with the checked answer and bounded captured page text, URLs, timestamps and version IDs. The source pages are evidence; Jev still judges support and citations on the OpenAI draft, and a fallback may use Jev's selected passage. The JSON does not make the model's summary a verified structured database.
 
 ## Versioned artifact envelope for the next slices
 

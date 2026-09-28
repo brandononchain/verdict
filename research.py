@@ -63,8 +63,10 @@ def rates():
 def reservation(depth='standard'):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     # Two Jev judgments, one bounded draft, at most three page extractions.
+    provider_credits = 2 if depth == 'crawl' else 1 if depth == 'scrape' else 3 if depth in ('deep', 'compare') else 1
+    optional_scrapes = 0 if depth in ('scrape', 'crawl') else 3
     return math.ceil(200_000 * jev_rate + 20_000 * writer_in +
-        900 * writer_out + (search_rate * (3 if depth in ('deep', 'compare') else 1) + scrape_rate * 3) * 1_000_000)
+        900 * writer_out + (search_rate * provider_credits + scrape_rate * optional_scrapes) * 1_000_000)
 
 
 def limits():
@@ -86,8 +88,16 @@ def validate(body):
     parent = body.get("parent_id")
     if parent is not None and (not isinstance(parent, str) or not re.fullmatch(r"[a-f0-9]{32}", parent)):
         raise ValueError("Invalid follow-up identifier")
-    if body.get('depth', 'standard') not in ('standard', 'deep', 'compare') or not isinstance(body.get('use_knowledge', False), bool):
+    depth = body.get('depth', 'standard')
+    if depth not in ('standard', 'deep', 'compare', 'scrape', 'crawl') or not isinstance(body.get('use_knowledge', False), bool):
         raise ValueError('Invalid research options')
+    if depth in ('scrape', 'crawl'):
+        from web_ingest import target
+        target(body.get('target_url'))
+        if body.get('use_knowledge'):
+            raise ValueError('Private notes are not supported in URL collection')
+    elif body.get('target_url') is not None:
+        raise ValueError('A URL target requires Scrape or Crawl mode')
     return query.strip(), request_id, parent
 
 
@@ -177,24 +187,32 @@ def estimate(usage):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
     tokens = usage.get('input_tokens')
     calls = usage.get('search_calls', 1)
+    extracts, crawls = usage.get('extract_calls', 0), usage.get('crawl_calls', 0)
     if type(tokens) is not int or tokens < 0 or type(calls) is not int or calls < 0 or calls > 3:
+        return None
+    if type(extracts) is not int or type(crawls) is not int or not 0 <= extracts <= 1 or not 0 <= crawls <= 1 or extracts + crawls > 1:
         return None
     writer = usage.get('writer') or {}
     wi, wo, scrape = writer.get('input_tokens', 0), writer.get('output_tokens', 0), usage.get('scrape_calls', 0)
     if any(type(n) is not int or n < 0 for n in (wi, wo, scrape)) or scrape > 3:
         return None
     return math.ceil(tokens * jev_rate + wi * writer_in + wo * writer_out +
-                     (calls * search_rate + scrape * scrape_rate) * 1_000_000)
+                     ((calls + extracts + 2 * crawls) * search_rate + scrape * scrape_rate) * 1_000_000)
 
 
 def prepare(owner, body):
     query, request_id, parent = validate(body)
+    target_url = None
+    if body.get('depth') in ('scrape', 'crawl'):
+        from web_ingest import target
+        target_url = target(body['target_url'])
     if not ready():
         raise Unavailable("Live research is being configured. Please check back shortly.")
     history = db.context(owner, parent)
     record, fresh = db.reserve(owner, uuid.uuid4().hex, request_id, query, parent,
                                os.environ.get("JEV_MODEL", "jev-latest"), reservation(body.get("depth", "standard")), limits(),
-                               body.get("depth", "standard"), body.get("use_knowledge", False))
+                               body.get("depth", "standard"), body.get("use_knowledge", False),
+                               target_url)
     return record, fresh, history
 
 
@@ -217,7 +235,8 @@ def run(owner, record, history):
     try:
         yield {"type": "start", "id": rid}
         import market_data
-        if market_data.wants_btc_usd_quote(query):
+        mode = record.get('depth', 'standard')
+        if mode not in ('scrape', 'crawl') and market_data.wants_btc_usd_quote(query):
             yield {'type': 'status', 'text': 'Checking the live market quote'}
             try:
                 source, answer = measured('market_quote', market_data.quote)
@@ -242,9 +261,14 @@ def run(owner, record, history):
             finalized = True
             yield {'type': 'complete', 'run': db.get_run(owner, rid)}
             return
-        yield {"type": "status", "text": "Searching the web"}
-        import retrieval
-        sources, report = measured('retrieval', retrieval.retrieve, query, history, record.get('depth', 'standard'), search)
+        if mode in ('scrape', 'crawl'):
+            yield {'type': 'status', 'text': 'Reading the page' if mode == 'scrape' else 'Crawling up to five pages'}
+            import web_ingest
+            sources, report = measured('retrieval', web_ingest.collect, record['target_url'], mode)
+        else:
+            yield {"type": "status", "text": "Searching the web"}
+            import retrieval
+            sources, report = measured('retrieval', retrieval.retrieve, query, history, mode, search)
         import source_store
         sources, removed = source_store.excluded(sources)
         report['tombstoned_sources'] = removed
@@ -265,7 +289,8 @@ def run(owner, record, history):
             raise Unavailable('No usable evidence was found. Try a more specific question.')
         yield {'type': 'status', 'text': 'Reading sources'}
         import enrichment
-        sources, enrich_report = measured('enrichment', enrichment.enrich, sources)
+        sources, enrich_report = measured('enrichment', enrichment.enrich, sources) if mode not in ('scrape', 'crawl') else (
+            sources, {'scrape_calls': 0, 'enriched_pages': 0, 'cache_hits': 0, 'cache_errors': 0})
         for source in sources:
             source.setdefault('source_version_id', source_store.version_id(source))
         usage.update(enrich_report)
@@ -298,7 +323,7 @@ def run(owner, record, history):
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
             try:
-                draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids)
+                draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids, mode)
                 usage['writer'] = writer_usage
                 yield {'type': 'status', 'text': 'Jev is checking the draft'}
                 approved, check, check_usage = measured('jev_verification', jev_research.verify, query, draft, sources, draft_ids)
