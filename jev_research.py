@@ -21,8 +21,17 @@ def passage(query, text):
     segments = [s.strip() for s in re.split(r'(?<=[.!?])\s+|\n+', text) if s.strip()]
     if not segments:
         return ''
-    segments.sort(key=lambda s: (-len(terms.intersection(re.findall(r'\w+', s.lower()))), len(s)))
-    return segments[0][:450].strip()
+    anchor = max(range(len(segments)), key=lambda i: (
+        len(terms.intersection(re.findall(r'\w+', segments[i].lower()))), -len(segments[i])))
+    # Many questions have two parts. A single highest-overlap sentence may say
+    # what a term means while the immediately following sentence explains the
+    # action. Keep the original context together, within Jev's evidence bound.
+    selected = segments[anchor][:450]
+    for next_sentence in segments[anchor + 1:anchor + 3]:
+        if len(selected) + len(next_sentence) + 1 > 450:
+            break
+        selected += ' ' + next_sentence
+    return selected.strip()
 
 
 def state_and_questions(query, sources):
