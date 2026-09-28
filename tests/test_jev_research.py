@@ -109,9 +109,17 @@ class JevResearchTests(unittest.TestCase):
             jev.verify('solar panels', 'Unsupported citation. [999]', SOURCES, [1, 2])
 
     def test_attribution_failure_rejects_supported_paragraph(self):
-        with patch.object(jev, 'call', return_value={'answers': {
+        with patch.dict(os.environ, {'ZEARCH_ATTRIBUTION_GATE':'1'}), patch.object(jev, 'call', return_value={'answers': {
                 'supported_0': {'noul': .96}, 'attributed_0': {'noul': .2}}}):
             approved, check, _ = jev.verify('solar', 'Solar claim. [1]', SOURCES, [1])
         self.assertFalse(approved)
         self.assertEqual(check['support_probabilities'], [.96])
+        self.assertEqual(check['attribution_probabilities'], [.2])
+
+    def test_attribution_shadow_records_without_changing_support_gate(self):
+        with patch.dict(os.environ, {'ZEARCH_ATTRIBUTION_GATE':'0'}), patch.object(jev, 'call', return_value={'answers': {
+                'supported_0': {'noul': .96}, 'attributed_0': {'noul': .2}}}):
+            approved, check, _ = jev.verify('solar', 'Solar claim. [1]', SOURCES, [1])
+        self.assertTrue(approved)
+        self.assertFalse(check['attribution_enforced'])
         self.assertEqual(check['attribution_probabilities'], [.2])

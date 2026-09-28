@@ -41,7 +41,7 @@ The gates below are ordered by dependency. A milestone is complete only when its
 ## M9 implementation slices
 
 1. **M9.1: Bounded answer-first draft and shared evidence window (implemented).** The writer is instructed to answer immediately in one or two short paragraphs, with optional collapsed Details. Drafting and Jev verification inspect the same bounded capture window, preserving a selected passage near the end of a source.
-2. **M9.2: Support and attribution decisions (implemented).** Jev now returns separate per-paragraph probabilities for whether claims are supported and whether each claim is attributed to its specific adjacent citation. Both must clear the release threshold; missing/invalid decisions fail closed. The fallback shows the selected passage directly when a draft is rejected.
+2. **M9.2: Support and attribution decisions (shadow rollout).** Jev records separate per-paragraph probabilities for whether claims are supported and whether each claim is attributed to its specific adjacent citation. The existing support threshold controls release; optional `ZEARCH_ATTRIBUTION_GATE=1` makes both mandatory after live review establishes safe behavior. The fallback shows the selected passage directly when a draft is rejected.
 3. **M9.3: Controlled model evaluation (report implemented, HOLD).** Versioned scorecards retain model IDs and draft fallback fields. The [cohort comparator](../evals/REVIEW.md) checks two independent 100-case human-reviewed cohorts by mode, rejects mixed model versions and quality regressions, and applies the M6.4 release policy. The M6.3 live baseline and thresholds are still missing; no model change is accepted from fixtures.
 
 ## Design and economics rules
