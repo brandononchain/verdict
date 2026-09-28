@@ -52,6 +52,12 @@ The gates below are ordered by dependency. A milestone is complete only when its
 
 **M10 acceptance:** Local identity, claim, document isolation, cross-device session, export and deletion tests pass. Hosted cross-device sign-in and a deletion rehearsal remain HOLD until email delivery is configured and tested. Private records remain until the owner deletes them; account sessions expire after 30 days and sign-in codes after 10 minutes. Expired credentials are pruned on new sign-in requests or by the trusted `python account_store.py` operator job. This beta does not claim that every file format is ingestible or generated.
 
+## M11 implementation slices
+
+1. **M11.1: Recurring discovery worker (code shipped, hosted activation HOLD).** A separate Railway cron service can run `python discovery.py` every five minutes using `railway.discovery.json`; each invocation claims at most one due or manually queued job and exits. Database locks and lease tokens prevent concurrent duplicate publication, while existing research reservations enforce the global and owner daily caps. A source-text diff and normalized answer diff are recorded as review candidates, never as verified fact changes or notifications. Configure the separate service and observe a restart/due-window run before enabling scheduling in the web app.
+2. **M11.2: Reviewed fact changes (pending).** Compare attributed claims with Jev against both captured versions, record a human-review decision for meaningful changes, and deliver only approved updates to opted-in account owners. Keep source-copy changes, answer rephrasing and uncertain claims out of notification delivery.
+3. **M11.3: Delivery and lifecycle (pending).** Add per-investigation notification opt-in, reliable outbox and duplicate suppression, pause/cancel/expiry checks at send time, unsubscribe, and delivery audit. Test worker restart, overlap, allowance exhaustion and source deletion on hosted infrastructure.
+
 ## Design and economics rules
 
 - The answer appears first. Sources, research approach, and richer detail remain inspectable without overwhelming the reading path.
