@@ -49,6 +49,7 @@ class WebIngestTests(unittest.TestCase):
             self.assertEqual(report['failed_pages'],1)
             self.assertEqual(call.call_args.args[1]['limit'],5)
             self.assertFalse(call.call_args.args[1]['allow_external'])
+            self.assertEqual(call.call_args.args[1]['select_domains'],['^example\\.com$'])
         with patch.object(web_ingest,'_request',return_value={'results':rows}) as call:
             sources, report=web_ingest.collect('https://example.com/','scrape')
             self.assertEqual([s['url'] for s in sources],['https://example.com/'])

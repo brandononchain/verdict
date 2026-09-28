@@ -43,6 +43,7 @@ def collect(url, mode):
     elif mode == 'crawl':
         data = _request('crawl', {'url': clean, 'max_depth': 1, 'max_breadth': 4,
                                  'limit': MAX_PAGES, 'allow_external': False,
+                                 'select_domains': ['^' + re.escape(urlsplit(clean).hostname) + '$'],
                                  'extract_depth': 'basic', 'format': 'markdown',
                                  'include_images': False, 'include_usage': True})
     else:

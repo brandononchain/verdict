@@ -30,6 +30,7 @@
     $('target-url').placeholder = mode === 'crawl' ? 'https://example.com (up to five pages)' : 'https://example.com/page';
     query.placeholder = collecting ? 'What should Zearch extract? (optional)' : 'Ask a question or compare options…';
     if (collecting) $('use-knowledge').checked = false;
+    $('use-knowledge').closest('label').hidden = collecting;
     $('decide').disabled = !active && (collecting ? !$('target-url').value.trim() : !query.value.trim());
     const action = mode === 'scrape' ? 'Scrape' : mode === 'crawl' ? 'Crawl' : 'Search';
     $('decide').querySelector('span').textContent = active ? 'Stop' : action;
