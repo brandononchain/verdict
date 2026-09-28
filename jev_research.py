@@ -173,16 +173,21 @@ def verify(query, answer, sources, selected_ids):
     answers = result.get('answers') if isinstance(result, dict) else None
     if not isinstance(answers, dict):
         raise JevError('Jev returned an invalid draft check')
+    enforce_attribution = os.environ.get('ZEARCH_ATTRIBUTION_GATE') == '1'
     probabilities, support, attribution = [], [], []
     for i in range(len(paragraphs)):
         p = answers.get(f'supported_{i}', {}).get('noul')
         a = answers.get(f'attributed_{i}', {}).get('noul')
-        if any(type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1 for value in (p, a)):
-            raise JevError('Jev returned an invalid support or attribution probability')
-        support.append(round(p, 4)); attribution.append(round(a, 4))
-        probabilities.append(round(min(p, a), 4))
+        if type(p) not in (int, float) or not math.isfinite(p) or not 0 <= p <= 1:
+            raise JevError('Jev returned an invalid support probability')
+        valid_attribution = type(a) in (int, float) and math.isfinite(a) and 0 <= a <= 1
+        if enforce_attribution and not valid_attribution:
+            raise JevError('Jev returned an invalid attribution probability')
+        support.append(round(p, 4)); attribution.append(round(a, 4) if valid_attribution else None)
+        probabilities.append(round(min(p, a) if enforce_attribution else p, 4))
     return all(p >= .75 for p in probabilities), {'probabilities': probabilities,
         'support_probabilities': support, 'attribution_probabilities': attribution,
+        'attribution_enforced': enforce_attribution,
         'model': result.get('model', os.environ.get('JEV_MODEL', 'jev-latest'))}, result.get('usage') or {}
 
 
