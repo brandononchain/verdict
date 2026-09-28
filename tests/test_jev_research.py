@@ -96,7 +96,9 @@ class JevResearchTests(unittest.TestCase):
         captured = {}
         def fake_call(state, questions):
             captured.update(state)
-            return {'answers': {'supported_0': {'noul': .9}, 'supported_1': {'noul': .9}}}
+            self.assertEqual(set(questions), {'supported_0','supported_1','attributed_0','attributed_1'})
+            return {'answers': {'supported_0': {'noul': .9}, 'supported_1': {'noul': .9},
+                                'attributed_0': {'noul': .92}, 'attributed_1': {'noul': .88}}}
         with patch.object(jev, 'call', side_effect=fake_call):
             approved, _, _ = jev.verify('solar panels', 'First claim. [1]\n\nSecond claim. [2]', SOURCES, [1, 2])
         self.assertTrue(approved)
@@ -105,3 +107,11 @@ class JevResearchTests(unittest.TestCase):
         self.assertEqual(captured['checks'][0]['cited_evidence'][0]['captured_at_utc'], 'unknown')
         with self.assertRaises(jev.JevError):
             jev.verify('solar panels', 'Unsupported citation. [999]', SOURCES, [1, 2])
+
+    def test_attribution_failure_rejects_supported_paragraph(self):
+        with patch.object(jev, 'call', return_value={'answers': {
+                'supported_0': {'noul': .96}, 'attributed_0': {'noul': .2}}}):
+            approved, check, _ = jev.verify('solar', 'Solar claim. [1]', SOURCES, [1])
+        self.assertFalse(approved)
+        self.assertEqual(check['support_probabilities'], [.96])
+        self.assertEqual(check['attribution_probabilities'], [.2])

@@ -38,6 +38,12 @@ The gates below are ordered by dependency. A milestone is complete only when its
 2. **M8.2: Revalidation queue (worker implemented, disabled).** Durable URL jobs have atomic claims, leases, three bounded attempts, explicit daily call and cost reservations, and an operator report. No domains or spend are enabled by default; the worker needs external invocation. Conditional rechecks where providers support them and per-domain success/cost reporting remain. Never serve stale content as current evidence.
 3. **M8.3: Citation and deletion lifecycle (implemented for retained beta runs).** Inline citations open the saved capture and highlight Jev's inspected span. Operator URL tombstones remove shared extracts and queued rechecks, redact historical answers/snapshots that contained the source, clear affected investigation comparisons and exclude the URL from future evidence. The current operator scan is transactional and linear in retained runs; an indexed batch lifecycle is needed before a large corpus. Already-delivered client content cannot be retracted. Verify permissions and rights before enabling cache domains.
 
+## M9 implementation slices
+
+1. **M9.1: Bounded answer-first draft and shared evidence window (implemented).** The writer is instructed to answer immediately in one or two short paragraphs, with optional collapsed Details. Drafting and Jev verification inspect the same bounded capture window, preserving a selected passage near the end of a source.
+2. **M9.2: Support and attribution decisions (implemented).** Jev now returns separate per-paragraph probabilities for whether claims are supported and whether each claim is attributed to its specific adjacent citation. Both must clear the release threshold; missing/invalid decisions fail closed. The fallback shows the selected passage directly when a draft is rejected.
+3. **M9.3: Controlled model evaluation (pending).** Compare model versions, fallback frequency, usefulness, support, abstention and p95 latency by mode on a human-reviewed live cohort. The M6.3 baseline and release thresholds are still HOLD; code changes alone do not accept M9.
+
 ## Design and economics rules
 
 - The answer appears first. Sources, research approach, and richer detail remain inspectable without overwhelming the reading path.

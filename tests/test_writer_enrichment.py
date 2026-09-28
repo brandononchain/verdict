@@ -49,6 +49,24 @@ class CollaborationTests(unittest.TestCase):
         self.assertIn('captured_at_utc', json.loads(captured['input'])['evidence'][0])
         self.assertIn('not when a quoted fact was measured', captured['instructions'])
 
+    def test_writer_receives_same_bounded_tail_span_as_verifier(self):
+        captured = {}
+        def respond(url, payload, key, timeout):
+            captured.update(payload)
+            return Response({'status':'completed', 'output':[{'type':'message','content':[
+                {'type':'output_text','text':'The answer is in the later passage. [1]'}]}],
+                'usage':{'input_tokens':10,'output_tokens':9}})
+        text = 'Navigation. ' * 320 + 'The answer is in the later passage.'
+        at = text.index('The answer is in the later passage.')
+        source = dict(self.sources[0], text=text, evidence_span=[at, len(text)], source_version_id='a'*64)
+        with patch.dict(os.environ, {'ZEARCH_WRITER_MODEL':'writer','OPENAI_API_KEY':'key'}), \
+             patch.object(writer, 'open_provider', side_effect=respond):
+            writer.compose('What is the answer?', [source], [1])
+        evidence = json.loads(captured['input'])['evidence'][0]
+        self.assertIn('The answer is in the later passage.', evidence['text'])
+        self.assertEqual(evidence['capture_version'], 'a'*64)
+        self.assertLessEqual(len(evidence['text']), 3000)
+
     def test_writer_rejects_unselected_reference(self):
         with patch.dict(os.environ,{'ZEARCH_WRITER_MODEL':'writer','OPENAI_API_KEY':'key'}), \
              patch.object(writer,'open_provider',return_value=Response({'status':'completed',
@@ -58,7 +76,7 @@ class CollaborationTests(unittest.TestCase):
 
     def test_jev_rejects_unsupported_paragraph(self):
         with patch.object(jev,'call',return_value={'model':'jev','answers':{
-             'supported_0':{'noul':.2}},'usage':{'input_tokens':12}}):
+             'supported_0':{'noul':.2},'attributed_0':{'noul':.9}},'usage':{'input_tokens':12}}):
             approved,check,usage=jev.verify('How?', 'Unsupported assertion. [1]', self.sources,[1])
         self.assertFalse(approved)
         self.assertEqual(usage['input_tokens'],12)
