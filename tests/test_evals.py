@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from evals import run, review, quality_gate, retrieval_quality
+from evals import run, review, quality_gate, retrieval_quality, model_compare
 
 
 class EvaluationWorkflowTests(unittest.TestCase):
@@ -75,3 +75,28 @@ class EvaluationWorkflowTests(unittest.TestCase):
         self.assertEqual(result['matched_publisher_share'],1)
         card['relevant_candidate_urls']=['https://example.org/outside']
         with self.assertRaises(ValueError): retrieval_quality.report([card])
+
+    def test_model_comparison_requires_independent_reviewed_cohorts(self):
+        def cohort(prefix):
+            return [dict(version='m6.2-v1', case_id=case['id'], category=case['category'],
+                mode=case['mode'], temporal=case['temporal'], run_id=prefix + case['id'],
+                status='complete', reviewer='human', reviewed_at='2026-09-28T00:00:00Z',
+                citations_opened=True, scores={key:'pass' for key in review.DIMENSIONS},
+                failure_stage='none', total_ms=5000, estimated_cost=12000,
+                jev_selection_model='jev-pinned', jev_verification_model='jev-pinned',
+                writer_model='writer-pinned', answer_format='jev_verified_prose', draft_rejected=False)
+                for case in run.corpus()['cases']]
+        before, after = cohort('baseline-'), cohort('candidate-')
+        policy={'version':'m6.4-v1','baseline_id':'pinned-baseline','thresholds':{
+            mode:{'min_pass_rate':{key:.95 for key in review.DIMENSIONS},
+                  'max_p95_total_ms':6000,'max_p95_estimated_cost_usd':.02}
+            for mode in quality_gate.MODES}}
+        self.assertEqual(model_compare.compare(before, after, {})['status'], 'HOLD')
+        self.assertEqual(model_compare.compare(before, after, policy)['status'], 'GO')
+        after[0]['scores']['citation_support'] = 'fail'
+        self.assertEqual(model_compare.compare(before, after, policy)['status'], 'HOLD')
+        after[0]['scores']['citation_support'] = 'pass'
+        after[0]['jev_selection_model'] = 'mixed-version'
+        self.assertEqual(model_compare.compare(before, after, policy)['status'], 'HOLD')
+        after[0]['jev_selection_model'] = 'jev-pinned'
+        self.assertEqual(model_compare.compare(before, after[:99], policy)['status'], 'HOLD')
