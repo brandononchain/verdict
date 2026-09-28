@@ -35,7 +35,7 @@ The gates below are ordered by dependency. A milestone is complete only when its
 ## M8 implementation slices
 
 1. **M8.1: Owned capture identity and controlled extraction reuse (implemented, policy disabled).** Saved source snapshots have a content-and-capture version ID. A Railway Postgres cache can reuse an unexpired Context.dev extraction only for an exact domain with an explicit reviewed permission and TTL in `source_cache_policy.json`. Tombstones block future cache reuse and expired entries are pruned on writes. The default policy enables no domains; per-run snapshots remain owner scoped.
-2. **M8.2: Extraction queue and revalidation.** Add bounded durable jobs, conditional rechecks where providers support them, retries and per-domain success/cost reporting. Never serve stale content as current evidence.
+2. **M8.2: Revalidation queue (worker implemented, disabled).** Durable URL jobs have atomic claims, leases, three bounded attempts, explicit daily call and cost reservations, and an operator report. No domains or spend are enabled by default; the worker needs external invocation. Conditional rechecks where providers support them and per-domain success/cost reporting remain. Never serve stale content as current evidence.
 3. **M8.3: Citation and deletion lifecycle.** Resolve a visible citation to its exact captured span/version and propagate URL tombstones through owned indexes and retained snapshots under a documented deletion policy. Verify permissions and rights before enabling domains.
 
 ## Design and economics rules
