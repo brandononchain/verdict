@@ -125,6 +125,11 @@ class WebIngestTests(unittest.TestCase):
         self.assertEqual(data['pages'][0]['assets'][0]['kind'],'logo')
         self.assertEqual(data['pages'][0]['emails'],['hello@example.com'])
         self.assertEqual(data['pages'][0]['description'],'A public page')
+        import csv, io
+        rows=list(csv.DictReader(io.StringIO(artifact.data_csv(saved).decode('utf-8-sig'))))
+        self.assertEqual([row['type'] for row in rows],['page','logo','email'])
+        self.assertEqual(rows[1]['value'],source['assets'][0]['url'])
+        self.assertEqual(rows[2]['value'],'hello@example.com')
         with self.assertRaises(ValueError): workspace.save_investigation('alice',saved['id'])
         self.assertTrue(workspace.delete_run('alice',saved['id']))
         self.assertIsNone(db.get_run('alice',saved['id']))
@@ -150,9 +155,23 @@ class WebIngestTests(unittest.TestCase):
         allowed=Handler(path,alice); artifact.handle(allowed)
         self.assertEqual(allowed.status,200)
         self.assertEqual(json.loads(allowed.wfile.getvalue())['kind'],'crawl')
+        inventory=Handler(path.replace('json','csv'),alice); artifact.handle(inventory)
+        self.assertEqual(inventory.status,200)
+        self.assertIn(b'https://example.com/',inventory.wfile.getvalue())
         workspace.delete_run(owner,run['id'])
         after=Handler(path,alice); artifact.handle(after)
         self.assertEqual(after.status,404)
+
+    def test_csv_escapes_spreadsheet_formulas(self):
+        data=artifact.data_csv({'depth':'scrape','sources':[{'url':'https://example.com',
+            'title':'=HYPERLINK("https://evil.example")','description':'\t=1+1',
+            'assets':[{'kind':'image','url':'https://example.com/logo.png','label':'+SUM(1,2)'}],
+            'emails':[]}]})
+        import csv, io
+        rows=list(csv.DictReader(io.StringIO(data.decode('utf-8-sig'))))
+        self.assertEqual(rows[0]['page_title'][0],"'")
+        self.assertEqual(rows[0]['value'][0],"'")
+        self.assertEqual(rows[1]['label'][0],"'")
 
     def test_crawl_abstention_returns_captured_findings_when_writer_unavailable(self):
         source={'n':1,'url':'https://example.com/','canonical_url':'https://example.com/',
