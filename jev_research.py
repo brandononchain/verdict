@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 import urllib.request
 from evidence import window
+from answer_contract import units
 
 ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
 MAX_RESPONSE_BYTES = 200_000
@@ -141,9 +142,12 @@ def judge(query, sources):
 
 def verify(query, answer, sources, selected_ids):
     """Ask Jev about each paragraph against cited evidence, fail closed on uncertainty."""
-    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', answer) if p.strip()]
+    try:
+        paragraphs = units(answer)
+    except ValueError as exc:
+        raise JevError('Draft could not be checked') from exc
     allowed = {s['n']: s for s in sources if s['n'] in selected_ids}
-    if not paragraphs or len(paragraphs) > 3 or not allowed:
+    if not allowed:
         raise JevError('Draft could not be checked')
     checks = []
     for paragraph in paragraphs:

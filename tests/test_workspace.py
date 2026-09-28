@@ -71,6 +71,38 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue(workspace.delete_run('alice',rid))
         self.assertIsNone(db.get_run('alice',rid)); self.assertEqual(workspace.allowance('alice')['used'],1)
 
+    def test_export_is_paginated_and_owner_scoped(self):
+        workspace.add_note('alice', 'Private', 'Owner text')
+        workspace.add_note('bob', 'Other', 'Do not export')
+        ids = [self.completed() for _ in range(6)]
+        first = workspace.export_page('alice')
+        self.assertEqual(len(first['runs']), 5)
+        self.assertEqual(first['notes'][0]['body'], 'Owner text')
+        second = workspace.export_page('alice', first['next_cursor'])
+        self.assertEqual(len(second['runs']), 1)
+        self.assertIsNone(second['next_cursor'])
+        self.assertEqual(second['notes'], [])
+        self.assertEqual(set(ids), {run['id'] for run in first['runs'] + second['runs']})
+        with self.assertRaises(ValueError): workspace.export_page('bob', first['next_cursor'])
+
+    def test_delete_workspace_erases_private_data_without_refunding_allowance(self):
+        rid = self.completed()
+        workspace.add_note('alice', 'Private', 'Owner text')
+        workspace.add_note('bob', 'Other', 'Keep')
+        workspace.save_investigation('alice', rid)
+        used = workspace.allowance('alice')['used']
+        self.assertTrue(workspace.delete_workspace('alice'))
+        self.assertIsNone(db.get_run('alice', rid))
+        self.assertEqual(workspace.notes('alice'), [])
+        self.assertEqual(workspace.saved('alice'), [])
+        self.assertEqual(workspace.notes('bob')[0]['title'], 'Other')
+        self.assertEqual(workspace.allowance('alice')['used'], used)
+
+    def test_delete_workspace_blocks_active_research(self):
+        run, _ = self.reserve('alice')
+        with self.assertRaises(ValueError): workspace.delete_workspace('alice')
+        self.assertIsNotNone(db.get_run('alice', run['id']))
+
     def test_pending_cannot_be_deleted(self):
         run,_=self.reserve()
         with self.assertRaises(ValueError): workspace.delete_run('alice',run['id'])

@@ -315,6 +315,32 @@
     if (text.length > 40000 || text.includes('\0')) { toast('Use plain text up to 40,000 characters'); return; }
     $('note-body').value = text; if (!$('note-title').value) $('note-title').value = file.name.slice(0, 120);
   };
+  $('export-workspace').onclick = async () => {
+    const control = $('export-workspace'); control.disabled = true;
+    try {
+      const exportData = { version: 1, exported_at: new Date().toISOString(), notes: [], investigations: [], runs: [] };
+      let cursor = null, pages = 0;
+      do {
+        const response = await fetch('/api/workspace?export=1' + (cursor ? '&cursor=' + cursor : ''));
+        const page = await response.json(); if (!response.ok) throw Error(page.error || 'Could not export data');
+        exportData.notes.push(...page.notes); exportData.investigations.push(...page.investigations); exportData.runs.push(...page.runs);
+        cursor = page.next_cursor;
+        if (++pages > 1000) throw Error('Export is too large to download in the browser');
+      } while (cursor);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'zearch-workspace.json';
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast('Workspace download started');
+    } catch (error) { toast(error.message); } finally { control.disabled = false; }
+  };
+  $('delete-workspace').onclick = async () => {
+    if (active) { toast('Wait for current research to finish'); return; }
+    if (!window.confirm('Permanently delete all saved answers, notes, investigations and evidence in this browser workspace?')) return;
+    const control = $('delete-workspace'); control.disabled = true;
+    try {
+      await api('delete_workspace'); history = []; persistHistory(); home(); await loadWorkspace(); toast('Workspace deleted');
+    } catch (error) { toast(error.message); } finally { control.disabled = false; }
+  };
   form.addEventListener('submit', submit); query.addEventListener('input', controls);
   query.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }

@@ -76,6 +76,54 @@ def history(owner):
         return [dict(row) for row in db.execute(conn, marker, 'SELECT id,query,status,created FROM research_runs WHERE owner=? ORDER BY created DESC,id DESC LIMIT 100', (owner,)).fetchall()]
 
 
+def export_page(owner, cursor=None):
+    """Owner-scoped, bounded snapshot export. No provider calls or public cache."""
+    with db.connection() as (conn, marker):
+        boundary = None
+        if cursor is not None:
+            if not isinstance(cursor, str) or len(cursor) != 32:
+                raise ValueError('Invalid export cursor')
+            boundary = db.execute(conn, marker, 'SELECT created,id FROM research_runs WHERE owner=? AND id=?', (owner, cursor)).fetchone()
+            if not boundary:
+                raise ValueError('Invalid export cursor')
+        query = 'SELECT * FROM research_runs WHERE owner=?'
+        args = [owner]
+        if boundary:
+            query += ' AND (created<? OR (created=? AND id<?))'
+            args.extend((boundary['created'], boundary['created'], boundary['id']))
+        query += ' ORDER BY created DESC,id DESC LIMIT 5'
+        rows = db.execute(conn, marker, query, tuple(args)).fetchall()
+        runs = []
+        for row in rows:
+            item = db.public(row)
+            options = db.execute(conn, marker, 'SELECT depth,use_knowledge FROM research_options WHERE run_id=?', (item['id'],)).fetchone()
+            item.update(dict(options) if options else {'depth': 'standard', 'use_knowledge': 0})
+            runs.append(item)
+        first = cursor is None
+        notes = [dict(row) for row in db.execute(conn, marker,
+            'SELECT id,title,body,created FROM knowledge_notes WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
+        investigations = [dict(row) for row in db.execute(conn, marker,
+            'SELECT id,query,depth,interval_hours,next_run,expires,last_run,last_changes,created FROM investigations WHERE owner=? ORDER BY created DESC,id', (owner,)).fetchall()] if first else []
+        return {'version': 1, 'notes': notes, 'investigations': investigations,
+                'runs': runs, 'next_cursor': runs[-1]['id'] if len(rows) == 5 else None}
+
+
+def delete_workspace(owner):
+    """Erase this session's private records, retaining metering to prevent cap resets."""
+    with db.connection() as (conn, marker):
+        lock_owner(conn, marker, owner)
+        active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone()
+        worker = db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (owner,)).fetchone()
+        if active or worker:
+            raise ValueError('Wait for active research to finish before deleting your workspace')
+        db.execute(conn, marker, 'DELETE FROM discovery_jobs WHERE owner=?', (owner,))
+        db.execute(conn, marker, 'DELETE FROM investigations WHERE owner=?', (owner,))
+        db.execute(conn, marker, 'DELETE FROM knowledge_notes WHERE owner=?', (owner,))
+        db.execute(conn, marker, 'DELETE FROM research_options WHERE run_id IN (SELECT id FROM research_runs WHERE owner=?)', (owner,))
+        db.execute(conn, marker, 'DELETE FROM research_runs WHERE owner=?', (owner,))
+        return True
+
+
 def delete_run(owner, rid):
     with db.connection() as (conn, marker):
         lock_owner(conn, marker, owner)

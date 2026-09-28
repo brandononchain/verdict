@@ -294,6 +294,16 @@ a { color: inherit; }
 .answer-table { max-width:100%; overflow:auto; margin:16px 0; }
 .answer-table table { width:100%; border-collapse:collapse; font-size:14px; }
 .answer-table th,.answer-table td { border-bottom:1px solid var(--line); padding:10px 14px; text-align:left; vertical-align:top; }
+.answer-code { margin:16px 0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--rail); }
+.answer-code-language { display:block; padding:9px 16px 0; color:var(--muted); font:11px/1.4 var(--f-mono); }
+.answer-code pre { border:0; margin:0; background:transparent; }
+.chart-toggle { margin:0 0 10px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--rail); color:var(--ink-2); cursor:pointer; font:12px/1.4 var(--f-sans); }
+.answer-chart { display:grid; gap:10px; padding:14px; border:1px solid var(--line); border-radius:12px; }
+.answer-chart[hidden],.answer-table table[hidden] { display:none; }
+.chart-row { display:grid; grid-template-columns:minmax(80px,1fr) minmax(90px,3fr) auto; gap:12px; align-items:center; color:var(--ink-2); font-size:12px; }
+.chart-row > span { overflow-wrap:anywhere; }
+.chart-track { height:12px; border-radius:6px; background:var(--line); overflow:hidden; }
+.chart-fill { height:100%; background:linear-gradient(90deg,#777,#d6d6d6); border-radius:6px; }
 .workspace-sheet { width:min(720px,calc(100vw - 24px)); }
 .workspace-sheet section { margin-top:24px; border-top:1px solid var(--line); padding-top:12px; }
 .workspace-sheet h3 { font-size:15px; }
