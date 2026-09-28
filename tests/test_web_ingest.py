@@ -75,6 +75,12 @@ class WebIngestTests(unittest.TestCase):
         self.assertEqual(saved['usage']['extract_calls'],1)
         self.assertEqual(saved['estimated_cost'],10055)
         self.assertEqual(len(saved['sources'][0]['source_version_id']),64)
+        import usage_report
+        summary=usage_report.report()['scrape']
+        self.assertEqual(summary['runs'],1)
+        self.assertEqual(summary['complete'],1)
+        self.assertEqual(summary['source_tiers'],{'web':1})
+        self.assertNotIn(body['query'],str(summary))
         data=json.loads(artifact.data_json(saved))
         self.assertEqual(data['pages'][0]['text'],source['text'])
         self.assertEqual(data['target_url'],body['target_url'])
