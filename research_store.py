@@ -65,6 +65,8 @@ def migrate():
             UNIQUE(owner, request_id))""")
         import workspace_store
         workspace_store.migrate(conn)
+        import account_store
+        account_store.migrate(conn)
         import source_store
         source_store.migrate(conn)
         import source_revalidation

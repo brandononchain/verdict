@@ -28,6 +28,14 @@ def send_json(handler, status, data, cookie=None):
 
 
 def identity(headers, create=False):
+    import account_store
+    account = account_store.session(headers)
+    if account:
+        return 'acct:' + account['id'], None
+    return anonymous_identity(headers, create)
+
+
+def anonymous_identity(headers, create=False):
     secret = os.environ.get("ZEARCH_SESSION_SECRET", "")
     if len(secret) < 32:
         raise research.Unavailable("Live research is being configured. Please check back shortly.")

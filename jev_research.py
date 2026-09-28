@@ -63,7 +63,7 @@ def state_and_questions(query, sources):
             candidates.append({'id': str(source['n']), 'title': source.get('title', '')[:180],
             'domain': source.get('domain', 'private'), 'passage': excerpt,
                 'span_start': start, 'span_end': end,
-                'provenance': 'private note' if source.get('note_id') else 'web page'})
+                'provenance': 'private document' if source.get('document_id') else 'private note' if source.get('note_id') else 'web page'})
     if not candidates:
         raise JevError('No readable evidence was found')
     state = {'user_question': query, 'candidates': candidates}
