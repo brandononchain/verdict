@@ -265,6 +265,8 @@ a { color: inherit; }
 .research-evidence li { margin:14px 0; }
 .research-evidence li p { color:var(--muted); font-size:12px; }
 .citation { text-decoration-color:#777; text-underline-offset:3px; }
+.citation-button { display:inline; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer; text-decoration:underline; }
+.citation-button:focus-visible { outline:2px solid var(--ink-2); outline-offset:2px; border-radius:2px; }
 .research-prose .citation { font-size:12px; margin-inline:2px; }
 
 /* Native select retains reliable keyboard and touch behavior. */
@@ -285,6 +287,10 @@ a { color: inherit; }
 .answer-details summary,.research-trace summary { cursor:pointer; color:var(--ink-2); font-size:13px; }
 .research-trace p { color:var(--muted); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .source-meta { display:block; margin-top:5px; color:var(--muted); font-size:11px; }
+.source-capture { margin-top:5px; }
+.source-capture summary { width:max-content; color:var(--ink-2); font-size:12px; }
+.source-snapshot { max-height:280px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:14px; border:1px solid var(--line); border-radius:10px; color:var(--ink-2); font:12px/1.55 ui-monospace,monospace; }
+.source-snapshot mark { background:#d9d9d9; color:#161616; }
 .answer-table { max-width:100%; overflow:auto; margin:16px 0; }
 .answer-table table { width:100%; border-collapse:collapse; font-size:14px; }
 .answer-table th,.answer-table td { border-bottom:1px solid var(--line); padding:10px 14px; text-align:left; vertical-align:top; }

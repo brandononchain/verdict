@@ -17,6 +17,7 @@ const root=new Node('div');
 render(root,'<img src=x onerror=alert(1)> [1]\n\n## Details\n\n**More**',[{n:1,url:'javascript:alert(1)',title:'Unsafe'}],true);
 const walk=node=>[node,...(node.children||[]).flatMap(walk)];
 assert(!walk(root).some(n=>n.tag==='img'||n.tag==='script'||n.tag==='a'));
+assert(walk(root).some(n=>n.tag==='button'&&n.textContent==='[1]'));
 assert(walk(root).some(n=>n.tag==='details'));
 assert(walk(root).some(n=>n.tag==='strong'&&n.textContent==='More'));
 console.log('Renderer parsing, disclosure and unsafe-link tests passed');

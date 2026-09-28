@@ -224,6 +224,11 @@ def run(owner, record, history):
             except (OSError, ValueError, TypeError, KeyError) as exc:
                 raise Unavailable('A fresh BTC-USD quote is unavailable. Please try again shortly.') from exc
             sources = [source]
+            import source_store
+            sources, removed = source_store.excluded(sources)
+            if removed:
+                raise Unavailable('This market source is unavailable.')
+            source['source_version_id'] = source_store.version_id(source)
             usage.update({'input_tokens': 0, 'search_calls': 0, 'market_data': 'Coinbase Exchange BTC-USD last trade',
                           'answer_format': 'validated_market_quote'})
             db.save(owner, rid, status='streaming', sources=sources)
@@ -240,6 +245,14 @@ def run(owner, record, history):
         yield {"type": "status", "text": "Searching the web"}
         import retrieval
         sources, report = measured('retrieval', retrieval.retrieve, query, history, record.get('depth', 'standard'), search)
+        import source_store
+        sources, removed = source_store.excluded(sources)
+        report['tombstoned_sources'] = removed
+        if removed:
+            from retrieval import canonical
+            allowed_urls = {source['canonical_url'] for source in sources if source.get('canonical_url')}
+            for field in ('candidate_urls', 'selected_urls'):
+                report[field] = [url for url in report.get(field, []) if canonical(url) in allowed_urls]
         usage.update(report)
         if record.get('use_knowledge'):
             import workspace_store
@@ -253,7 +266,6 @@ def run(owner, record, history):
         yield {'type': 'status', 'text': 'Reading sources'}
         import enrichment
         sources, enrich_report = measured('enrichment', enrichment.enrich, sources)
-        import source_store
         for source in sources:
             source.setdefault('source_version_id', source_store.version_id(source))
         usage.update(enrich_report)
@@ -302,6 +314,11 @@ def run(owner, record, history):
             except (writer.WriterError, jev_research.JevError) as exc:
                 usage['draft_rejected'] = True
                 usage['draft_fallback_reason'] = 'writer_error' if isinstance(exc, writer.WriterError) else 'verification_error'
+        _, removed = source_store.excluded(sources)
+        if removed:
+            answer = 'This answer is unavailable because a source was removed.'
+            sources = []
+            usage = {'redacted_source': True}
         yield {'type': 'delta', 'text': answer}
         finish_metrics()
         cost = estimate(usage)

@@ -83,6 +83,17 @@
     question.append(make('div', 'user-bubble', run.query));
     response.setAttribute('aria-label', 'Zearch answer'); status.setAttribute('role', 'status');
     details.append(summary, sources);
+    body.addEventListener('click', event => {
+      const citation = event.target.closest('button[data-citation-id]');
+      if (!citation) return;
+      const card = [...sources.children].find(item => item.dataset.sourceId === citation.dataset.citationId);
+      if (!card) return;
+      details.open = true;
+      const capture = card.querySelector('details');
+      if (capture) capture.open = true;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (capture?.querySelector('summary') || card).focus();
+    });
     const copy = button('Copy', async () => { await navigator.clipboard.writeText(run.answer || ''); toast('Answer copied'); });
     const save = button('Save investigation', async () => {
       await api('save_investigation', { id: run.id }); toast('Investigation saved'); await loadWorkspace(false);
@@ -90,12 +101,13 @@
     actions.append(copy, save); response.append(status, body, details, trace, actions); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
-      status.textContent = run.error || (run.status === 'complete' ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
+      status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
       if (run.usage?.citation_warnings?.length) status.textContent = run.usage.citation_warnings.join(' ');
       actions.hidden = !run.answer || !['complete', 'error', 'interrupted'].includes(run.status);
       save.hidden = run.status !== 'complete'; sources.replaceChildren();
       for (const source of run.sources || []) {
         const li = make('li');
+        li.dataset.sourceId = String(source.n);
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
         li.append(make('p', '', source.evidence_span ? `Jev inspected: ${source.excerpt}` : source.excerpt));
         const provenance = [];
@@ -105,6 +117,20 @@
           provenance.push(`Page captured ${new Date(source.retrieved_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`);
         }
         if (provenance.length) li.append(make('small', 'source-meta', provenance.join(' · ')));
+        if (typeof source.text === 'string' && source.text) {
+          const capture = make('details', 'source-capture');
+          capture.append(make('summary', '', 'Captured evidence'));
+          if (/^[a-f0-9]{64}$/.test(source.source_version_id || '')) capture.append(make('small', 'source-meta', `Capture ${source.source_version_id}`));
+          const excerpt = make('pre', 'source-snapshot');
+          const span = source.evidence_span;
+          if (Array.isArray(span) && span.length === 2 && Number.isInteger(span[0]) && Number.isInteger(span[1]) &&
+              span[0] >= 0 && span[1] > span[0] && span[1] <= source.text.length) {
+            excerpt.append(document.createTextNode(source.text.slice(0, span[0])));
+            excerpt.append(make('mark', '', source.text.slice(span[0], span[1])));
+            excerpt.append(document.createTextNode(source.text.slice(span[1])));
+          } else excerpt.textContent = source.text;
+          capture.append(excerpt); li.append(capture);
+        }
         sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');

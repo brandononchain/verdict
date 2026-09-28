@@ -49,10 +49,10 @@
   function inline(node, text, sources) {
     for (const part of text.split(/(\[\d+\]|\*\*[^*]+\*\*|`[^`]+`)/g)) {
       const marker = part.match(/^\[(\d+)\]$/), source = marker && sources.find(s => s.n === Number(marker[1]));
-      if (source && source.url) node.append(sourceLink(source, part));
-      else if (source) {
-        const detail = document.createElement('span'); detail.className = 'citation'; detail.textContent = part;
-        detail.title = 'Private note: ' + source.title; node.append(detail);
+      if (source) {
+        const citation = document.createElement('button'); citation.type = 'button'; citation.className = 'citation citation-button';
+        citation.textContent = part; citation.title = 'Open captured evidence';
+        citation.setAttribute('data-citation-id', String(source.n)); node.append(citation);
       } else if (/^\*\*.+\*\*$/.test(part)) {
         const strong = document.createElement('strong'); strong.textContent = part.slice(2, -2); node.append(strong);
       } else if (/^`.+`$/.test(part)) {

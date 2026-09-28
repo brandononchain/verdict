@@ -152,6 +152,16 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, dep
 
 def save(owner, rid, *, status, answer="", sources=None, usage=None, error=None, estimated_cost=None):
     with connection() as (conn, marker):
+        if sources:
+            from retrieval import canonical
+            keys = {canonical(source['url']) for source in sources if source.get('url')}
+            if keys:
+                placeholders = ','.join('?' for _ in keys)
+                blocked = execute(conn, marker, f'SELECT url FROM source_tombstones WHERE url IN ({placeholders})', tuple(keys)).fetchone()
+                if blocked:
+                    status, answer, sources, usage, error = ('redacted',
+                        'This answer is unavailable because a source was removed.', [],
+                        {'redacted_source': True}, None)
         execute(conn, marker, "UPDATE research_runs SET status=?,answer=?,sources=?,usage=?,error=?,estimated_cost=?,updated=? WHERE owner=? AND id=?", (status, answer, json.dumps(sources or []), json.dumps(usage or {}), error, estimated_cost, int(time.time()), owner, rid))
     # Reservations intentionally remain charged for the day, including failures.
     # Unknown upstream charges must never silently restore spend headroom.

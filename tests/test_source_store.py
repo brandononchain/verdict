@@ -9,6 +9,8 @@ from unittest.mock import patch
 import enrichment
 import research_store as db
 import source_store
+import workspace_store as workspace
+import source_revalidation
 
 
 class Response:
@@ -74,6 +76,35 @@ class SourceStoreTests(unittest.TestCase):
         self.policy.write_text(json.dumps({'version': 1, 'domains': {'example.org': {
             'cache_extracted_content': True, 'ttl_seconds': 3600}}}))
         self.assertIsNone(source_store.policy_for(self.source['url']))
+
+    def test_tombstone_redacts_retained_runs_and_future_evidence(self):
+        self.allow()
+        limits = dict(global_calls=20, user_calls=10, global_budget=1000000, user_budget=1000000)
+        ids = []
+        for owner in ('alice', 'bob'):
+            rid = owner + 'a' * (32 - len(owner))
+            db.reserve(owner, rid, owner + 'request', 'Question', None, 'test', 100, limits)
+            db.save(owner, rid, status='complete', answer='Claim from extracted article [1]',
+                sources=[dict(self.source, text='Captured page text', excerpt='Captured page text')],
+                usage={'candidate_urls': [self.source['url']]})
+            ids.append((owner, rid))
+        iid = workspace.save_investigation('alice', ids[0][1])
+        source_revalidation.enqueue(self.source['url'])
+        self.assertEqual(source_store.tombstone('https://example.org/article'), 2)
+        for owner, rid in ids:
+            saved = db.get_run(owner, rid)
+            self.assertEqual(saved['status'], 'redacted')
+            self.assertEqual(saved['sources'], [])
+            self.assertNotIn('Claim from', saved['answer'])
+            self.assertEqual(saved['usage'], {'redacted_source': True})
+        self.assertEqual(workspace.saved('alice')[0]['last_run'], None)
+        self.assertEqual(workspace.saved('alice')[0]['interval_hours'], 0)
+        with db.connection() as (conn, marker):
+            self.assertIsNone(db.execute(conn, marker, 'SELECT url FROM source_revalidation_jobs').fetchone())
+        kept, removed = source_store.excluded([dict(self.source, text='New copy', n=1)])
+        self.assertEqual((kept, removed), ([], 1))
+        db.save('alice', ids[0][1], status='complete', answer='Reintroduced claim', sources=[dict(self.source, text='New copy')])
+        self.assertEqual(db.get_run('alice', ids[0][1])['status'], 'redacted')
 
 
 if __name__ == '__main__': unittest.main()
