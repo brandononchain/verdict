@@ -16,6 +16,6 @@ Live research needs provider credentials, contracted prices and a database. The 
 
 ## Quality and economics
 
-Run the 20-case review set for factual, current, ambiguous, adversarial and unsupported questions. Record Jev's selected source, sufficiency judgment, abstention, source quality, claim support, latency and cost. A source citation is provenance, not proof. Every Jev decision and web request must stay within the global/session budget; provider account caps remain essential. Anonymous session quotas do not constitute paid entitlements. Do not sell subscriptions before accounts, signed billing webhooks and an immutable credit ledger are implemented and tested.
+Run the versioned 100-case review set for factual, technical, current, comparison, ambiguous, unsupported, adversarial, conflict, synthesis and follow-up questions. Record Jev's selected source, sufficiency judgment, abstention, source quality, claim support, latency and cost. A source citation is provenance, not proof. Every Jev decision and web request must stay within the global/session budget; provider account caps remain essential. Anonymous session quotas do not constitute paid entitlements. Do not sell subscriptions before accounts, signed billing webhooks and an immutable credit ledger are implemented and tested.
 
 The writer can produce short paragraphs from Jev-selected evidence; Jev can reject the draft and show the selected excerpt. This gate is probabilistic, so it still needs human quality review. Treat AGI and unlimited search as ambitions, not claims of shipped capability.

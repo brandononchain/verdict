@@ -22,7 +22,7 @@ The gates below are ordered by dependency. A milestone is complete only when its
 ## Work order within the next milestone
 
 1. **M6.1: Instrument runs (implemented).** Persist stage timing, provider error classes, source ranking reasons, writer fallback reasons, and Jev verdicts without storing secrets. The operator CLI reports aggregates by mode. Validate these fields on live runs during M6.3; historical records have no traces.
-2. **M6.2: Build the review set.** Add representative questions, expected evidence characteristics, and a human scoring rubric. Separate stable facts from time-sensitive cases whose correct value changes.
+2. **M6.2: Build the review set (implemented).** A versioned 100-case corpus covers ten categories, including follow-ups with parent context. Each case defines expected evidence, review focus, mode and time sensitivity. A capped runner and human scorecard/report workflow are documented in `evals/REVIEW.md`. No live quality result is claimed from the corpus alone.
 3. **M6.3: Evaluate production.** Run a small capped batch, open citations, label failures, and set thresholds from the measured baseline. Fix the largest failure class first, then rerun the same set plus new holdouts.
 
 ## Design and economics rules
