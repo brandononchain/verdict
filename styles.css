@@ -284,6 +284,7 @@ a { color: inherit; }
 .answer-details,.research-trace { margin:18px 0; }
 .answer-details summary,.research-trace summary { cursor:pointer; color:var(--ink-2); font-size:13px; }
 .research-trace p { color:var(--muted); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.source-meta { display:block; margin-top:5px; color:var(--muted); font-size:11px; }
 .answer-table { max-width:100%; overflow:auto; margin:16px 0; }
 .answer-table table { width:100%; border-collapse:collapse; font-size:14px; }
 .answer-table th,.answer-table td { border-bottom:1px solid var(--line); padding:10px 14px; text-align:left; vertical-align:top; }

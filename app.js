@@ -97,7 +97,11 @@
       for (const source of run.sources || []) {
         const li = make('li');
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
-        li.append(make('p', '', source.excerpt)); sources.append(li);
+        li.append(make('p', '', source.excerpt));
+        if (Number.isInteger(source.retrieved_at) && source.retrieved_at > 0 && source.retrieved_at < 4102444800) {
+          li.append(make('small', 'source-meta', `Page captured ${new Date(source.retrieved_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`));
+        }
+        sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {

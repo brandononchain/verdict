@@ -95,5 +95,6 @@ class JevResearchTests(unittest.TestCase):
         self.assertTrue(approved)
         self.assertEqual([e['id'] for e in captured['checks'][0]['cited_evidence']], [1])
         self.assertEqual([e['id'] for e in captured['checks'][1]['cited_evidence']], [2])
+        self.assertEqual(captured['checks'][0]['cited_evidence'][0]['captured_at_utc'], 'unknown')
         with self.assertRaises(jev.JevError):
             jev.verify('solar panels', 'Unsupported citation. [999]', SOURCES, [1, 2])
