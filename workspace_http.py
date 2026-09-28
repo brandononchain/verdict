@@ -1,6 +1,6 @@
 """Same-origin, private workspace API. Never accepts an owner from the client."""
 import json
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 import discovery
 import research_http as http
 import research_store as db
@@ -16,6 +16,9 @@ def handle(handler, mutate=False):
         owner, cookie = http.identity(handler.headers, create=True)
         db.ensure_schema()
         if not mutate:
+            params = parse_qs(urlsplit(handler.path).query)
+            if params.get('export') == ['1']:
+                return http.send_json(handler, 200, store.export_page(owner, params.get('cursor', [None])[0]), cookie)
             return http.send_json(handler, 200, {'history': store.history(owner), 'notes': store.notes(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),
                 'discovery_enabled': discovery.enabled()}, cookie)
@@ -27,7 +30,7 @@ def handle(handler, mutate=False):
             raise ValueError('Expected an object')
         action = body.get('action')
         ident = body.get('id')
-        if action != 'add_note' and (not isinstance(ident, str) or len(ident) != 32):
+        if action not in ('add_note', 'delete_workspace') and (not isinstance(ident, str) or len(ident) != 32):
             raise ValueError('Invalid record identifier')
         if action == 'add_note':
             result = store.add_note(owner, body.get('title'), body.get('body'))
@@ -43,6 +46,8 @@ def handle(handler, mutate=False):
             result = discovery.schedule(owner, ident, body.get('hours'))
         elif action == 'delete_investigation':
             result = discovery.remove(owner, ident)
+        elif action == 'delete_workspace':
+            result = store.delete_workspace(owner)
         else:
             raise ValueError('Unknown action')
         return http.send_json(handler, 200, {'result': result}, cookie)

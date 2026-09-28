@@ -41,6 +41,8 @@ Your workspace supports owner-scoped saved answers and deletion, 20 plain-text n
 
 The answer renderer supports safe headings, lists, code, bounded tables and expandable Details. HTML and model-authored links are not executed. Source cards provide the underlying evidence. Jev support probabilities do not prove the answer is true.
 
+The M10 presentation slice can show language-labeled code blocks and toggle a two-column cited numeric table into a bar chart. The chart is derived from the checked answer and retains the table and captured citations; it does not generate new facts. Account sync, generated images, video, and document artifacts are not yet enabled. The workspace can download a paginated JSON export of its private notes, investigations, answers, and captured evidence, or delete those records while preserving daily metering. Browser session ownership does not provide cross-device identity.
+
 ## Discovery worker
 
 Save a completed answer as an investigation. Refresh jobs search the saved question against the public web without private notes or prior conversational context. Text diffs show changed source content, not proven changes in underlying facts.
