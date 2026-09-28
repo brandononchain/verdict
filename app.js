@@ -98,9 +98,13 @@
         const li = make('li');
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + ' · Private note'));
         li.append(make('p', '', source.excerpt));
+        const provenance = [];
+        if (source.source_tier === 'primary') provenance.push('Matched publisher domain');
+        if (source.published_date && source.published_date_provenance === 'provider_metadata') provenance.push(`Reported publication: ${source.published_date}`);
         if (Number.isInteger(source.retrieved_at) && source.retrieved_at > 0 && source.retrieved_at < 4102444800) {
-          li.append(make('small', 'source-meta', `Page captured ${new Date(source.retrieved_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`));
+          provenance.push(`Page captured ${new Date(source.retrieved_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`);
         }
+        if (provenance.length) li.append(make('small', 'source-meta', provenance.join(' · ')));
         sources.append(li);
       }
       details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');

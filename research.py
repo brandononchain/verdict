@@ -159,6 +159,8 @@ def search(query):
                         "text": text, "excerpt": text[:450],
                         "retrieved_at": int(time.time()),
                         "published_date": str(row.get('published_date') or '')[:80],
+                        "retrieval_provider": "tavily",
+                        "published_date_provenance": "provider_metadata" if row.get('published_date') else "unknown",
                         "provider_score": row.get('score'),
                         "content_type": "page" if row.get("raw_content") else "snippet"})
         if len(sources) == 8:

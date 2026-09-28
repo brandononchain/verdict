@@ -173,6 +173,19 @@ class RetrievalTests(unittest.TestCase):
         self.assertLessEqual(sum(s['domain']=='example.com' for s in ranked),2)
         self.assertEqual(len({retrieval.canonical(s['url']) for s in ranked}),len(ranked))
         self.assertEqual([s['n'] for s in ranked],list(range(1,len(ranked)+1)))
+        self.assertEqual(ranked[0]['canonical_url'], 'https://example.com/a')
+        self.assertIn('domain diversity',ranked[0]['selection_reasons'])
+
+    def test_retrieval_preserves_queries_when_canonical_sources_merge(self):
+        def search(q):
+            return [{'url':'https://example.com/a?utm_source=ad' if 'primary' in q else 'https://example.com/a',
+                     'title':'Evidence','domain':'example.com','text':'Detailed evidence ' + q[:5]}]
+        result, report = retrieval.retrieve('example evidence', [], 'deep', search)
+        self.assertEqual(len(result),1)
+        self.assertEqual(len(result[0]['matched_queries']),3)
+        self.assertEqual(result[0]['canonical_url'],'https://example.com/a')
+        self.assertIn('found by multiple queries',result[0]['selection_reasons'])
+        self.assertEqual(report['search_calls'],3)
 
     def test_partial_search_failure_is_visible(self):
         def search(q):

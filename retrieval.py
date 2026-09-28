@@ -66,8 +66,15 @@ def rank(query, sources, limit=8, budget=24000):
     unique = {}
     for source in sources:
         key = canonical(source['url']) if source.get('url') else 'note:' + source['note_id']
-        if key not in unique or len(source['text']) > len(unique[key]['text']):
+        previous = unique.get(key)
+        matched = list(dict.fromkeys((previous or {}).get('matched_queries', []) + source.get('matched_queries', [])))
+        if previous is None or len(source['text']) > len(previous['text']):
             unique[key] = dict(source)
+            unique[key]['matched_queries'] = matched
+        else:
+            previous['matched_queries'] = matched
+        if source.get('url'):
+            unique[key]['canonical_url'] = key
     rows = list(unique.values())
     documents = [Counter(tokens(s.get('title', '') + ' ' + s['text'][:3000])) for s in rows]
     terms = set(tokens(query))
@@ -112,6 +119,13 @@ def rank(query, sources, limit=8, budget=24000):
             break
         fingerprints.add(fingerprint); domains[domain] += 1; budget -= len(text)
         row.update(n=len(selected) + 1, text=text, excerpt=text[:450], fingerprint=fingerprint)
+        row['selection_reasons'] = ['lexical relevance', 'query coverage', 'domain diversity']
+        if row['ranking_factors']['primary_boost']:
+            row['selection_reasons'].append('matched publisher domain')
+        if row['ranking_factors']['provider_score']:
+            row['selection_reasons'].append('provider score')
+        if len(row.get('matched_queries', [])) > 1:
+            row['selection_reasons'].append('found by multiple queries')
         selected.append(row)
         if len(selected) == limit:
             break
@@ -125,9 +139,12 @@ def retrieve(query, history, depth, search):
     # Provider timeouts bound each worker; every attempt is reserved before here.
     with ThreadPoolExecutor(max_workers=len(queries)) as pool:
         futures = [pool.submit(search, q) for q in queries]
-        for future in futures:
+        for query_text, future in zip(queries, futures):
             try:
-                results.extend(future.result())
+                for source in future.result():
+                    row = dict(source)
+                    row['matched_queries'] = [query_text]
+                    results.append(row)
             except Exception as exc:
                 failed += 1
                 failure_kinds[type(exc).__name__] += 1

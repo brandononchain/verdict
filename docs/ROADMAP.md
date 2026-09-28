@@ -24,6 +24,13 @@ The gates below are ordered by dependency. A milestone is complete only when its
 1. **M6.1: Instrument runs (implemented).** Persist stage timing, provider error classes, source ranking reasons, writer fallback reasons, and Jev verdicts without storing secrets. The operator CLI reports aggregates by mode. Validate these fields on live runs during M6.3; historical records have no traces.
 2. **M6.2: Build the review set (implemented).** A versioned 100-case corpus covers ten categories, including follow-ups with parent context. Each case defines expected evidence, review focus, mode and time sensitivity. A capped runner and human scorecard/report workflow are documented in `evals/REVIEW.md`. No live quality result is claimed from the corpus alone.
 3. **M6.3: Evaluate production (in progress).** The [first five live runs](../evals/LIVE_BASELINE.md) found a false abstention on HTTP 429, verified a bounded passage fix on a rerun, and identified capture-time wording for current answers. Only two runs have complete citation inspection. Continue capped cases across days, score at least 100 distinct completed cases, then set thresholds from the measured distribution and holdouts.
+4. **M6.4: Quality release gate (implemented, HOLD).** The [gate](../evals/QUALITY_GATE.md) requires a pinned human-reviewed 100-case cohort, inspected sources, complete cost/timing records, and per-mode thresholds calibrated from live evidence. Its policy is intentionally unset until the M6.3 baseline is complete.
+
+## M7 implementation slices
+
+1. **M7.1: Query and source provenance (implemented).** Persist canonical URLs, all bounded queries that found a source, provider and reported publication provenance, ranking factors, and selection reasons. Source cards distinguish reported publication from page capture time. No additional provider calls.
+2. **M7.2: Retrieval quality.** Measure relevant-source recall and primary-source coverage on the completed M6 cohort; introduce a second provider or hybrid semantic reranker only if a measured failure justifies it within the existing spend reservation.
+3. **M7.3: Freshness and authority.** Validate timestamp handling and source authority on current cases, capture exact source spans, and compare against the M6 baseline before accepting M7.
 
 ## Design and economics rules
 
