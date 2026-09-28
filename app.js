@@ -115,6 +115,7 @@
         if (run.usage.market_data) lines.push(`Market data: ${run.usage.market_data}`);
         if (run.usage.judgment) lines.push(`Jev evidence decision: ${run.usage.judgment.gate}`);
         if (run.usage.answer_format) lines.push(`Answer path: ${run.usage.answer_format}`);
+        if (run.usage.scrape_calls || run.usage.cache_hits) lines.push(`Page extracts: ${run.usage.scrape_calls || 0} new · ${run.usage.cache_hits || 0} reused`);
         if (run.usage.draft_fallback_reason) lines.push(`Draft fallback: ${run.usage.draft_fallback_reason.replaceAll('_', ' ')}`);
         if (run.usage.total_ms != null) lines.push(`Research time: ${(run.usage.total_ms / 1000).toFixed(1)}s`);
         if (Number.isInteger(run.estimated_cost)) lines.push(`Estimated provider cost: $${(run.estimated_cost / 1000000).toFixed(6)}`);

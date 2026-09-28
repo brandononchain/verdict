@@ -253,6 +253,9 @@ def run(owner, record, history):
         yield {'type': 'status', 'text': 'Reading sources'}
         import enrichment
         sources, enrich_report = measured('enrichment', enrichment.enrich, sources)
+        import source_store
+        for source in sources:
+            source.setdefault('source_version_id', source_store.version_id(source))
         usage.update(enrich_report)
         report.update(enrich_report)
         yield {'type': 'research', 'report': report}
