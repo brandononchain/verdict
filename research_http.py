@@ -123,7 +123,9 @@ def post(handler):
         record, fresh, history = research.prepare(owner, body)
         if not fresh:
             return send_json(handler, 200, {"run": record}, cookie)
-    except (ValueError, TypeError):
+    except ValueError as exc:
+        return send_json(handler, 400, {"error": str(exc)}, cookie)
+    except TypeError:
         return send_json(handler, 400, {"error": "Invalid question or request identifier"}, cookie)
     except db.LimitReached as exc:
         return send_json(handler, 429, {"error": str(exc)}, cookie)
