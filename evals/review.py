@@ -30,7 +30,11 @@ def init(source, destination):
             usage = row.get('usage') or {}
             card.update(estimated_cost=row.get('estimated_cost'), total_ms=usage.get('total_ms'),
                         jev_gate=(usage.get('judgment') or {}).get('gate'),
-                        answer_format=usage.get('answer_format'))
+                        answer_format=usage.get('answer_format'),
+                        draft_rejected=bool(usage.get('draft_rejected')),
+                        jev_selection_model=(usage.get('judgment') or {}).get('model'),
+                        jev_verification_model=(usage.get('draft_check') or {}).get('model'),
+                        writer_model=(usage.get('writer') or {}).get('model'))
             card.update(candidate_urls=usage.get('candidate_urls'), selected_urls=usage.get('selected_urls'),
                         primary_selected_urls=[source.get('canonical_url') for source in row.get('sources', [])
                                                if source.get('source_tier') == 'primary' and source.get('canonical_url')],
