@@ -35,6 +35,20 @@ class CollaborationTests(unittest.TestCase):
         self.assertIn('[1]',answer)
         self.assertEqual(usage['output_tokens'],20)
 
+    def test_writer_distinguishes_capture_time_from_fact_time(self):
+        captured = {}
+        def respond(url, payload, key, timeout):
+            captured.update(payload)
+            return Response({'status':'completed', 'output':[{'type':'message','content':[
+                {'type':'output_text','text':'Python.org lists a stable version. [1]'}]}],
+                'usage':{'input_tokens':5,'output_tokens':8}})
+        source = dict(self.sources[0], retrieved_at=1790553600)
+        with patch.dict(os.environ,{'ZEARCH_WRITER_MODEL':'writer','OPENAI_API_KEY':'key'}), \
+             patch.object(writer,'open_provider',side_effect=respond):
+            writer.compose('latest version?', [source], [1])
+        self.assertIn('captured_at_utc', json.loads(captured['input'])['evidence'][0])
+        self.assertIn('not when a quoted fact was measured', captured['instructions'])
+
     def test_writer_rejects_unselected_reference(self):
         with patch.dict(os.environ,{'ZEARCH_WRITER_MODEL':'writer','OPENAI_API_KEY':'key'}), \
              patch.object(writer,'open_provider',return_value=Response({'status':'completed',
