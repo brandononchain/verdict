@@ -164,7 +164,7 @@ def save(owner, rid, *, status, answer="", sources=None, usage=None, error=None,
                     status, answer, sources, usage, error = ('redacted',
                         'This answer is unavailable because a source was removed.', [],
                         {'redacted_source': True}, None)
-        execute(conn, marker, "UPDATE research_runs SET status=?,answer=?,sources=?,usage=?,error=?,estimated_cost=?,updated=? WHERE owner=? AND id=?", (status, answer, json.dumps(sources or []), json.dumps(usage or {}), error, estimated_cost, int(time.time()), owner, rid))
+        execute(conn, marker, "UPDATE research_runs SET status=?,answer=?,sources=?,usage=?,error=?,estimated_cost=?,updated=? WHERE owner=? AND id=? AND status<>'redacted'", (status, answer, json.dumps(sources or []), json.dumps(usage or {}), error, estimated_cost, int(time.time()), owner, rid))
     # Reservations intentionally remain charged for the day, including failures.
     # Unknown upstream charges must never silently restore spend headroom.
 

@@ -120,15 +120,19 @@ def tombstone(url, now=None):
         db.execute(conn, marker, """INSERT INTO source_tombstones(url,deleted_at) VALUES(?,?)
             ON CONFLICT(url) DO UPDATE SET deleted_at=excluded.deleted_at""", (key, now))
         db.execute(conn, marker, 'DELETE FROM source_revalidation_jobs WHERE url=?', (key,))
-        redacted = []
-        for row in db.execute(conn, marker, 'SELECT id,sources FROM research_runs').fetchall():
-            sources = json.loads(row['sources'])
-            if any(source.get('url') and canonical(source['url']) == key for source in sources):
+        rows = db.execute(conn, marker, 'SELECT id,parent_id,sources FROM research_runs').fetchall()
+        redacted = {row['id'] for row in rows if any(source.get('url') and canonical(source['url']) == key
+                    for source in json.loads(row['sources']))}
+        while True:
+            more = {row['id'] for row in rows if row['parent_id'] in redacted}
+            if more.issubset(redacted): break
+            redacted.update(more)
+        for row in rows:
+            if row['id'] in redacted:
                 db.execute(conn, marker, """UPDATE research_runs SET status='redacted',
                     answer='This answer is unavailable because a source was removed.',
                     sources='[]',usage='{"redacted_source":true}',error=NULL,updated=? WHERE id=?""",
                     (now, row['id']))
-                redacted.append(row['id'])
         for rid in redacted:
             db.execute(conn, marker, """UPDATE investigations SET last_run=NULL,last_changes='{}',
                 interval_hours=0 WHERE last_run=?""", (rid,))
