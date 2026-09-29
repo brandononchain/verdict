@@ -1,4 +1,4 @@
-"""Small, deterministic path for time-sensitive BTC spot quotes.
+"""Small, deterministic path for supported crypto spot quotes.
 
 The Exchange ticker is a last trade on one venue, not a global reference price.
 Never substitute an old web snippet when the live quote is unavailable.
@@ -13,22 +13,34 @@ from decimal import Decimal, InvalidOperation
 
 TICKER_URL = 'https://api.exchange.coinbase.com/products/BTC-USD/ticker'
 CANDLES_URL = 'https://api.exchange.coinbase.com/products/BTC-USD/candles'
+ASSETS = {'BTC': 'Bitcoin', 'ETH': 'Ethereum', 'SOL': 'Solana', 'XRP': 'XRP'}
+
+
+def quote_symbol(question):
+    q = question.lower()
+    if (not re.search(r'\b(price|trading|worth|quote|rate)\b', q)
+            or re.search(r'\b(historical|history|yesterday|prediction|forecast|future|tomorrow|compare|past|ago)\b|\blast\s+(?:week|month|year)\b|\b20\d{2}\b', q)
+            or re.search(r'\b(eur|euro|gbp|pound|cad|canadian|aud|australian)\b', q)):
+        return None
+    matched = [symbol for symbol, pattern in {
+        'BTC': r'\b(bitcoin|btc)\b', 'ETH': r'\b(ethereum|ether|eth)\b',
+        'SOL': r'\b(solana|sol)\b', 'XRP': r'\b(xrp|ripple)\b'
+    }.items() if re.search(pattern, q)]
+    return matched[0] if len(matched) == 1 else None
 
 
 def wants_btc_usd_quote(question):
-    q = question.lower()
-    return (bool(re.search(r'\b(bitcoin|btc)\b', q))
-            and bool(re.search(r'\b(price|trading|worth|quote|rate)\b', q))
-            and (bool(re.search(r'\b(current|currently|right now|now|live|today|latest)\b', q))
-                 or bool(re.search(r'\b(price|quote|worth)\b', q)))
-            and not re.search(r'\b(historical|history|yesterday|prediction|forecast|future|tomorrow|compare|past|ago)\b|\blast\s+(?:week|month|year)\b|\b20\d{2}\b', q)
-            and not re.search(r'\b(eur|euro|gbp|pound|cad|canadian|aud|australian)\b', q))
+    return quote_symbol(question) == 'BTC'
 
 
-def quote(now=None, opener=None):
+def quote(symbol='BTC', now=None, opener=None):
+    if symbol not in ASSETS:
+        raise ValueError('Unsupported market product')
     now = time.time() if now is None else now
     opener = opener or urllib.request.urlopen
-    request = urllib.request.Request(TICKER_URL, headers={'User-Agent': 'Zearch/1.0', 'Accept': 'application/json'})
+    ticker_url = f'https://api.exchange.coinbase.com/products/{symbol}-USD/ticker'
+    candles_url = f'https://api.exchange.coinbase.com/products/{symbol}-USD/candles'
+    request = urllib.request.Request(ticker_url, headers={'User-Agent': 'Zearch/1.0', 'Accept': 'application/json'})
     with opener(request, timeout=8) as response:
         raw = response.read(16_001)
     if len(raw) > 16_000:
@@ -47,15 +59,17 @@ def quote(now=None, opener=None):
         raise ValueError('Invalid market quote') from exc
     shown = f'${price:,.2f}'
     observed = stamp.strftime('%Y-%m-%d %H:%M:%S UTC')
-    text = f'Coinbase Exchange BTC-USD last trade price: {shown} USD per BTC. Trade time: {observed}.'
-    source = {'n': 1, 'url': TICKER_URL, 'title': 'Coinbase Exchange BTC-USD ticker',
+    text = f'Coinbase Exchange {symbol}-USD last trade price: {shown} USD per {symbol}. Trade time: {observed}.'
+    source = {'n': 1, 'url': ticker_url, 'title': f'Coinbase Exchange {symbol}-USD ticker',
               'domain': 'api.exchange.coinbase.com', 'text': text, 'excerpt': text,
-              'retrieved_at': int(now), 'content_type': 'market_ticker'}
+              'retrieved_at': int(now), 'content_type': 'market_ticker',
+              'market': {'symbol': symbol, 'name': ASSETS[symbol], 'price': shown,
+                         'observed_at': int(stamp.timestamp()), 'venue': 'Coinbase Exchange'}}
     try:
         start = datetime.fromtimestamp(now - 24 * 3600, timezone.utc).isoformat()
         end = datetime.fromtimestamp(now, timezone.utc).isoformat()
         from urllib.parse import urlencode
-        candle_url = CANDLES_URL + '?' + urlencode({'granularity': 3600, 'start': start, 'end': end})
+        candle_url = candles_url + '?' + urlencode({'granularity': 3600, 'start': start, 'end': end})
         candles_request = urllib.request.Request(candle_url, headers={'User-Agent': 'Zearch/1.0', 'Accept': 'application/json'})
         with opener(candles_request, timeout=8) as response:
             candles_raw = response.read(64_001)
@@ -77,10 +91,10 @@ def quote(now=None, opener=None):
             points[bucket] = [bucket, round(values[3], 2)]
         series = [points[key] for key in sorted(points)][-26:]
         if len(series) >= 2:
-            source['chart'] = {'kind': 'price_series', 'label': 'BTC-USD · Coinbase Exchange',
+            source['chart'] = {'kind': 'price_series', 'label': f'{symbol}-USD · Coinbase Exchange',
                                'unit': 'USD', 'interval_seconds': 3600,
-                               'source_url': CANDLES_URL, 'captured_at': int(now), 'points': series}
+                               'source_url': candles_url, 'captured_at': int(now), 'points': series}
     except (OSError, ValueError, TypeError, OverflowError, KeyError):
         pass  # The fresh ticker stands on its own when historical candles are unavailable.
-    answer = f'Bitcoin’s last traded price on Coinbase Exchange was **{shown} USD** at {observed}. [1]\n\nPrices change continuously and may differ across exchanges.'
+    answer = f'{ASSETS[symbol]}’s last traded price on Coinbase Exchange was **{shown} USD** at {observed}. [1]\n\nPrices change continuously and may differ across exchanges.'
     return source, answer

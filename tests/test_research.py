@@ -227,6 +227,21 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(events[-1]['type'], 'complete')
         self.assertEqual(events[-1]['run']['answer'], 'BTC was $100. [1]')
         self.assertEqual(events[-1]['run']['usage']['search_calls'], 0)
+    def test_solana_price_routes_to_fresh_quote(self):
+        import market_data
+        question = 'Can you find the price of Solana?'
+        record, _ = db.reserve('alice', uuid.uuid4().hex, uuid.uuid4().hex, question,
+                               None, 'test', 100, self.limits)
+        source = {'n':1,'url':'https://api.exchange.coinbase.com/products/SOL-USD/ticker',
+                  'title':'Coinbase Exchange SOL-USD ticker','domain':'api.exchange.coinbase.com',
+                  'text':'SOL-USD last trade $116.83','excerpt':'SOL-USD last trade $116.83',
+                  'content_type':'market_ticker','market':{'symbol':'SOL','price':'$116.83','observed_at':1790650800}}
+        with patch.object(market_data,'quote',return_value=(source,'Solana last traded at $116.83. [1]')) as quote, \
+             patch.object(r,'search',side_effect=AssertionError('web search must not run')):
+            events = list(r.run('alice', record, []))
+        quote.assert_called_once_with('SOL')
+        self.assertEqual(events[-1]['run']['usage']['search_calls'],0)
+        self.assertEqual(events[-1]['run']['sources'][0]['market']['symbol'],'SOL')
     def test_http_stream_and_private_reload(self):
         import threading, json, urllib.request, urllib.error
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

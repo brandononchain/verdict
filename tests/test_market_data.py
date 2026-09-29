@@ -14,6 +14,11 @@ class MarketDataTests(unittest.TestCase):
         self.assertFalse(market_data.wants_btc_usd_quote('Bitcoin price last week'))
         self.assertFalse(market_data.wants_btc_usd_quote('What was the Bitcoin price yesterday?'))
         self.assertFalse(market_data.wants_btc_usd_quote('Current Bitcoin price in EUR'))
+        self.assertEqual(market_data.quote_symbol('Can you find the price of Solana?'), 'SOL')
+        self.assertEqual(market_data.quote_symbol('ETH price now'), 'ETH')
+        self.assertEqual(market_data.quote_symbol('What is XRP worth?'), 'XRP')
+        self.assertIsNone(market_data.quote_symbol('Compare Solana and Bitcoin prices'))
+        self.assertIsNone(market_data.quote_symbol('Solana price yesterday'))
 
     def test_fresh_quote_is_cited_and_timestamped(self):
         now = time.time()
@@ -37,6 +42,24 @@ class MarketDataTests(unittest.TestCase):
             def read(self, size): return json.dumps({'price': '109123.45', 'time': stamp}).encode()
         with self.assertRaisesRegex(ValueError, 'Stale'):
             market_data.quote(now=now, opener=lambda *args, **kwargs: Response())
+
+    def test_solana_quote_uses_structured_sol_usd_ticker(self):
+        now = time.time()
+        stamp = datetime.fromtimestamp(now - 3, timezone.utc).isoformat()
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self, size): return json.dumps({'price':'116.83','time':stamp}).encode()
+        calls = []
+        def opener(request, timeout):
+            calls.append(request.full_url)
+            return Response()
+        source, answer = market_data.quote('SOL', now=now, opener=opener)
+        self.assertEqual(source['market']['symbol'], 'SOL')
+        self.assertEqual(source['market']['price'], '$116.83')
+        self.assertIn('/products/SOL-USD/ticker', calls[0])
+        self.assertIn('Solana', answer)
+        self.assertIn('[1]', answer)
 
     def test_bounded_candle_series_is_attached_to_fresh_quote(self):
         now = time.time()

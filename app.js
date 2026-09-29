@@ -147,7 +147,7 @@
     dashboard.append(dashboardHead, metrics, tabs, ...labels.map(label => panels[label]));
     selectTab('Overview');
     const summary = make('summary'), sources = make('ol'), actions = make('div', 'turn-actions');
-    const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'Research approach');
+    const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'How this answer was checked');
     const traceBody = make('p'); trace.append(traceTitle, traceBody); trace.hidden = true;
     question.append(make('div', 'user-bubble', run.query));
     if (run.target_url) question.append(make('small', 'source-meta', run.target_url));
@@ -165,8 +165,8 @@
       card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       (capture?.querySelector('summary') || card).focus();
     });
-    const copy = button('Copy', async () => { await navigator.clipboard.writeText(run.answer || ''); toast('Answer copied'); });
-    const save = button('Save investigation', async () => {
+    const copy = button('Copy answer', async () => { await navigator.clipboard.writeText(run.answer || ''); toast('Answer copied'); });
+    const save = button('Save', async () => {
       await api('save_investigation', { id: run.id }); toast('Investigation saved'); await loadWorkspace(false);
     });
     const monitor = button('Monitor daily', async () => {
@@ -184,7 +184,8 @@
         document.body.append(link); link.click(); link.remove(); exportMenu.open = false;
       }));
     }
-    actions.append(copy, exportMenu, save, monitor); response.append(status, collecting ? dashboard : body, details, trace, actions); root.append(question, response); thread.append(root);
+    actions.setAttribute('aria-label', 'Answer actions');
+    actions.append(copy, exportMenu, save, monitor); response.append(status, collecting ? dashboard : body, actions, details, trace); root.append(question, response); thread.append(root);
     function update() {
       ZearchRender.render(body, run.answer || '', run.sources || [], run.status === 'complete');
       status.textContent = run.error || (['complete', 'redacted'].includes(run.status) ? '' : ['pending', 'streaming'].includes(run.status) ? 'Research in progress' : 'Partial answer');
@@ -225,7 +226,8 @@
         }
         sources.append(li);
       }
-      details.hidden = !sources.children.length; summary.textContent = `Sources · ${sources.children.length}`;
+      details.hidden = !sources.children.length;
+      summary.textContent = `View ${sources.children.length} ${sources.children.length === 1 ? 'source' : 'sources'}`;
       if (collecting) renderCollection();
       if (collecting && run.status === 'complete' && run.id && !visualLoaded) {
         visualLoaded = true;

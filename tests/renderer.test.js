@@ -33,4 +33,12 @@ render(root, 'A fresh quote. [1]', [{n:1,content_type:'market_ticker',url:'https
   chart:{kind:'price_series',unit:'USD',captured_at:1790000000,points:[[1789992800,100],[1789996400,105]]}}], true);
 assert(walk(root).some(n=>n.tag==='svg'));
 assert(walk(root).some(n=>n.tag==='polyline'));
+render(root, 'Solana’s last traded price on Coinbase Exchange was **$116.83 USD** at 2026-09-29 03:00:00 UTC. [1]\n\nPrices change continuously.',
+  [{n:1,content_type:'market_ticker',url:'https://api.exchange.coinbase.com/products/SOL-USD/ticker',
+    market:{symbol:'SOL',name:'Solana',price:'$116.83',observed_at:1790650800,venue:'Coinbase Exchange'},
+    chart:{kind:'price_series',unit:'USD',captured_at:1790650800,points:[[1790643600,115],[1790647200,116.83]]}}], true);
+assert(walk(root).some(n=>n.className==='market-card'));
+assert(walk(root).some(n=>n.className==='market-price'&&n.textContent==='$116.83'));
+assert(walk(root).some(n=>n.tag==='polyline'));
+assert(!walk(root).some(n=>n.tag==='p'&&n.textContent.includes('last traded price on Coinbase')));
 console.log('Renderer parsing, disclosure and unsafe-link tests passed');

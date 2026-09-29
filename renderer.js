@@ -85,10 +85,11 @@
     const spread = Math.max(high - low, high * .001);
     const coords = points.map((p, i) => `${20 + i * 560 / (points.length - 1)},${160 - (p[1] - low + spread * .08) * 135 / (spread * 1.16)}`).join(' ');
     const figure = document.createElement('figure'); figure.className = 'market-figure';
-    const heading = document.createElement('figcaption'); heading.textContent = 'BTC-USD · 24-hour price context';
+    const symbol = source.market?.symbol || 'Market';
+    const heading = document.createElement('figcaption'); heading.textContent = `${symbol}-USD · 24-hour price context`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 600 180'); svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', `Hourly Coinbase Exchange closes from $${low.toLocaleString()} to $${high.toLocaleString()} USD. Snapshot, not a streaming chart.`);
+    svg.setAttribute('aria-label', `${symbol}-USD hourly Coinbase Exchange closes from $${low.toLocaleString()} to $${high.toLocaleString()} USD. Snapshot, not a streaming chart.`);
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     line.setAttribute('points', coords); line.setAttribute('fill', 'none');
     line.setAttribute('stroke', '#dedede'); line.setAttribute('stroke-width', '2.5');
@@ -98,13 +99,42 @@
     foot.textContent = `Coinbase Exchange hourly closes · snapshot ${new Date(chart.captured_at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC · last trade above may differ from the last hourly close.`;
     figure.append(heading, svg, foot); return figure;
   }
+  function marketCard(source) {
+    const market = source?.market;
+    if (!market || !['BTC','ETH','SOL','XRP'].includes(market.symbol) ||
+        typeof market.price !== 'string' || !/^\$\d{1,3}(?:,\d{3})*(?:\.\d{2})$/.test(market.price) ||
+        !Number.isInteger(market.observed_at) || market.observed_at < 1 || market.observed_at > 4102444800) return null;
+    const card = document.createElement('section'); card.className = 'market-card';
+    card.setAttribute('aria-label', `${market.name || market.symbol} price snapshot`);
+    const head = document.createElement('div'); head.className = 'market-card-head';
+    const title = document.createElement('span'); title.textContent = `${market.name || market.symbol} · ${market.symbol}/USD`;
+    const venue = document.createElement('span'); venue.textContent = 'Coinbase Exchange';
+    head.append(title, venue);
+    const price = document.createElement('div'); price.className = 'market-price'; price.textContent = market.price;
+    const time = document.createElement('p'); time.className = 'market-time';
+    time.textContent = `Last trade · ${new Date(market.observed_at * 1000).toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+    card.append(head, price, time);
+    const visual = marketChart(source);
+    if (visual) card.append(visual);
+    else { const unavailable = document.createElement('p'); unavailable.className = 'market-no-chart';
+      unavailable.textContent = '24-hour chart unavailable for this snapshot.'; card.append(unavailable); }
+    const foot = document.createElement('p'); foot.className = 'market-disclaimer';
+    foot.textContent = 'Venue snapshot, not a consolidated or streaming price. ';
+    foot.append(sourceLink(source, 'Open price source')); card.append(foot);
+    return card;
+  }
   function render(node, text, sources = [], complete = false) {
     node.replaceChildren(); let target = node;
+    let skipQuoteParagraph = false;
     if (complete) {
-      const market = sources.find(s => s.content_type === 'market_ticker' && s.chart);
-      if (market) { const visual = marketChart(market); if (visual) node.append(visual); }
+      const market = sources.find(s => s.content_type === 'market_ticker');
+      if (market) { const card = marketCard(market); if (card) {
+        node.append(card);
+        skipQuoteParagraph = /^.{1,80}last traded price on Coinbase Exchange was \*\*\$/.test(text);
+      } else { const visual = marketChart(market); if (visual) node.append(visual); } }
     }
-    for (const block of blocks(text)) {
+    for (const [index, block] of blocks(text).entries()) {
+      if (index === 0 && skipQuoteParagraph && block.type === 'paragraph') continue;
       let item;
       if (block.type === 'heading') {
         if (complete && /^details\s*$/i.test(block.text)) {
