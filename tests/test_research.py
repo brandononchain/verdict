@@ -113,6 +113,22 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(saved['usage']['answer_format'],'jev_selected_excerpt')
         self.assertTrue(saved['usage']['draft_rejected'])
         self.assertEqual(saved['usage']['draft_fallback_reason'],'unsupported_draft')
+    def test_rejected_draft_gets_one_verified_revision(self):
+        run,_=self.reserve()
+        with self.pipeline(), patch.object(writer,'compose',side_effect=[
+            ('Unsupported draft. [1]', {'model':'test-writer','input_tokens':20,'output_tokens':10}),
+            ('Evidence answers the Question. [1]', {'model':'test-writer','input_tokens':25,'output_tokens':8})]) as compose, \
+             patch.object(jev,'verify',side_effect=[
+                 (False, {'probabilities':[.2]}, {'input_tokens':5}),
+                 (True, {'probabilities':[.97]}, {'input_tokens':6})]) as verify:
+            list(r.run('alice',run,[]))
+        saved=db.get_run('alice',run['id'])
+        self.assertEqual(compose.call_count,2)
+        self.assertEqual(verify.call_count,2)
+        self.assertEqual(saved['answer'],'Evidence answers the Question. [1]')
+        self.assertEqual(saved['usage']['writer_attempts'],2)
+        self.assertEqual(saved['usage']['writer']['input_tokens'],45)
+        self.assertEqual(saved['usage']['answer_format'],'jev_verified_prose')
     def test_first_pass_abstain_can_recover_with_verified_prose(self):
         run,_=self.reserve()
         abstain={'selected':None,'selected_probability':.7,'sufficiency_probability':.4,
@@ -132,7 +148,7 @@ class ResearchTests(unittest.TestCase):
              patch.object(jev,'verify',return_value=(False,{'probabilities':[.1]},{'input_tokens':5})):
             list(r.run('alice',run,[]))
         saved=db.get_run('alice',run['id'])
-        self.assertIn('could not find a passage',saved['answer'])
+        self.assertIn('could not verify a direct answer',saved['answer'])
         self.assertTrue(saved['usage']['draft_rejected'])
     def test_cookie_tamper(self):
         owner,cookie=http.identity({},True);self.assertEqual(http.identity({'Cookie':cookie})[0],owner)

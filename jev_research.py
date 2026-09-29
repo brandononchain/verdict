@@ -80,11 +80,11 @@ def state_and_questions(query, sources, mode='standard'):
     questions = {
         'best_passage': {'type': 'choice', 'instructions':
             ('Which `candidates` passage contains the most useful directly relevant facts for `user_question`? Choose none if none is relevant.' if overview else
-             'Which `candidates` passage most directly answers `user_question`? Choose none if none directly answers it.'),
+             'Which `candidates` passage provides the strongest relevant facts for `user_question`? A comparison or multi-part question can need several passages; choose the best starting evidence, and choose none only if all are irrelevant.'),
             'criteria': criteria},
         'sufficient': {'type': 'noul', 'instructions':
             ('Can the captured `candidates` collectively support at least one useful factual statement addressing `user_question`, without implying coverage of unseen pages?' if overview else
-             'Does at least one `candidates` passage contain enough explicit information to answer `user_question` without outside knowledge?')},
+             'Can the `candidates` collectively support a direct answer or a useful partial answer to `user_question` without outside knowledge? A comparison may cite different sources for its two subjects.')},
         'conflict': {'type': 'noul', 'instructions':
             'Do the `candidates` passages explicitly disagree on a fact needed to answer `user_question`?'}
     }
@@ -237,7 +237,13 @@ def verify(query, answer, sources, selected_ids):
 def format_answer(judgment, selected, candidates, sources):
     gate = judgment['gate']
     if gate == 'abstain':
-        return 'I could not find a passage that clearly answers this question. Open the sources below, or try a more specific question.'
+        titles = [str(source.get('title') or source.get('domain') or 'Source').strip()
+                  for source in sources[:3]]
+        if titles:
+            listed = '; '.join(f'{title[:100]} [{source["n"]}]' for title, source in zip(titles, sources))
+            return ('I found related material but could not verify a direct answer from it. '
+                    f'The closest captured sources are {listed}.')
+        return 'I could not verify an answer from the available sources.'
     cite = '[' + str(judgment['selected']) + ']'
     answer = f'{selected["passage"]} {cite}'
     if gate == 'review':

@@ -57,8 +57,18 @@ def plan(query, history, depth):
     if depth == 'deep':
         queries += [base + ' primary sources official documentation evidence', base + ' limitations conflicting evidence independent analysis']
     elif depth == 'compare':
-        queries += [base + ' advantages strengths direct comparison evidence',
-                    base + ' disadvantages limitations tradeoffs alternatives independent evidence']
+        # Search each side directly. Repeating the entire comparison question
+        # frequently retrieves generic listicles and misses one subject.
+        match = re.match(r'^\s*compare\s+(.{2,140}?)\s+(?:to|vs\.?|versus|with)\s+(.{2,140}?)\s*[?.!]?\s*$', query, re.I)
+        if match:
+            def subject(value):
+                value = value.strip(' ?.!')
+                parsed = urlsplit(value)
+                return parsed.hostname if parsed.scheme in ('http', 'https') and parsed.hostname else value
+            left, right = (subject(part) for part in match.groups())
+            queries = [base, left + ' product features official information', right + ' product features official information']
+        else:
+            queries += [base + ' option A features evidence', base + ' option B tradeoffs evidence']
     return queries
 
 
@@ -149,7 +159,19 @@ def retrieve(query, history, depth, search):
                 failed += 1
                 failure_kinds[type(exc).__name__] += 1
     candidate_urls = list(dict.fromkeys(canonical(row['url']) for row in results if row.get('url')))
-    selected = rank(query, results)
+    selected = rank(query, results, limit=8)
+    if depth == 'compare' and len(queries) == 3:
+        # Put one result from each focused search first so the four-source
+        # writer window actually contains both sides of a comparison.
+        focused_sources = []
+        for focused in queries[1:]:
+            option = rank(query, [row for row in results if focused in row.get('matched_queries', [])], limit=1)
+            if option and canonical(option[0]['url']) not in {canonical(row['url']) for row in focused_sources}:
+                focused_sources.append(option[0])
+        keys = {canonical(row['url']) for row in focused_sources}
+        selected = (focused_sources + [row for row in selected if canonical(row['url']) not in keys])[:8]
+        for n, row in enumerate(selected, 1):
+            row['n'] = n
     return selected, {'queries': queries, 'search_calls': len(queries),
         'failed_searches': failed, 'search_failure_kinds': dict(failure_kinds),
         'candidate_urls': candidate_urls, 'selected_urls': [row['canonical_url'] for row in selected if row.get('canonical_url')],
