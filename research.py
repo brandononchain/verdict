@@ -62,11 +62,11 @@ def rates():
 
 def reservation(depth='standard'):
     jev_rate, search_rate, writer_in, writer_out, scrape_rate = rates()
-    # Two Jev judgments, one bounded draft, at most three page extractions.
+    # One selection, up to two Jev checks and two bounded drafts.
     provider_credits = 3 if depth == 'crawl' else 1 if depth == 'scrape' else 3 if depth in ('deep', 'compare') else 1
     optional_scrapes = 0 if depth in ('scrape', 'crawl') else 3
-    return math.ceil(200_000 * jev_rate + 20_000 * writer_in +
-        900 * writer_out + (search_rate * provider_credits + scrape_rate * optional_scrapes) * 1_000_000)
+    return math.ceil(250_000 * jev_rate + 40_000 * writer_in +
+        1800 * writer_out + (search_rate * provider_credits + scrape_rate * optional_scrapes) * 1_000_000)
 
 
 def limits():
@@ -319,23 +319,47 @@ def run(owner, record, history):
         # actual paragraphs against the cited full evidence.
         if judgment['gate'] == 'answer':
             draft_ids = judgment['evidence_ids']
-        elif judgment['gate'] == 'abstain':
+        elif judgment['gate'] in ('abstain', 'review'):
             draft_ids = (([judgment['selected']] if judgment.get('selected') else []) +
                          [n for n in judgment.get('relevant_ids', []) if n != judgment.get('selected')])[:4]
             if not draft_ids:
                 draft_ids = [source['n'] for source in sources[:4]]
         else:
             draft_ids = []
+        if mode == 'compare' and draft_ids:
+            draft_ids = list(dict.fromkeys(draft_ids + [source['n'] for source in sources[:4]]))[:4]
         if draft_ids:
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
             try:
                 draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids, mode)
                 usage['writer'] = writer_usage
+                usage['writer_attempts'] = 1
                 yield {'type': 'status', 'text': 'Jev is checking the draft'}
                 approved, check, check_usage = measured('jev_verification', jev_research.verify, query, draft, sources, draft_ids)
                 usage['input_tokens'] += check_usage.get('input_tokens', 0)
                 usage['draft_check'] = check
+                if not approved and mode in ('standard', 'deep', 'compare') and not jev_research.supported_prefix(draft, check):
+                    # One bounded revision. The revised text is checked again
+                    # against the same captured sources before it can be shown.
+                    yield {'type': 'status', 'text': 'Rechecking a shorter answer'}
+                    try:
+                        revised, revised_usage = measured('writer_revision', writer.compose,
+                            query, sources, draft_ids, mode, True)
+                        usage['writer_attempts'] = 2
+                        usage['writer'] = {
+                            'input_tokens': writer_usage.get('input_tokens', 0) + revised_usage.get('input_tokens', 0),
+                            'output_tokens': writer_usage.get('output_tokens', 0) + revised_usage.get('output_tokens', 0),
+                            'model': revised_usage.get('model', writer_usage.get('model'))}
+                        revised_ok, revised_check, revised_cost = measured('jev_recheck',
+                            jev_research.verify, query, revised, sources, draft_ids)
+                        usage['input_tokens'] += revised_cost.get('input_tokens', 0)
+                        usage['revision_check'] = revised_check
+                        if revised_ok:
+                            approved, draft, check = True, revised, revised_check
+                            usage['draft_check'] = revised_check
+                    except (writer.WriterError, jev_research.JevError):
+                        usage['revision_failed'] = True
                 if approved:
                     answer = draft
                     usage['answer_format'] = 'jev_verified_prose'

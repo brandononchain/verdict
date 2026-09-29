@@ -208,6 +208,25 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(len(retrieval.plan('question',[],'compare')),3)
         self.assertIn('tradeoffs',retrieval.plan('question',[],'compare')[2])
         self.assertEqual(len(retrieval.plan('question',[],'standard')),1)
+        focused = retrieval.plan('Compare https://lobstack.ai to Grok Bot', [], 'compare')
+        self.assertIn('lobstack.ai', focused[1])
+        self.assertIn('Grok Bot', focused[2])
+
+    def test_compare_keeps_both_focused_sources_in_writer_window(self):
+        query = 'Compare https://lobstack.ai to Grok Bot'
+        def search(q):
+            if q.startswith('lobstack.ai'):
+                return [{'url':'https://lobstack.ai/','title':'Lobstack','domain':'lobstack.ai',
+                         'text':'Lobstack is an AI gateway.'}]
+            if q.startswith('Grok Bot'):
+                return [{'url':'https://grok.example/','title':'Grok Bot','domain':'grok.example',
+                         'text':'Grok Bot is a conversational bot.'}]
+            return [{'url':f'https://generic{i}.example/','title':f'Compare roundup {i}',
+                     'domain':f'generic{i}.example','text':query} for i in range(8)]
+        selected, report = retrieval.retrieve(query, [], 'compare', search)
+        self.assertEqual(report['search_calls'], 3)
+        self.assertEqual({s['title'] for s in selected[:4]} & {'Lobstack','Grok Bot'}, {'Lobstack','Grok Bot'})
+        self.assertLessEqual(len(selected), 8)
 
     def test_dedup_ranking_and_domain_diversity(self):
         rows=[{'url':'https://example.com/a?utm_source=ad','text':'Solar battery storage','title':'Solar','domain':'example.com'},

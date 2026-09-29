@@ -100,9 +100,9 @@
   function button(label, callback, cls = 'ghost-btn') {
     const node = make('button', cls, label); node.type = 'button';
     node.onclick = async () => {
-      node.disabled = true;
+      node.disabled = true; node.setAttribute('aria-busy', 'true');
       try { await callback(); } catch (error) { toast(error.message); }
-      finally { node.disabled = false; }
+      finally { node.disabled = false; node.removeAttribute('aria-busy'); }
     };
     return node;
   }
@@ -173,9 +173,10 @@
       await api('monitor_collection', { id: run.id }); monitor.hidden = true; toast('Daily monitor saved'); await loadWorkspace(false);
     });
     const exportMenu = make('details', 'export-menu');
-    exportMenu.append(make('summary', '', 'Export'));
+    const exportOptions = make('div', 'export-options');
+    exportMenu.append(make('summary', '', 'Export'), exportOptions);
     for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(collecting ? [['json', 'Data JSON'], ['csv', 'Inventory CSV']] : [])]) {
-      exportMenu.append(button(label, () => {
+      exportOptions.append(button(label, () => {
         if (!/^[a-f0-9]{32}$/.test(run.id || '')) throw Error('Saved answer unavailable');
         const link = document.createElement('a');
         link.href = '/api/artifact?id=' + run.id + '&format=' + format;
@@ -193,10 +194,14 @@
       save.hidden = run.status !== 'complete' || ['scrape','crawl'].includes(run.depth); sources.replaceChildren();
       monitor.hidden = !collecting || run.status !== 'complete';
       for (const source of run.sources || []) {
-        const li = make('li');
+        const li = make('li', 'evidence-card');
         li.dataset.sourceId = String(source.n);
         li.append(source.url ? ZearchRender.sourceLink(source, source.title || source.domain) : make('span', '', source.title + (source.document_id ? ' · Private document' : ' · Private note')));
-        li.append(make('p', '', source.evidence_span ? `Jev inspected: ${source.excerpt}` : source.excerpt));
+        if (source.excerpt) {
+          const excerpt = make('p', 'evidence-excerpt', source.excerpt);
+          excerpt.title = 'Passage considered for this answer';
+          li.append(excerpt);
+        }
         const provenance = [];
         if (source.source_tier === 'primary') provenance.push('Matched publisher domain');
         if (source.published_date && source.published_date_provenance === 'provider_metadata') provenance.push(`Reported publication: ${source.published_date}`);
@@ -220,7 +225,7 @@
         }
         sources.append(li);
       }
-      details.hidden = !sources.children.length; summary.textContent = sources.children.length + (sources.children.length === 1 ? ' source' : ' sources');
+      details.hidden = !sources.children.length; summary.textContent = `Sources · ${sources.children.length}`;
       if (collecting) renderCollection();
       if (collecting && run.status === 'complete' && run.id && !visualLoaded) {
         visualLoaded = true;
@@ -231,13 +236,14 @@
       if (run.usage?.queries || run.usage?.judgment || run.usage?.market_data) {
         trace.hidden = false;
         const lines = [];
-        if (run.usage.extract_calls || run.usage.crawl_calls) lines.push(`${run.usage.crawl_calls ? 'Crawl' : 'Page extraction'} · ${run.usage.crawl_pages || sources.children.length} captured pages · ${run.usage.failed_pages || 0} failed. ${run.usage.ranking}.`);
-        else if (run.usage.queries) lines.push(`${run.usage.search_calls} search attempts · ${run.usage.failed_searches || 0} failed. ${run.usage.ranking}.`, ...run.usage.queries);
+        if (run.usage.extract_calls || run.usage.crawl_calls) lines.push(`${run.usage.crawl_pages || sources.children.length} pages captured · ${run.usage.failed_pages || 0} unavailable`);
+        else if (run.usage.queries) lines.push(`${run.usage.search_calls} web searches · ${run.usage.failed_searches || 0} unavailable`);
         if (run.usage.market_data) lines.push(`Market data: ${run.usage.market_data}`);
-        if (run.usage.judgment) lines.push(`Jev evidence decision: ${run.usage.judgment.gate}`);
-        if (run.usage.answer_format) lines.push(`Answer path: ${run.usage.answer_format}`);
+        if (run.usage.judgment) lines.push(run.usage.judgment.gate === 'answer' ? 'Relevant evidence found' :
+          run.usage.judgment.gate === 'review' ? 'Sources need a closer look' : 'Direct evidence was limited');
+        if (run.usage.writer_attempts > 1) lines.push('The first draft was revised and checked again');
         if (run.usage.scrape_calls || run.usage.cache_hits) lines.push(`Page extracts: ${run.usage.scrape_calls || 0} new · ${run.usage.cache_hits || 0} reused`);
-        if (run.usage.draft_fallback_reason) lines.push(`Draft fallback: ${run.usage.draft_fallback_reason.replaceAll('_', ' ')}`);
+        if (run.usage.draft_fallback_reason) lines.push('Some draft claims could not be supported');
         if (run.usage.total_ms != null) lines.push(`Research time: ${(run.usage.total_ms / 1000).toFixed(1)}s`);
         if (Number.isInteger(run.estimated_cost)) lines.push(`Estimated provider cost: $${(run.estimated_cost / 1000000).toFixed(6)}`);
         traceBody.textContent = lines.join('\n');
@@ -257,7 +263,9 @@
       dashboardTarget.textContent = `${domain} · ${run.status === 'complete' ? 'Captured collection' : 'Collecting evidence'}`;
       metrics.replaceChildren();
       for (const [value, label] of [[pages.length, 'Pages'], [media.length, 'Media'], [emails.size, 'Contacts']]) {
-        const metric = make('div', 'collection-metric');
+        const metric = make('button', 'collection-metric');
+        metric.type = 'button'; metric.title = `Explore ${label.toLowerCase()}`;
+        metric.onclick = () => selectTab(label);
         metric.append(make('strong', '', String(value)), make('span', '', label)); metrics.append(metric);
       }
       tabButtons.Pages.textContent = `Pages ${pages.length}`;
@@ -273,19 +281,41 @@
           ZearchRender.sourceLink(page, page.title || page.url));
         card.append(top);
         if (page.description) card.append(make('p', '', page.description));
+        else if (page.excerpt) card.append(make('p', '', page.excerpt.slice(0, 210)));
         card.append(make('small', 'collection-url', page.url));
         const tags = [];
         if (page.assets?.length) tags.push(`${page.assets.length} media`);
         if (page.emails?.length) tags.push(`${page.emails.length} contacts`);
         if (page.retrieved_at) tags.push(`Captured ${new Date(page.retrieved_at * 1000).toLocaleString()}`);
         if (tags.length) card.append(make('small', 'collection-page-meta', tags.join(' · ')));
+        if (page.text) {
+          const captured = make('details', 'collection-page-capture');
+          captured.append(make('summary', '', 'Read captured page'), make('pre', '', page.text));
+          card.append(captured);
+        }
         pagePanel.append(card);
       }
       mediaPanel.append(make('h3', 'collection-section-title', 'Images & video'));
       if (!media.length) mediaPanel.append(make('p', 'collection-empty', 'No media links were found in these pages.'));
       const gallery = make('div', 'collection-gallery');
+      const kinds = [...new Set(media.map(item => ['image','logo','favicon'].includes(item.kind) ? 'Images' :
+        item.kind === 'video' ? 'Video' : 'Other'))];
+      if (kinds.length > 1) {
+        const filters = make('div', 'collection-filters');
+        const filterButtons = [];
+        for (const kind of ['All', ...kinds]) {
+          const filter = button(kind, () => {
+            for (const card of gallery.children) card.hidden = kind !== 'All' && card.dataset.kind !== kind;
+            for (const item of filterButtons) item.setAttribute('aria-pressed', String(item === filter));
+          }, 'filter-btn');
+          filter.setAttribute('aria-pressed', String(kind === 'All'));
+          filterButtons.push(filter); filters.append(filter);
+        }
+        mediaPanel.append(filters);
+      }
       for (const item of media) {
         const card = make('article', 'collection-media-card');
+        card.dataset.kind = ['image','logo','favicon'].includes(item.kind) ? 'Images' : item.kind === 'video' ? 'Video' : 'Other';
         const frame = make('div', 'collection-media-frame');
         if (['image','logo','favicon'].includes(item.kind) && /^https?:\/\//i.test(item.url)) {
           const img = document.createElement('img'); img.src = item.url; img.alt = item.label || `${item.kind} from ${domain}`;
@@ -301,10 +331,12 @@
       if (!emails.size) contactPanel.append(make('p', 'collection-empty', 'No public email addresses were found in these pages.'));
       for (const [email, page] of emails) {
         const row = make('div', 'collection-contact');
-        row.append(make('strong', '', email), make('small', '', `Found on ${page.title || page.url}`)); contactPanel.append(row);
+        row.append(make('strong', '', email), make('small', '', `Found on ${page.title || page.url}`),
+          button('Copy email', async () => { await navigator.clipboard.writeText(email); toast('Email copied'); }));
+        contactPanel.append(row);
       }
       dataPanel.append(make('h3', 'collection-section-title', 'Dataset'));
-      const note = make('p', 'collection-data-note', 'The collection keeps page text, metadata, media links, public contacts, source URLs, and capture identifiers together. Jev checks the evidence used in the answer above.');
+      const note = make('p', 'collection-data-note', 'Page content and assets captured from this address. Download the dataset using Export below.');
       dataPanel.append(note);
       const fields = make('dl', 'collection-fields');
       for (const [key, value] of [['Target', run.target_url || '—'], ['Scope', run.depth === 'crawl' ? 'Bounded site crawl' : 'Single page'],
@@ -315,8 +347,9 @@
       const decision = run.usage?.judgment;
       if (decision?.gate) {
         const jev = make('div', 'collection-decision');
-        jev.append(make('strong', '', `Jev evidence · ${decision.gate}`),
-          make('small', '', 'Choice probability and sufficiency are separate judgments; neither turns a source into a verified fact.'));
+        jev.append(make('strong', '', decision.gate === 'answer' ? 'Evidence reviewed' :
+          decision.gate === 'review' ? 'Check conflicting sources' : 'Limited direct evidence'),
+          make('small', '', `${pages.length} captured ${pages.length === 1 ? 'page' : 'pages'} available to inspect in the Pages tab.`));
         dataPanel.append(jev);
       }
       const visualSection = make('section', 'collection-visual');
