@@ -499,3 +499,30 @@ summary:hover { color:#f2f2f2; }
   .collection-contact { grid-template-columns:minmax(0,1fr); }
   .collection-contact button { grid-column:1; grid-row:auto; justify-self:start; margin-top:7px; }
 }
+
+/* A market result is one readable snapshot with its source and time attached. */
+.market-card { margin:0 0 15px; padding:22px 24px 15px; border:1px solid #4b4b4b; border-radius:19px; background:linear-gradient(155deg,#303030,#282828 60%); }
+.market-card-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px 16px; color:#cfcfcf; font-size:13px; font-weight:560; }
+.market-card-head span:last-child { color:#999; font-size:11px; font-weight:450; }
+.market-price { margin:12px 0 1px; color:#f6f6f6; font-size:clamp(34px,5vw,49px); font-weight:580; letter-spacing:-.055em; line-height:1.12; font-variant-numeric:tabular-nums; }
+.market-time,.market-no-chart { margin:0; color:#a9a9a9; font-size:12px; }
+.market-card .market-figure { margin:21px 0 0; padding:16px 0 0; border:0; border-top:1px solid #444; border-radius:0; background:transparent; }
+.market-card .market-figure figcaption { color:#d3d3d3; font-size:12px; }
+.market-card .market-figure svg { max-height:195px; margin:11px 0 7px; }
+.market-card .market-figure small { display:block; color:#929292; font-size:10px; }
+.market-no-chart { margin-top:20px; padding:16px 0 2px; border-top:1px solid #444; }
+.market-disclaimer { margin:14px 0 0 !important; color:#aaa; font-size:11px; line-height:1.55; }
+.market-disclaimer a { color:#dedede; text-decoration:underline; text-underline-offset:3px; }
+.market-card + p { color:#aaa; font-size:12px; line-height:1.6; }
+.turn-actions { margin-top:12px; padding-bottom:11px; border-bottom:1px solid #383838; }
+.research-evidence { margin:4px 0 0; }
+.research-trace { margin:0 0 4px; }
+.research-evidence > summary,.research-trace > summary { min-height:34px; padding:7px 0; color:#bcbcbc; }
+.research-evidence > summary:hover,.research-trace > summary:hover { color:#fff; }
+.research-evidence[open],.research-trace[open] { margin-bottom:10px; }
+@media(max-width:680px) {
+  .market-card { padding:18px 17px 14px; }
+  .market-card-head { display:grid; }
+  .market-price { font-size:38px; }
+  .turn-actions { gap:7px; }
+}

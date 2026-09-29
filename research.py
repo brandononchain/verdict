@@ -236,19 +236,20 @@ def run(owner, record, history):
         yield {"type": "start", "id": rid}
         import market_data
         mode = record.get('depth', 'standard')
-        if mode not in ('scrape', 'crawl') and market_data.wants_btc_usd_quote(query):
+        quote_symbol = market_data.quote_symbol(query) if mode in ('standard', 'deep') else None
+        if quote_symbol:
             yield {'type': 'status', 'text': 'Checking the live market quote'}
             try:
-                source, answer = measured('market_quote', market_data.quote)
+                source, answer = measured('market_quote', market_data.quote, quote_symbol)
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                raise Unavailable('A fresh BTC-USD quote is unavailable. Please try again shortly.') from exc
+                raise Unavailable(f'A fresh {quote_symbol}-USD quote is unavailable. Please try again shortly.') from exc
             sources = [source]
             import source_store
             sources, removed = source_store.excluded(sources)
             if removed:
                 raise Unavailable('This market source is unavailable.')
             source['source_version_id'] = source_store.version_id(source)
-            usage.update({'input_tokens': 0, 'search_calls': 0, 'market_data': 'Coinbase Exchange BTC-USD last trade',
+            usage.update({'input_tokens': 0, 'search_calls': 0, 'market_data': f'Coinbase Exchange {quote_symbol}-USD last trade',
                           'answer_format': 'validated_market_quote'})
             db.save(owner, rid, status='streaming', sources=sources)
             yield {'type': 'research', 'report': {'queries': [], 'search_calls': 0,
