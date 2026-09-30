@@ -79,7 +79,7 @@ def delete_note(owner, nid):
 
 
 def block_active(conn, marker, owner):
-    if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone():
+    if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') AND updated>? LIMIT 1", (owner, db.active_cutoff())).fetchone():
         raise ValueError('Wait for active research to finish before deleting knowledge')
 
 
@@ -231,7 +231,7 @@ def delete_workspace(owner):
 
 
 def erase_private(conn, marker, owner):
-    active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (owner,)).fetchone()
+    active = db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') AND updated>? LIMIT 1", (owner, db.active_cutoff())).fetchone()
     worker = db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (owner,)).fetchone()
     batch = db.execute(conn, marker, """SELECT 1 FROM collection_batch_items p JOIN collection_batches b ON b.id=p.batch_id
         WHERE b.owner=? AND p.status='running' LIMIT 1""", (owner,)).fetchone()
@@ -265,7 +265,7 @@ def claim_workspace(anonymous_owner, account_id):
             if prior['account_id'] != account_id:
                 raise ValueError('This browser workspace belongs to another account')
             return False
-        if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') LIMIT 1", (anonymous_owner,)).fetchone():
+        if db.execute(conn, marker, "SELECT 1 FROM research_runs WHERE owner=? AND status IN ('pending','streaming') AND updated>? LIMIT 1", (anonymous_owner, db.active_cutoff())).fetchone():
             raise ValueError('Wait for browser research to finish before claiming it')
         if db.execute(conn, marker, "SELECT 1 FROM discovery_jobs WHERE owner=? AND status='running' LIMIT 1", (anonymous_owner,)).fetchone():
             raise ValueError('Wait for browser refreshes to finish before claiming it')
@@ -291,18 +291,18 @@ def claim_workspace(anonymous_owner, account_id):
 def delete_run(owner, rid):
     with db.connection() as (conn, marker):
         lock_owner(conn, marker, owner)
-        row = db.execute(conn, marker, 'SELECT status FROM research_runs WHERE owner=? AND id=?', (owner, rid)).fetchone()
+        row = db.execute(conn, marker, 'SELECT status,updated FROM research_runs WHERE owner=? AND id=?', (owner, rid)).fetchone()
         if not row:
             return False
-        if row['status'] in ('pending', 'streaming'):
+        if row['status'] in ('pending', 'streaming') and row['updated'] > db.active_cutoff():
             raise ValueError('Wait for this research to finish before deleting it')
-        rows = db.execute(conn, marker, 'SELECT id,parent_id,status FROM research_runs WHERE owner=?', (owner,)).fetchall()
+        rows = db.execute(conn, marker, 'SELECT id,parent_id,status,updated FROM research_runs WHERE owner=?', (owner,)).fetchall()
         descendants = {rid}
         while True:
             more = {item['id'] for item in rows if item['parent_id'] in descendants}
             if more.issubset(descendants): break
             descendants.update(more)
-        if any(item['id'] in descendants and item['status'] in ('pending','streaming') for item in rows):
+        if any(item['id'] in descendants and item['status'] in ('pending','streaming') and item['updated'] > db.active_cutoff() for item in rows):
             raise ValueError('Wait for follow-up research to finish before deleting this answer')
         for child in descendants - {rid}:
             db.execute(conn, marker, '''UPDATE research_runs SET status='redacted',answer=?,sources='[]',
@@ -324,7 +324,10 @@ def allowance(owner):
     day = time.strftime('%Y-%m-%d', time.gmtime())
     with db.connection() as (conn, marker):
         row = db.execute(conn, marker, 'SELECT calls FROM research_budgets WHERE bucket=? AND day=?', ('user:' + owner, day)).fetchone()
-    cap = research.limits()['user_calls']
+    try:
+        cap = research.limits()['user_calls']
+    except (ValueError, ArithmeticError):
+        cap = 10  # malformed limit settings fall back to the documented default
     return {'plan': 'Research beta', 'used': row['calls'] if row else 0, 'daily_limit': cap,
             'reset': '00:00 UTC', 'billing_enabled': False}
 

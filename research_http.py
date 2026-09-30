@@ -27,6 +27,40 @@ def send_json(handler, status, data, cookie=None):
     handler.wfile.write(payload)
 
 
+def content_length(headers, maximum):
+    """Strict Content-Length: ASCII digits only, at least 1, at most `maximum`."""
+    raw = (headers.get('Content-Length') or '').strip()
+    if not raw.isascii() or not raw.isdigit():
+        raise ValueError('Invalid request size')
+    length = int(raw)
+    if length < 1 or length > maximum:
+        raise ValueError('Invalid request size')
+    return length
+
+
+def client_ip(headers):
+    """Best-effort client address from the hosting proxy headers (empty if unknown)."""
+    for name in ('x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for'):
+        value = (headers.get(name) or '').split(',')[0].strip()
+        if value and len(value) <= 64:
+            return value
+    return ''
+
+
+def charge_ip(headers, now=None):
+    """Per-IP daily run bucket so cookieless clients cannot drain the global cap."""
+    ip = client_ip(headers)
+    secret = os.environ.get('ZEARCH_SESSION_SECRET', '')
+    if not ip or len(secret) < 32:
+        return
+    bucket = 'ip:' + hmac.new(secret.encode(), ip.encode(), hashlib.sha256).hexdigest()[:32]
+    try:
+        cap = int(os.environ.get('ZEARCH_DAILY_IP_RUNS', '30'))
+    except ValueError:
+        cap = 30
+    db.charge_bucket(bucket, cap, now)
+
+
 def identity(headers, create=False):
     import account_store
     account = account_store.session(headers)
@@ -110,8 +144,9 @@ def post(handler):
         origin = handler.headers.get("Origin")
         if origin and urlsplit(origin).netloc != handler.headers.get("Host"):
             return send_json(handler, 403, {"error": "Request origin is not allowed"})
-        length = int(handler.headers.get("Content-Length", "0"))
-        if length < 1 or length > 12000:
+        try:
+            length = content_length(handler.headers, 12000)
+        except ValueError:
             return send_json(handler, 400, {"error": "Invalid request size"})
         if not handler.headers.get("Content-Type", "").startswith("application/json"):
             return send_json(handler, 415, {"error": "Expected application/json"})
@@ -120,6 +155,7 @@ def post(handler):
         owner, cookie = identity(handler.headers, create=True)
         if research.ready():
             db.ensure_schema()
+            charge_ip(handler.headers)
         record, fresh, history = research.prepare(owner, body)
         if not fresh:
             return send_json(handler, 200, {"run": record}, cookie)

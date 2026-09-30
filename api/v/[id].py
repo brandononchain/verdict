@@ -3,8 +3,6 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-import server
-
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):

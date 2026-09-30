@@ -204,9 +204,9 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(ranked[0]['source_tier'],'primary')
 
     def test_plan_bounded(self):
-        self.assertEqual(len(retrieval.plan('question',[],'deep')),3)
-        self.assertEqual(len(retrieval.plan('question',[],'compare')),3)
-        self.assertIn('tradeoffs',retrieval.plan('question',[],'compare')[2])
+        self.assertEqual(len(retrieval.plan('question',[],'deep')),2)  # third reserved search is the gap-driven second pass
+        self.assertEqual(len(retrieval.plan('question',[],'compare')),2)
+        self.assertNotIn('option A',' '.join(retrieval.plan('question',[],'compare')))
         self.assertEqual(len(retrieval.plan('question',[],'standard')),1)
         focused = retrieval.plan('Compare https://lobstack.ai to Grok Bot', [], 'compare')
         self.assertIn('lobstack.ai', focused[1])
@@ -247,18 +247,18 @@ class RetrievalTests(unittest.TestCase):
                      'title':'Evidence','domain':'example.com','text':'Detailed evidence ' + q[:5]}]
         result, report = retrieval.retrieve('example evidence', [], 'deep', search)
         self.assertEqual(len(result),1)
-        self.assertEqual(len(result[0]['matched_queries']),3)
+        self.assertEqual(len(result[0]['matched_queries']),2)
         self.assertEqual(result[0]['canonical_url'],'https://example.com/a')
         self.assertIn('found by multiple queries',result[0]['selection_reasons'])
-        self.assertEqual(report['search_calls'],3)
+        self.assertEqual(report['search_calls'],2)
         self.assertEqual(report['candidate_urls'],['https://example.com/a'])
         self.assertEqual(report['selected_urls'],['https://example.com/a'])
 
     def test_partial_search_failure_is_visible(self):
         def search(q):
-            if 'limitations' in q:raise RuntimeError('provider failed')
+            if 'primary' in q:raise RuntimeError('provider failed')
             return [{'url':'https://example.com/','title':'Source','domain':'example.com','text':'Evidence'}]
         result,report=retrieval.retrieve('question',[],'deep',search)
-        self.assertEqual(len(result),1);self.assertEqual(report['failed_searches'],1);self.assertEqual(report['search_calls'],3)
+        self.assertEqual(len(result),1);self.assertEqual(report['failed_searches'],1);self.assertEqual(report['search_calls'],2)
         self.assertEqual(report['search_failure_kinds'],{'RuntimeError':1})
         self.assertEqual(set(result[0]['ranking_factors']),{'lexical_relevance','query_coverage','provider_score','primary_boost'})

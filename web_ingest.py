@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit, urljoin
 
 from research import Unavailable, open_provider, safe_url
-from retrieval import canonical
+from retrieval import canonical, focus_text
 
 MAX_PAGES = 5
 MAX_RESPONSE = 2_000_000
@@ -120,7 +120,7 @@ def collect(url, mode, query=''):
             continue
         seen.add(key)
         media, emails, description = assets(row, content[:20_000], page_url)
-        content = IMAGE_LINK.sub('', content[:4000])
+        content = focus_text(query, IMAGE_LINK.sub('', content[:40_000]), 4000)
         if len(content.strip()) < 40:
             continue
         sources.append({'n': len(sources) + 1, 'url': page_url, 'canonical_url': key,

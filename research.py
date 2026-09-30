@@ -133,6 +133,14 @@ def open_provider(url, payload, key, timeout=20):
     return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
 
 
+def _post_search(payload):
+    with open_provider("https://api.tavily.com/search", payload, os.environ["TAVILY_API_KEY"]) as response:
+        raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise Unavailable("Search response exceeded its size limit")
+        return json.loads(raw)
+
+
 def search(query):
     import retrieval
     from provenance import publication_date
@@ -142,11 +150,18 @@ def search(query):
     preferred = retrieval.primary_domains(query)
     if preferred:
         payload.update(include_domains=preferred, include_domains_mode='prefer')
-    with open_provider("https://api.tavily.com/search", payload, os.environ["TAVILY_API_KEY"]) as response:
-        raw = response.read(2_000_001)
-        if len(raw) > 2_000_000:
-            raise Unavailable("Search response exceeded its size limit")
-        data = json.loads(raw)
+    # Provider assumption (unverified offline): `topic` and `time_range` are
+    # honored by /search. They are sent only for explicit news intent, and a
+    # provider rejection retries once without them.
+    extras = {}
+    if retrieval.recency_intent(query) == 'news':
+        extras = {'topic': 'news', 'time_range': retrieval.news_time_range(query)}
+    try:
+        data = _post_search(dict(payload, **extras))
+    except urllib.error.HTTPError as exc:
+        if not extras or exc.code not in (400, 422):
+            raise
+        data = _post_search(payload)
     sources, seen, remaining = [], set(), MAX_EVIDENCE_CHARS
     for row in data.get("results", []):
         if not isinstance(row, dict):
@@ -160,12 +175,16 @@ def search(query):
         if not url or url in seen or not isinstance(content, str) or not content.strip():
             continue
         seen.add(url)
-        text = content[:min(6000, remaining)]
+        text = retrieval.focus_text(query, content, min(6000, remaining))
         if not text:
             break
         remaining -= len(text)
         captured_at = int(time.time())
         published = publication_date(row.get('published_date'), captured_at)
+        provenance = "provider_metadata" if published else "unknown"
+        if not published:
+            published = retrieval.text_date(text, captured_at)
+            provenance = "page_text" if published else "unknown"
         sources.append({"n": len(sources) + 1, "url": url,
                         "title": str(row.get("title") or url)[:300],
                         "domain": urllib.parse.urlsplit(url).hostname,
@@ -173,7 +192,7 @@ def search(query):
                         "retrieved_at": captured_at,
                         "published_date": published,
                         "retrieval_provider": "tavily",
-                        "published_date_provenance": "provider_metadata" if published else "unknown",
+                        "published_date_provenance": provenance,
                         "provider_score": row.get('score'),
                         "content_type": "page" if row.get("raw_content") else "snippet"})
         if len(sources) == 8:
@@ -262,14 +281,31 @@ def run(owner, record, history):
             finalized = True
             yield {'type': 'complete', 'run': db.get_run(owner, rid)}
             return
+        import retrieval
+        parent, standalone, seed = None, query, []
+        if record.get('parent_id') and history:
+            try:
+                parent = db.get_run(owner, record['parent_id'])
+            except Exception:
+                parent = None
+            titles = [str(x.get('title') or '') for x in ((parent or {}).get('sources') or [])[:2] if isinstance(x, dict)]
+            standalone = retrieval.standalone_question(query, history, titles)
+            if standalone != query and mode in ('standard', 'deep', 'compare'):
+                seed = [x for x in ((parent or {}).get('sources') or [])[:3]
+                        if isinstance(x, dict) and x.get('url') and not x.get('market')]
+        followup = {'standalone': standalone, 'today': time.strftime('%Y-%m-%d', time.gmtime())}
+        previous = next((m['content'] for m in reversed(history or []) if m.get('role') == 'assistant'), '')
+        if previous:
+            followup['previous'] = retrieval.clip_words(re.sub(r'\s+', ' ', re.sub(r'\[\d+\]', '', previous)), 300)
+        if standalone != query:
+            usage['standalone_question'] = standalone
         if mode in ('scrape', 'crawl'):
             yield {'type': 'status', 'text': 'Reading the page' if mode == 'scrape' else 'Crawling up to five pages'}
             import web_ingest
             sources, report = measured('retrieval', web_ingest.collect, record['target_url'], mode, query)
         else:
             yield {"type": "status", "text": "Searching the web"}
-            import retrieval
-            sources, report = measured('retrieval', retrieval.retrieve, query, history, mode, search)
+            sources, report = measured('retrieval', retrieval.retrieve, query, history, mode, search, standalone, seed)
         import source_store
         sources, removed = source_store.excluded(sources)
         report['tombstoned_sources'] = removed
@@ -281,16 +317,18 @@ def run(owner, record, history):
         usage.update(report)
         if record.get('use_knowledge'):
             import workspace_store
-            private = measured('private_knowledge', workspace_store.knowledge, owner, query)
-            # Keep selected private snippets separate from public web retrieval.
-            sources = sources[:6] + private[:2]
+            private = measured('private_knowledge', workspace_store.knowledge, owner, standalone)
+            # Keep selected private snippets separate from public web retrieval;
+            # only trim the web results when private snippets need the room.
+            if private:
+                sources = sources[:6] + private[:2]
             for n, source in enumerate(sources, 1):
                 source['n'] = n
         if not sources:
             raise Unavailable('No usable evidence was found. Try a more specific question.')
         yield {'type': 'status', 'text': 'Reading sources'}
         import enrichment
-        sources, enrich_report = measured('enrichment', enrichment.enrich, sources) if mode not in ('scrape', 'crawl') else (
+        sources, enrich_report = measured('enrichment', enrichment.enrich, sources, standalone) if mode not in ('scrape', 'crawl') else (
             sources, {'scrape_calls': 0, 'enriched_pages': 0, 'cache_hits': 0, 'cache_errors': 0})
         for source in sources:
             source.setdefault('source_version_id', source_store.version_id(source))
@@ -301,59 +339,104 @@ def run(owner, record, history):
         yield {"type": "sources", "sources": sources}
         yield {'type': 'status', 'text': 'Jev is judging the evidence'}
         import jev_research
-        judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, query, sources, mode)
-        by_number = {source['n']: source for source in sources}
-        for candidate in candidates:
-            source = by_number.get(int(candidate['id']))
-            if source is not None:
-                source['evidence_span'] = [candidate['span_start'], candidate['span_end']]
-                source['excerpt'] = candidate['passage']
+        judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, standalone, sources, mode)
+        def apply_spans(found):
+            by_number = {source['n']: source for source in sources}
+            for candidate in found:
+                source = by_number.get(int(candidate['id']))
+                if source is not None:
+                    source['evidence_span'] = [candidate['span_start'], candidate['span_end']]
+                    source['excerpt'] = candidate['passage']
+        apply_spans(candidates)
         db.save(owner, rid, status='streaming', sources=sources)
         yield {'type': 'sources', 'sources': sources}
         usage['input_tokens'] = model_usage.get('input_tokens', 0)
+        if model_usage.get('estimated'):
+            usage['usage_estimated'] = True
+        if mode == 'deep' and retrieval.needs_second_pass(judgment):
+            # One gap-driven search inside the already reserved third provider call.
+            yield {'type': 'status', 'text': 'Looking for what is missing'}
+            extra = retrieval.gap_query(query, candidates, judgment, standalone)
+            added, extra_report = measured('second_pass', retrieval.second_pass, standalone, sources, extra, search)
+            usage['search_calls'] = min(3, usage.get('search_calls', 1) + 1)
+            usage['second_pass'] = extra_report
+            if added:
+                sources = sources + added
+                sources, removed = source_store.excluded(sources)
+                for source in sources:
+                    source.setdefault('source_version_id', source_store.version_id(source))
+                db.save(owner, rid, status='streaming', sources=sources)
+                yield {'type': 'sources', 'sources': sources}
+                yield {'type': 'status', 'text': 'Jev is judging the evidence'}
+                judgment, selected, model_usage, candidates = measured('jev_reselection', jev_research.judge, standalone, sources, mode)
+                apply_spans(candidates)
+                db.save(owner, rid, status='streaming', sources=sources)
+                yield {'type': 'sources', 'sources': sources}
+                usage['input_tokens'] += model_usage.get('input_tokens', 0)
+                if model_usage.get('estimated'):
+                    usage['usage_estimated'] = True
         usage['judgment'] = judgment
-        answer = jev_research.format_answer(judgment, selected, candidates, sources)
+        answer = jev_research.format_answer(judgment, selected, candidates, sources, standalone)
         usage['answer_format'] = 'jev_selected_excerpt'
         # A short selected passage can fail Jev's first sufficiency gate
         # even when the full retrieved snippets support a concise answer. Let
         # the writer try those sources, but publish only after Jev verifies its
         # actual paragraphs against the cited full evidence.
+        wide = 6 if mode == 'deep' else 4
         if judgment['gate'] == 'answer':
             draft_ids = judgment['evidence_ids']
         elif judgment['gate'] in ('abstain', 'review'):
             draft_ids = (([judgment['selected']] if judgment.get('selected') else []) +
-                         [n for n in judgment.get('relevant_ids', []) if n != judgment.get('selected')])[:4]
+                         [n for n in judgment.get('relevant_ids', []) if n != judgment.get('selected')])[:wide]
             if not draft_ids:
-                draft_ids = [source['n'] for source in sources[:4]]
+                draft_ids = [source['n'] for source in sources[:wide]]
         else:
             draft_ids = []
         if mode == 'compare' and draft_ids:
-            draft_ids = list(dict.fromkeys(draft_ids + [source['n'] for source in sources[:4]]))[:4]
+            # The focused per-side sources come first so Jev's single pick
+            # cannot evict one side of the comparison from the four-source window.
+            existing = {source['n'] for source in sources}
+            focus = [n for n in report.get('compare_focus', []) if n in existing] or [source['n'] for source in sources[:2]]
+            draft_ids = list(dict.fromkeys(focus + draft_ids + [source['n'] for source in sources[:4]]))[:4]
         if draft_ids:
             yield {'type': 'status', 'text': 'Writing from selected evidence'}
             import writer
+            import answer_contract
             try:
-                draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids, mode)
+                try:
+                    draft, writer_usage = measured('writer', writer.compose, query, sources, draft_ids, mode, False, followup)
+                    usage['writer_attempts'] = 1
+                except writer.WriterError:
+                    # Transient provider or format failure: retry once with the reserved second draft.
+                    yield {'type': 'status', 'text': 'Retrying the draft'}
+                    usage['writer_failed_attempts'] = 1
+                    draft, writer_usage = measured('writer_retry', writer.compose, query, sources, draft_ids, mode, False, followup)
+                    usage['writer_attempts'] = 2
                 usage['writer'] = writer_usage
-                usage['writer_attempts'] = 1
                 yield {'type': 'status', 'text': 'Jev is checking the draft'}
-                approved, check, check_usage = measured('jev_verification', jev_research.verify, query, draft, sources, draft_ids)
+                approved, check, check_usage = measured('jev_verification', jev_research.verify, standalone, draft, sources, draft_ids, wide if mode == 'deep' else 4)
                 usage['input_tokens'] += check_usage.get('input_tokens', 0)
                 usage['draft_check'] = check
-                if not approved and mode in ('standard', 'deep', 'compare') and not jev_research.supported_prefix(draft, check):
+                limit = 6 if mode == 'deep' else 4
+                if not approved and mode in ('standard', 'deep', 'compare') and usage['writer_attempts'] < 2 and not jev_research.supported_prefix(draft, check, limit):
                     # One bounded revision. The revised text is checked again
                     # against the same captured sources before it can be shown.
                     yield {'type': 'status', 'text': 'Rechecking a shorter answer'}
                     try:
+                        parts = answer_contract.units(draft, limit)
+                        rejected = [parts[i] for i in jev_research.failing_units(draft, check, limit) if i < len(parts)]
+                    except ValueError:
+                        rejected = []
+                    try:
                         revised, revised_usage = measured('writer_revision', writer.compose,
-                            query, sources, draft_ids, mode, True)
+                            query, sources, draft_ids, mode, True, followup, rejected)
                         usage['writer_attempts'] = 2
                         usage['writer'] = {
                             'input_tokens': writer_usage.get('input_tokens', 0) + revised_usage.get('input_tokens', 0),
                             'output_tokens': writer_usage.get('output_tokens', 0) + revised_usage.get('output_tokens', 0),
                             'model': revised_usage.get('model', writer_usage.get('model'))}
                         revised_ok, revised_check, revised_cost = measured('jev_recheck',
-                            jev_research.verify, query, revised, sources, draft_ids)
+                            jev_research.verify, standalone, revised, sources, draft_ids, limit)
                         usage['input_tokens'] += revised_cost.get('input_tokens', 0)
                         usage['revision_check'] = revised_check
                         if revised_ok:
@@ -368,7 +451,7 @@ def run(owner, record, history):
                 else:
                     usage['draft_rejected'] = True
                     usage['draft_fallback_reason'] = 'unsupported_draft'
-                    supported = jev_research.supported_prefix(draft, check)
+                    supported = jev_research.supported_prefix(draft, check, limit)
                     if supported:
                         answer = supported
                         usage['answer_format'] = 'jev_verified_partial_prose'

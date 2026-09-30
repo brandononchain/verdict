@@ -2,8 +2,29 @@
   "version": "m6.4-v1",
   "baseline_id": null,
   "thresholds": {
-    "standard": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null},
-    "deep": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null},
-    "compare": {"min_pass_rate": {}, "max_p95_total_ms": null, "max_p95_estimated_cost_usd": null}
+    "standard": {
+      "min_pass_rate": {},
+      "max_p95_total_ms": null,
+      "max_p95_estimated_cost_usd": null
+    },
+    "deep": {
+      "min_pass_rate": {},
+      "max_p95_total_ms": null,
+      "max_p95_estimated_cost_usd": null
+    },
+    "compare": {
+      "min_pass_rate": {},
+      "max_p95_total_ms": null,
+      "max_p95_estimated_cost_usd": null
+    }
+  },
+  "jev_gate": {
+    "sufficient_min": 0.65,
+    "selected_min": 0.45,
+    "selected_floor": 0.25,
+    "relevant_min": 0.65,
+    "relevant_strong": 0.8,
+    "conflict_max": 0.65,
+    "support_min": 0.75
   }
 }

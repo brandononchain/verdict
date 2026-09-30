@@ -1,0 +1,14 @@
+{
+  "name": "zearch",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zearch: a space for discovery. Search with inspectable evidence.",
+  "license": "MIT",
+  "scripts": {
+    "check": "node --check app.js && node --check renderer.js && node --check zearch-core.js",
+    "test:js": "node tests/renderer.test.js && node tests/core.test.js",
+    "test:py": "python -m unittest discover -s tests -v",
+    "test": "npm run check && npm run test:js"
+  },
+  "engines": { "node": ">=20" }
+}

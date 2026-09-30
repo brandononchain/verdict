@@ -6,7 +6,7 @@ The renderer remains a separate, non-executing presentation layer.
 import re
 
 
-def units(answer):
+def units(answer, limit=4):
     pieces, current, fenced = [], [], False
     for line in answer.replace('\r\n', '\n').split('\n'):
         if line.startswith('```'):
@@ -32,6 +32,6 @@ def units(answer):
             pending_heading = ''
     if pending_heading:
         raise ValueError('A heading needs content')
-    if not result or len(result) > 4:
+    if not result or len(result) > limit:
         raise ValueError('Answer has too many sections')
     return result

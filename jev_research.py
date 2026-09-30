@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 import urllib.request
+from pathlib import Path
 from evidence import window
 from answer_contract import units
 
@@ -17,6 +18,43 @@ class JevError(Exception):
     pass
 
 
+GATE_DEFAULTS = {'sufficient_min': .65, 'selected_min': .45, 'selected_floor': .25,
+                 'relevant_min': .65, 'relevant_strong': .8, 'conflict_max': .65, 'support_min': .75}
+_policy_cache = {}
+
+
+def gate_policy():
+    """Gate thresholds from evals/quality-policy.json; invalid or missing values use defaults."""
+    if not _policy_cache:
+        values = dict(GATE_DEFAULTS)
+        try:
+            data = json.loads((Path(__file__).parent / 'evals' / 'quality-policy.json').read_text())
+            for key, value in (data.get('jev_gate') or {}).items():
+                if key in values and type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1:
+                    values[key] = float(value)
+        except (OSError, ValueError, AttributeError):
+            pass
+        _policy_cache.update(values)
+    return _policy_cache
+
+
+def number(value):
+    return type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1
+
+
+def answer_field(answers, key, field):
+    entry = answers.get(key)
+    return entry.get(field) if isinstance(entry, dict) else None
+
+
+def usage_or_estimate(raw_usage, state, questions):
+    """Provider usage when valid; otherwise a conservative size-based estimate so spend is never under-counted."""
+    if isinstance(raw_usage, dict) and type(raw_usage.get('input_tokens')) is int and raw_usage['input_tokens'] >= 0:
+        return raw_usage
+    size = len(json.dumps([state, questions], ensure_ascii=False))
+    return {'input_tokens': math.ceil(size / 3), 'estimated': True}
+
+
 def passage(query, text):
     """Deterministic bounded extract from retrieved content, not authored prose."""
     return passage_span(query, text)[0]
@@ -25,7 +63,7 @@ def passage(query, text):
 def passage_span(query, text):
     """Return the extract and its exact character range in the captured text."""
     import retrieval
-    terms = set(retrieval.tokens(query))
+    terms = set(retrieval.stems(query))
     segments = []
     boundary = 0
     for separator in re.finditer(r'(?<=[.!?])\s+|\n+', text):
@@ -40,22 +78,27 @@ def passage_span(query, text):
         segments.append((chunk.strip(), boundary + leading, len(text) - (len(chunk) - len(chunk.rstrip()))))
     if not segments:
         return '', 0, 0
-    overlap = [len(terms.intersection(re.findall(r'\w+', item[0].lower()))) for item in segments]
+    words = [set(retrieval.stems(item[0])) for item in segments]
+    # Rare terms carry more weight than terms that appear in most sentences.
+    frequency = {t: sum(t in w for w in words) for t in terms}
+    weight = {t: math.log(1 + len(segments) / (1 + frequency[t])) for t in terms}
+    overlap = [sum(weight[t] for t in terms & w) for w in words]
     # Broad summary prompts contain few page-specific terms. Do not choose
     # the shortest fragment when every segment ties at zero overlap.
-    anchor = (max(range(len(segments)), key=lambda i: (overlap[i], -len(segments[i][0])))
-              if max(overlap) else next((i for i, item in enumerate(segments)
-                                         if len(item[0]) >= 35), 0))
+    anchor = (max(range(len(segments)), key=lambda i: (round(overlap[i], 6), -len(segments[i][0])))
+              if max(overlap) > 0 else next((i for i, item in enumerate(segments)
+                                             if len(item[0]) >= 35), 0))
     # Many questions have two parts. A single highest-overlap sentence may say
     # what a term means while the immediately following sentence explains the
     # action. Keep the original context together, within Jev's evidence bound.
-    selected = segments[anchor][0][:450]
+    selected = retrieval.clip_words(segments[anchor][0], 450)
     end = segments[anchor][1] + len(selected)
-    for next_sentence, _, next_end in segments[anchor + 1:anchor + 3]:
-        if len(selected) + len(next_sentence) + 1 > 450:
-            break
-        selected += ' ' + next_sentence
-        end = next_end
+    if len(selected) == len(segments[anchor][0]):
+        for next_sentence, _, next_end in segments[anchor + 1:anchor + 3]:
+            if len(selected) + len(next_sentence) + 1 > 450:
+                break
+            selected += ' ' + next_sentence
+            end = next_end
     return selected.strip(), segments[anchor][1], end
 
 
@@ -118,44 +161,75 @@ def judge(query, sources, mode='standard'):
     if not isinstance(raw, dict) or not isinstance(raw.get('answers'), dict):
         raise JevError('Jev returned an invalid decision')
     answers = raw['answers']
-    choice = answers.get('best_passage', {}).get('choice')
+    choice = answer_field(answers, 'best_passage', 'choice')
     allowed = {c['id'] for c in candidates} | {'none'}
-    if choice not in allowed:
+    if not isinstance(choice, str) or choice not in allowed:
         raise JevError('Jev selected an unknown passage')
-    probs = answers['best_passage'].get('probabilities') or {}
-    values = [answers.get(k, {}).get('noul') for k in ('sufficient', 'conflict')]
-    if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in values):
+    probs = answer_field(answers, 'best_passage', 'probabilities')
+    probs = probs if isinstance(probs, dict) else {}
+    sufficient, conflict = (answer_field(answers, k, 'noul') for k in ('sufficient', 'conflict'))
+    if not number(sufficient) or not number(conflict):
         raise JevError('Jev returned an invalid judgment')
-    sufficient, conflict = values
     selected_probability = probs.get(choice, 0)
-    if type(selected_probability) not in (int, float) or not math.isfinite(selected_probability) or not 0 <= selected_probability <= 1:
+    if not number(selected_probability):
         raise JevError('Jev returned an invalid choice probability')
     selected = next((c for c in candidates if c['id'] == choice), None)
-    can_answer = selected is not None and sufficient >= .65 and selected_probability >= .45
+    policy = gate_policy()
+    relevance = {}
+    for candidate in candidates:
+        value = answer_field(answers, 'relevant_' + candidate['id'], 'noul')
+        if number(value):
+            relevance[candidate['id']] = value
+    relevant_all = [cid for cid, value in relevance.items() if value >= policy['relevant_min']]
+    max_relevance = max(relevance.values(), default=0)
+    # The softmax choice splits its mass when several passages are relevant, so
+    # judge confidence from the independent relevance answers as well.
+    chosen_relevance = relevance.get(choice, 0)
+    confident = (selected_probability >= policy['selected_min'] or chosen_relevance >= policy['relevant_strong']
+                 or (selected_probability >= policy['selected_floor'] and len(relevant_all) >= 2
+                     and chosen_relevance >= policy['relevant_min']))
+    can_answer = selected is not None and sufficient >= policy['sufficient_min'] and confident
     judgment = {'selected': int(choice) if selected else None,
         'selected_probability': round(selected_probability, 4),
         'sufficiency_probability': round(sufficient, 4),
         'conflict_probability': round(conflict, 4),
-        'gate': 'answer' if can_answer and conflict < .65 else 'review' if can_answer else 'abstain',
+        'max_relevance': round(max_relevance, 4), 'relevant_count': len(relevant_all),
+        'gate': ('answer' if can_answer and conflict < policy['conflict_max']
+                 else 'review' if can_answer else 'abstain'),
         'model': raw.get('model', os.environ.get('JEV_MODEL', 'jev-latest'))}
-    relevant = []
-    for candidate in candidates:
-        value = answers.get('relevant_' + candidate['id'], {}).get('noul')
-        if type(value) in (int, float) and math.isfinite(value) and value >= .65 and candidate['id'] != choice:
-            relevant.append(int(candidate['id']))
-    judgment['evidence_ids'] = ([int(choice)] + relevant[:3]) if judgment['gate'] == 'answer' else []
-    judgment['relevant_ids'] = relevant[:4]
-    return judgment, selected, raw.get('usage') or {}, candidates
+    relevant = [int(cid) for cid in relevant_all if cid != choice]
+    relevant.sort(key=lambda n: -relevance[str(n)])
+    wide = mode == 'deep'
+    judgment['evidence_ids'] = ([int(choice)] + relevant[:5 if wide else 3]) if judgment['gate'] == 'answer' else []
+    judgment['relevant_ids'] = relevant[:6 if wide else 4]
+    return judgment, selected, usage_or_estimate(raw.get('usage'), state, questions), candidates
 
 
-def supported_prefix(draft, check):
+def supported_prefix(draft, check, limit=4):
     """Keep only the initial independently approved Markdown units."""
     accepted = []
-    for part, probability in zip(units(draft), check.get('probabilities', [])):
-        if type(probability) not in (int, float) or probability < .75:
+    minimum = gate_policy()['support_min']
+    try:
+        parts = units(draft, limit)
+    except ValueError:
+        return ''
+    for part, probability in zip(parts, check.get('probabilities', [])):
+        if type(probability) not in (int, float) or probability < minimum:
             break
         accepted.append(part)
     return '\n\n'.join(accepted)
+
+
+def failing_units(draft, check, limit=4):
+    """0-based indexes of draft units Jev did not approve."""
+    minimum = gate_policy()['support_min']
+    try:
+        count = len(units(draft, limit))
+    except ValueError:
+        return []
+    probabilities = check.get('probabilities', [])
+    return [i for i in range(count) if i >= len(probabilities) or type(probabilities[i]) not in (int, float)
+            or probabilities[i] < minimum]
 
 
 def captured_overview(candidates, sources):
@@ -178,10 +252,10 @@ def captured_overview(candidates, sources):
     return 'From the captured pages:\n\n' + '\n'.join(lines)
 
 
-def verify(query, answer, sources, selected_ids):
+def verify(query, answer, sources, selected_ids, limit=4):
     """Ask Jev about each paragraph against cited evidence, fail closed on uncertainty."""
     try:
-        paragraphs = units(answer)
+        paragraphs = units(answer, limit)
     except ValueError as exc:
         raise JevError('Draft could not be checked') from exc
     allowed = {s['n']: s for s in sources if s['n'] in selected_ids}
@@ -219,8 +293,8 @@ def verify(query, answer, sources, selected_ids):
     enforce_attribution = os.environ.get('ZEARCH_ATTRIBUTION_GATE') == '1'
     probabilities, support, attribution = [], [], []
     for i in range(len(paragraphs)):
-        p = answers.get(f'supported_{i}', {}).get('noul')
-        a = answers.get(f'attributed_{i}', {}).get('noul')
+        p = answer_field(answers, f'supported_{i}', 'noul')
+        a = answer_field(answers, f'attributed_{i}', 'noul')
         if type(p) not in (int, float) or not math.isfinite(p) or not 0 <= p <= 1:
             raise JevError('Jev returned an invalid support probability')
         valid_attribution = type(a) in (int, float) and math.isfinite(a) and 0 <= a <= 1
@@ -228,24 +302,50 @@ def verify(query, answer, sources, selected_ids):
             raise JevError('Jev returned an invalid attribution probability')
         support.append(round(p, 4)); attribution.append(round(a, 4) if valid_attribution else None)
         probabilities.append(round(min(p, a) if enforce_attribution else p, 4))
-    return all(p >= .75 for p in probabilities), {'probabilities': probabilities,
+    minimum = gate_policy()['support_min']
+    return all(p >= minimum for p in probabilities), {'probabilities': probabilities,
         'support_probabilities': support, 'attribution_probabilities': attribution,
         'attribution_enforced': enforce_attribution,
-        'model': result.get('model', os.environ.get('JEV_MODEL', 'jev-latest'))}, result.get('usage') or {}
+        'model': result.get('model', os.environ.get('JEV_MODEL', 'jev-latest'))}, usage_or_estimate(result.get('usage'), state, questions)
 
 
-def format_answer(judgment, selected, candidates, sources):
+def format_answer(judgment, selected, candidates, sources, query=None):
     gate = judgment['gate']
     if gate == 'abstain':
-        titles = [str(source.get('title') or source.get('domain') or 'Source').strip()
-                  for source in sources[:3]]
-        if titles:
-            listed = '; '.join(f'{title[:100]} [{source["n"]}]' for title, source in zip(titles, sources))
-            return ('I found related material but could not verify a direct answer from it. '
-                    f'The closest captured sources are {listed}.')
-        return 'I could not verify an answer from the available sources.'
+        return abstention(judgment, candidates, sources, query)
     cite = '[' + str(judgment['selected']) + ']'
     answer = f'{selected["passage"]} {cite}'
     if gate == 'review':
         answer += '\n\nThe sources may disagree on a needed fact. Check the captured evidence before relying on this excerpt.'
     return answer
+
+
+def abstention(judgment, candidates, sources, query=None):
+    """Structured partial answer: what the sources say, what is missing, how to refine."""
+    import retrieval
+    lead = 'I found related material but could not verify a direct answer from it.'
+    ids = [str(n) for n in ([judgment['selected']] if judgment.get('selected') else []) + list(judgment.get('relevant_ids', []))]
+    by_id = {c['id']: c for c in candidates}
+    shown = [by_id[i] for i in dict.fromkeys(ids) if i in by_id][:3]
+    parts, closest = [lead], False
+    if shown:
+        lines = []
+        for candidate in shown:
+            excerpt = re.sub(r'\s+', ' ', candidate['passage']).strip()
+            lines.append(f'- {retrieval.clip_words(excerpt, 240)} [{candidate["id"]}]')
+        parts.append('What the sources do say:\n\n' + '\n'.join(lines))
+    else:
+        titles = [str(source.get('title') or source.get('domain') or 'Source').strip() for source in sources[:3]]
+        if titles:
+            listed = '; '.join(f'{title[:100]} [{source["n"]}]' for title, source in zip(titles, sources))
+            parts[0] += f' The closest captured sources are {listed}.'
+            closest = True
+    if query:
+        covered = set()
+        for candidate in shown:
+            covered |= set(retrieval.stems(candidate['passage'] + ' ' + candidate.get('title', '')))
+        missing = list(dict.fromkeys(t for t in retrieval.tokens(query) if retrieval.stem(t) not in covered))[:4]
+        if missing:
+            parts.append('What is missing: no captured passage directly covers ' + ', '.join(missing) + '.')
+            parts.append('To narrow it down, try asking about one of those points specifically, or name the source or version you care about.')
+    return '\n\n'.join(parts) if len(parts) > 1 or shown or closest else 'I could not verify an answer from the available sources.'
