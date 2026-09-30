@@ -188,4 +188,37 @@ assert.deepEqual(doc.attrs, { 'data-theme': 'dark', 'data-motion': 'reduce' });
 doc = fakeDoc(); assert.equal(core.applyPreferences(doc, store({ 'zearch:theme': '<script>' })).theme, 'system');
 doc = fakeDoc(); assert.equal(core.applyPreferences(doc, { getItem: () => { throw new Error('blocked'); } }).theme, 'system');   // blocked storage
 assert.equal(core.normalizeTheme('light'), 'light');
+
+// ---- Rail width ----
+assert.equal(core.clampRailWidth(100, 1280), 224);
+assert.equal(core.clampRailWidth(999, 1280), 256);
+assert.equal(core.clampRailWidth(240, 1280), 240);
+assert.equal(core.clampRailWidth(400, 800), 224);            // 20% of 800 is below the minimum, so the minimum wins
+assert.equal(core.clampRailWidth('abc', 1920), 258);
+assert.equal(core.clampRailWidth(600, 1920), 384);
+assert.equal(core.railMaxWidth(0), 224);
+
+// ---- Target URL validation ----
+assert.equal(core.validateTargetUrl('').empty, true);
+assert.equal(core.validateTargetUrl('https://example.com/page').ok, true);
+for (const bad of ['http://example.com', 'example.com', 'https://user:pw@example.com', 'https://localhost/x', 'https://127.0.0.1/', 'https://intranet/', 'ftp://example.com', 'javascript:alert(1)'])
+  assert.equal(core.validateTargetUrl(bad).ok, false, bad);
+assert.match(core.validateTargetUrl('http://example.com').reason, /https/);
+assert.equal(core.validateTargetUrl('https://example.com/' + 'a'.repeat(2100)).ok, false);
+
+// ---- Follow-up suggestions ----
+assert.deepEqual(core.followupSuggestions(undefined), []);
+assert.deepEqual(core.followupSuggestions({}), []);
+assert.deepEqual(core.followupSuggestions({ followups: 'nope' }), []);
+assert.deepEqual(core.followupSuggestions({ followups: ['  One  ', 2, null, 'one', 'Two', '', 'Three', 'Four'] }), ['One', 'Two', 'Three']);
+assert.deepEqual(core.followupSuggestions({ followups: ['x'.repeat(200), 'ok'] }), ['ok']);
+
+// ---- Library filter ----
+const lib = [{ id: 1, query: 'Heat pumps', status: 'complete', depth: 'deep' }, { id: 2, query: 'Postgres', status: 'error', depth: 'compare' }, { id: 3, query: 'Old row', status: 'streaming' }];
+assert.deepEqual(core.filterLibrary(lib, {}).map(r => r.id), [1, 2, 3]);
+assert.deepEqual(core.filterLibrary(lib, { needle: 'heat' }).map(r => r.id), [1]);
+assert.deepEqual(core.filterLibrary(lib, { mode: 'deep' }).map(r => r.id), [1]);
+assert.deepEqual(core.filterLibrary(lib, { status: 'running' }).map(r => r.id), [3]);
+assert.deepEqual(core.filterLibrary(lib, { status: 'error', mode: 'compare' }).map(r => r.id), [2]);
+assert.equal(core.hasDepth(lib), true); assert.equal(core.hasDepth([{ query: 'a' }]), false);
 console.log('Core display, insight, sort and palette tests passed');

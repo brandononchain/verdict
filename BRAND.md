@@ -57,3 +57,9 @@ Product icons are a small inline SVG sprite in `index.html` (stroke icons, `curr
 
 ## Copy in the product
 Describe only what Zearch does: "Jev-checked answers with cited sources". No claims such as "AGI" or "neural engine". Every number shown comes from stored run data and says how many runs it covers. Empty states appear when there is no data; there are no placeholder or demo figures.
+
+## Interface patterns
+- **Sidebar**: resizable by the right-edge separator (mouse, touch, arrow keys, Home/End; double-click resets). Width is a CSS variable, at least 224px and at most 20% of the viewport, saved in the browser. Fixed and collapsible to icons on desktop; a drawer on mobile. Labels truncate with an ellipsis and the rail never scrolls sideways.
+- **Composer**: one mode menu (icon, name, description and cost per mode) replaces the chips row. Each mode shows only its own tiles: URL with https-only hint (Scrape, Crawl), the "X vs Y" helper (Compare), the three-step list (Deep), a hint (Search), and the "Use my notes" switch with the real note count. In the thread the composer is compact and the tiles sit behind Options.
+- **Pages**: Library, Knowledge, Monitors, Batches and Overview share one page header (icon tile, title, subtitle, actions), a 960px centred column, cards with a header hairline, and one set of form controls. File pickers are drop zones. Destructive actions confirm inline. Status pills use the functional tokens and always carry words.
+- **Follow-ups**: if a finished run's `usage.followups` holds up to three strings, they show as chips under the answer and send as a follow-up. Nothing shows when it is absent.

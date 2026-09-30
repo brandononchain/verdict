@@ -200,4 +200,34 @@ root = fresh(); render(root, 'A fresh quote. [1]', [{ n: 1, content_type: 'marke
 assert(find(root, n => n.tag === 'svg').length === 1);
 assert(find(root, n => n.tag === 'polyline').length === 1);
 
+// ---- Links, inline code, rules, nested lists ----
+root = fresh(); render(root, 'See [the **docs**](https://example.com/a?b=1) now.', [], false);
+const anchor = find(root, n => n.tag === 'a')[0];
+assert(anchor); assert.equal(anchor.href, 'https://example.com/a?b=1'); assert.equal(anchor.rel, 'noopener noreferrer'); assert.equal(anchor.target, '_blank');
+assert.equal(anchor.referrerPolicy, 'no-referrer'); assert.equal(anchor.textContent, 'the docs'); assert(find(anchor, n => n.tag === 'strong').length === 1);
+for (const bad of ['[x](javascript:alert(1))', '[x](data:text/html,hi)', '[x](https://u:p@example.com/)', '[x](ftp://example.com)']) {
+  root = fresh(); render(root, bad, [], false);
+  assert.equal(find(root, n => n.tag === 'a').length, 0, bad);
+  assert.equal(root.textContent, bad, bad);
+}
+root = fresh(); render(root, '[<img src=x onerror=alert(1)>](https://example.com)', [], false);
+assert(!walk(root).some(n => n.tag === 'img')); assert(find(root, n => n.tag === '#text').some(n => n.data.includes('<img')));
+root = fresh(); render(root, 'A link [1](https://example.com) and citation [1].', [{ n: 1, title: 'One' }], false);
+assert.equal(find(root, n => n.tag === 'a').length, 1); assert.equal(find(root, n => n.tag === 'button').length, 1);
+root = fresh(); render(root, 'Use `a.b` and ``x ` y`` here', [], false);
+assert.deepEqual(find(root, n => n.tag === 'code').map(n => n.textContent), ['a.b', 'x ` y']);
+assert.deepEqual(blocks('One\n\n---\n\nTwo').map(b => b.type), ['paragraph', 'rule', 'paragraph']);
+assert.equal(blocks('***')[0].type, 'rule'); assert.equal(blocks('- - -')[0].type, 'rule'); assert.equal(blocks('- one\n- two')[0].type, 'list');
+assert.equal(blocks('| A | B |\n| --- | --- |\n| 1 | 2 |')[0].type, 'table');
+root = fresh(); render(root, 'a\n\n---\n\nb', [], false); assert.equal(find(root, n => n.tag === 'hr').length, 1);
+const nest = blocks('- Parent\n  - Child one\n  - Child two\n- Sibling');
+assert.equal(nest.length, 1); assert.deepEqual(nest[0].items, ['Parent', 'Sibling']); assert.deepEqual(nest[0].nested[0][0].items, ['Child one', 'Child two']);
+root = fresh(); render(root, '1. Step\n   - sub a\n   - sub b\n2. Next', [], false);
+const outer = find(root, n => n.tag === 'ol')[0];
+assert.equal(outer.children.length, 2); assert.equal(find(outer.children[0], n => n.tag === 'ul').length, 1); assert.equal(find(find(outer.children[0], n => n.tag === 'ul')[0], n => n.tag === 'li').length, 2);
+assert.equal(blocks('- a\n  - b').length, 1);
+// Details callout keeps a title and a hint.
+root = fresh(); render(root, '## Details\n\nBody', [], true);
+assert(find(root, n => n.className === 'details-title' && n.textContent === 'Explore the details').length === 1);
+
 console.log('Renderer parsing, disclosure and unsafe-link tests passed');
