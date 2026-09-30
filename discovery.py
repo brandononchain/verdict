@@ -86,27 +86,39 @@ def tick():
                 db.execute(conn, marker, "INSERT INTO discovery_jobs(id,investigation_id,owner,status,created) VALUES(?,?,?,'queued',?)", (uuid.uuid4().hex, item['id'], item['owner'], now))
             db.execute(conn, marker, 'UPDATE investigations SET next_run=? WHERE id=?', (now + item['interval_hours'] * 3600, item['id']))
         suffix = ' FOR UPDATE OF j SKIP LOCKED' if marker == '%s' else ''
-        row = db.execute(conn, marker, """SELECT j.*,i.query,i.depth,i.last_run,i.expires,t.target_url
-            FROM discovery_jobs j JOIN investigations i ON i.id=j.investigation_id
-            LEFT JOIN investigation_targets t ON t.investigation_id=i.id
-            WHERE j.status='queued' ORDER BY j.created,j.id LIMIT 1""" + suffix).fetchone()
-        if not row:
-            return None
-        job = dict(row)
-        if job['expires'] <= now:
-            db.execute(conn, marker, "UPDATE discovery_jobs SET status='cancelled',error='Investigation expired' WHERE id=?", (job['id'],))
-            return None
-        job['lease_token'] = uuid.uuid4().hex
-        db.execute(conn, marker, "UPDATE discovery_jobs SET status='running',lease_until=?,lease_token=? WHERE id=?", (now + 300, job['lease_token'], job['id']))
-        return job
+        while True:
+            row = db.execute(conn, marker, """SELECT j.*,i.query,i.depth,i.last_run,i.expires,t.target_url
+                FROM discovery_jobs j JOIN investigations i ON i.id=j.investigation_id
+                LEFT JOIN investigation_targets t ON t.investigation_id=i.id
+                WHERE j.status='queued' ORDER BY j.created,j.id LIMIT 1""" + suffix).fetchone()
+            if not row:
+                return None
+            job = dict(row)
+            if job['expires'] <= now:
+                # An expired investigation must not stall the jobs queued behind it.
+                db.execute(conn, marker, "UPDATE discovery_jobs SET status='cancelled',error='Investigation expired' WHERE id=?", (job['id'],))
+                continue
+            job['lease_token'] = uuid.uuid4().hex
+            db.execute(conn, marker, "UPDATE discovery_jobs SET status='running',lease_until=?,lease_token=? WHERE id=?", (now + 300, job['lease_token'], job['id']))
+            return job
 
 
 def changes(previous, current):
     def normalized(value):
         return ' '.join(unicodedata.normalize('NFKC', value or '').split())
     def snapshot(run):
-        return {s['url']: hashlib.sha256(normalized(s.get('text')).encode()).hexdigest()
-                for s in (run or {}).get('sources', []) if s.get('url') and isinstance(s.get('text'), str)}
+        # Compare what Jev selected as evidence, not raw page text, so ads,
+        # navigation and timestamps elsewhere on a page do not look like changes.
+        rows = {}
+        for s in (run or {}).get('sources', []):
+            if not s.get('url') or not isinstance(s.get('text'), str):
+                continue
+            text, span = s['text'], s.get('evidence_span')
+            if (isinstance(span, (list, tuple)) and len(span) == 2 and all(type(n) is int for n in span)
+                    and 0 <= span[0] < span[1] <= len(text)):
+                text = text[span[0]:span[1]]
+            rows[s['url']] = hashlib.sha256(normalized(text).encode()).hexdigest()
+        return rows
     old, new = snapshot(previous), snapshot(current)
     before = normalized((previous or {}).get('answer'))
     after = normalized((current or {}).get('answer'))

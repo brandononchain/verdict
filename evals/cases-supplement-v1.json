@@ -1,0 +1,145 @@
+{
+  "version": "m6.5-supplement-v1",
+  "note": "Offline-authored regression cases for Phase 2 (follow-ups, compare parsing, quote false positives, freshness). Kept outside the pinned 100-case cohort so quality baselines stay comparable. Use evals/run.py --supplement.",
+  "cases": [
+    {
+      "id": "sup-followup-01",
+      "category": "followup",
+      "query": "And how much does one cost to install?",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "factual-02",
+      "evidence_expectation": "Installation cost information for heat pumps, not a generic cost page.",
+      "review_focus": "Standalone rewrite must keep the heat pump subject."
+    },
+    {
+      "id": "sup-followup-02",
+      "category": "followup",
+      "query": "What about the Earth, does it show one face to the Moon?",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "factual-01",
+      "evidence_expectation": "Earth-Moon tidal locking sources.",
+      "review_focus": "Reuse the lunar context without repeating the earlier answer."
+    },
+    {
+      "id": "sup-followup-03",
+      "category": "followup",
+      "query": "Is that also the version shipped in current Ubuntu LTS?",
+      "mode": "standard",
+      "temporal": "current",
+      "parent_case_id": "current-01",
+      "evidence_expectation": "Ubuntu package or release page for Python.",
+      "review_focus": "Resolve \"that\" to the earlier Python version; date the claim."
+    },
+    {
+      "id": "sup-followup-04",
+      "category": "followup",
+      "query": "Which of those two is better for exact error codes?",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "comparison-01",
+      "evidence_expectation": "Sources on lexical versus vector retrieval for identifiers.",
+      "review_focus": "Resolve \"those two\" to lexical and vector search."
+    },
+    {
+      "id": "sup-compare-01",
+      "category": "comparison",
+      "query": "PostgreSQL vs SQLite for a small embedded application",
+      "mode": "compare",
+      "temporal": "stable",
+      "evidence_expectation": "Official PostgreSQL and SQLite documentation.",
+      "review_focus": "Both sides cited; focused sources must reach the writer."
+    },
+    {
+      "id": "sup-compare-02",
+      "category": "comparison",
+      "query": "What is the difference between HTTP/2 and HTTP/3?",
+      "mode": "compare",
+      "temporal": "stable",
+      "evidence_expectation": "RFC or MDN material on both protocol versions.",
+      "review_focus": "Parsed as two subjects; no placeholder queries; both cited."
+    },
+    {
+      "id": "sup-compare-03",
+      "category": "comparison",
+      "query": "Which is better, Rust or Go, for command-line tools?",
+      "mode": "compare",
+      "temporal": "stable",
+      "evidence_expectation": "Language documentation or independent comparisons for both.",
+      "review_focus": "Balanced comparison; state where evidence is missing for one side."
+    },
+    {
+      "id": "sup-compare-04",
+      "category": "comparison",
+      "query": "React and Vue",
+      "mode": "compare",
+      "temporal": "stable",
+      "evidence_expectation": "Official framework documentation for both.",
+      "review_focus": "Bare two-subject phrasing is still split into per-side searches."
+    },
+    {
+      "id": "sup-quote-01",
+      "category": "current",
+      "query": "What are Bitcoin transaction fees right now?",
+      "mode": "standard",
+      "temporal": "current",
+      "evidence_expectation": "Fee estimator or news source, not the spot ticker.",
+      "review_focus": "Must not answer with the BTC-USD last trade price."
+    },
+    {
+      "id": "sup-quote-02",
+      "category": "current",
+      "query": "What is the Ethereum gas price in gwei?",
+      "mode": "standard",
+      "temporal": "current",
+      "evidence_expectation": "Gas tracker or documentation.",
+      "review_focus": "Must not answer with the ETH-USD ticker."
+    },
+    {
+      "id": "sup-quote-03",
+      "category": "factual",
+      "query": "How does the bitcoin price get determined?",
+      "mode": "standard",
+      "temporal": "stable",
+      "evidence_expectation": "Explanation of market price formation.",
+      "review_focus": "Explanatory answer, not a live quote."
+    },
+    {
+      "id": "sup-quote-04",
+      "category": "factual",
+      "query": "Is bitcoin worth it as a long-term investment?",
+      "mode": "standard",
+      "temporal": "stable",
+      "evidence_expectation": "Balanced sources on risk.",
+      "review_focus": "No spot quote shortcut; cautious, sourced answer."
+    },
+    {
+      "id": "sup-fresh-01",
+      "category": "current",
+      "query": "What are the latest AI regulation news this week?",
+      "mode": "standard",
+      "temporal": "current",
+      "evidence_expectation": "Recent dated news coverage.",
+      "review_focus": "Sources dated within the window; state publication dates."
+    },
+    {
+      "id": "sup-fresh-02",
+      "category": "current",
+      "query": "What is the latest Node.js LTS release?",
+      "mode": "standard",
+      "temporal": "current",
+      "evidence_expectation": "Official Node.js release schedule.",
+      "review_focus": "Prefer the primary source and its date; distinguish LTS from current."
+    },
+    {
+      "id": "sup-fresh-03",
+      "category": "current",
+      "query": "What happened in tech news today?",
+      "mode": "standard",
+      "temporal": "current",
+      "evidence_expectation": "Same-day news coverage.",
+      "review_focus": "Recency-filtered search; do not present old articles as today."
+    }
+  ]
+}

@@ -14,6 +14,21 @@ import research
 import research_store as db
 
 
+def supplement():
+    """Extra regression cases outside the pinned 100-case cohort; parents may be cohort cases."""
+    base = corpus()
+    data = json.loads(Path(__file__).with_name('cases-supplement-v1.json').read_text())
+    known = {case['id'] for case in base['cases']}
+    extra = data['cases']
+    ids = {case['id'] for case in extra}
+    if data['version'] != 'm6.5-supplement-v1' or len(ids) != len(extra) or ids & known:
+        raise ValueError('Invalid supplemental corpus')
+    for case in extra:
+        if case.get('parent_case_id') and case['parent_case_id'] not in known | ids:
+            raise ValueError('Unknown parent case')
+    return {'version': data['version'], 'cases': base['cases'] + extra}
+
+
 def corpus():
     data = json.loads(Path(__file__).with_name('cases-v1.json').read_text())
     cases = data['cases']
@@ -71,10 +86,11 @@ def main(argv=None):
     parser.add_argument('--limit', type=int, default=3)
     parser.add_argument('--category')
     parser.add_argument('--ids', nargs='+', default=[])
+    parser.add_argument('--supplement', action='store_true', help='Also offer the supplemental Phase 2 regression cases')
     args = parser.parse_args(argv)
     if args.limit < 1 or args.limit > 100 or (args.execute and not args.output):
         parser.error('limit must be 1–100; --execute requires --output')
-    data = corpus()
+    data = supplement() if args.supplement else corpus()
     if args.category and args.category not in {case['category'] for case in data['cases']}:
         parser.error('Unknown category')
     try:

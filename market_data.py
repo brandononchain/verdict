@@ -16,10 +16,18 @@ CANDLES_URL = 'https://api.exchange.coinbase.com/products/BTC-USD/candles'
 ASSETS = {'BTC': 'Bitcoin', 'ETH': 'Ethereum', 'SOL': 'Solana', 'XRP': 'XRP'}
 
 
+PRICE_INTENT = re.compile(r"\b(price|worth|quote|trading at|trades at|how much (?:is|does|are)|cost of|value of)\b")
+NOT_A_QUOTE = re.compile(
+    r"\b(historical|history|yesterday|prediction|predict|forecast|future|tomorrow|compare|past|ago|"
+    r"gas|hash|hashrate|volume|fees?|rates?|market\s*cap|mining|miner|difficulty|dominance|supply|halving|"
+    r"transaction|block|wallet|address|etf|stock|shares?|futures|options|why|explain|effect|impact|affect|"
+    r"determine[sd]?|calculate|worth\s+(?:it|buying|investing|holding))\b"
+    r"|\blast\s+(?:week|month|year)\b|\b20\d{2}\b|\b(?:how|what)\s+(?:does|do)\b")
+
+
 def quote_symbol(question):
     q = question.lower()
-    if (not re.search(r'\b(price|trading|worth|quote|rate)\b', q)
-            or re.search(r'\b(historical|history|yesterday|prediction|forecast|future|tomorrow|compare|past|ago)\b|\blast\s+(?:week|month|year)\b|\b20\d{2}\b', q)
+    if (not PRICE_INTENT.search(q) or NOT_A_QUOTE.search(q) or len(q.split()) > 14
             or re.search(r'\b(eur|euro|gbp|pound|cad|canadian|aud|australian)\b', q)):
         return None
     matched = [symbol for symbol, pattern in {

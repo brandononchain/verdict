@@ -16,6 +16,18 @@ class EvaluationWorkflowTests(unittest.TestCase):
         self.assertEqual([case['id'] for case in chosen], ['current-01','followup-03'])
         self.assertEqual([case['mode'] for case in chosen], ['standard','standard'])
 
+    def test_supplemental_cases_extend_without_changing_the_pinned_cohort(self):
+        self.assertEqual(len(run.corpus()['cases']), 100)
+        data = run.supplement()
+        extra = [case for case in data['cases'] if case['id'].startswith('sup-')]
+        self.assertEqual(len(data['cases']), 100 + len(extra))
+        self.assertGreaterEqual(len(extra), 12)
+        for kind in ('followup', 'compare', 'quote', 'fresh'):
+            self.assertTrue(any(kind in case['id'] for case in extra), kind)
+        chosen = run.selection(data['cases'], ['sup-followup-03'], None, 1)
+        self.assertEqual([case['id'] for case in chosen], ['current-01', 'sup-followup-03'])
+        self.assertEqual([case['mode'] for case in extra if 'compare' in case['id']], ['compare'] * 4)
+
     def test_blank_scorecard_requires_complete_human_review(self):
         with tempfile.TemporaryDirectory() as directory:
             results, cards = Path(directory)/'results.jsonl', Path(directory)/'cards.jsonl'
