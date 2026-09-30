@@ -254,19 +254,20 @@ def run(owner, record, history):
     try:
         yield {"type": "start", "id": rid}
         import market_data
+        import retrieval
         mode = record.get('depth', 'standard')
         quote_symbol = market_data.quote_symbol(query) if mode in ('standard', 'deep') else None
         if quote_symbol:
-            yield {'type': 'status', 'text': 'Checking the live market quote'}
+            yield {'type': 'status', 'text': 'Checking the live price'}
             try:
                 source, answer = measured('market_quote', market_data.quote, quote_symbol)
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                raise Unavailable(f'A fresh {quote_symbol}-USD quote is unavailable. Please try again shortly.') from exc
+                raise Unavailable(f'A live {quote_symbol}-USD price is not available right now. Try again in a minute.') from exc
             sources = [source]
             import source_store
             sources, removed = source_store.excluded(sources)
             if removed:
-                raise Unavailable('This market source is unavailable.')
+                raise Unavailable('This price source has been removed, so the quote cannot be shown.')
             source['source_version_id'] = source_store.version_id(source)
             usage.update({'input_tokens': 0, 'search_calls': 0, 'market_data': f'Coinbase Exchange {quote_symbol}-USD last trade',
                           'answer_format': 'validated_market_quote'})
@@ -276,13 +277,15 @@ def run(owner, record, history):
             yield {'type': 'sources', 'sources': sources}
             yield {'type': 'delta', 'text': answer}
             finish_metrics()
+            usage['followups'] = retrieval.suggest_followups(query, mode, None, sources, (), 'market')
             db.save(owner, rid, status='complete', answer=answer, sources=sources,
                     usage=usage, estimated_cost=estimate(usage))
             finalized = True
             yield {'type': 'complete', 'run': db.get_run(owner, rid)}
             return
         import retrieval
-        parent, standalone, seed = None, query, []
+        parent, standalone, seed, reuse = None, query, [], []
+        refine = None
         if record.get('parent_id') and history:
             try:
                 parent = db.get_run(owner, record['parent_id'])
@@ -290,21 +293,44 @@ def run(owner, record, history):
                 parent = None
             titles = [str(x.get('title') or '') for x in ((parent or {}).get('sources') or [])[:2] if isinstance(x, dict)]
             standalone = retrieval.standalone_question(query, history, titles)
-            if standalone != query and mode in ('standard', 'deep', 'compare'):
+            refine = retrieval.refinement_intent(query) if mode in ('standard', 'deep', 'compare') else None
+            if refine:
+                # Reshaping the previous answer needs its evidence, not a new search.
+                reuse = [dict(x) for x in ((parent or {}).get('sources') or [])
+                         if isinstance(x, dict) and x.get('url') and x.get('text') and not x.get('market') and not x.get('note_id')][:6]
+                asked = [m['content'] for m in history if m.get('role') == 'user' and m.get('content')]
+                if reuse and (parent or {}).get('status') == 'complete' and asked:
+                    standalone = retrieval.clip_words(re.sub(r'\s+', ' ', asked[-1]), 350)
+                else:
+                    refine, reuse = None, []
+            if standalone != query and not refine and mode in ('standard', 'deep', 'compare'):
                 seed = [x for x in ((parent or {}).get('sources') or [])[:3]
                         if isinstance(x, dict) and x.get('url') and not x.get('market')]
         followup = {'standalone': standalone, 'today': time.strftime('%Y-%m-%d', time.gmtime())}
         previous = next((m['content'] for m in reversed(history or []) if m.get('role') == 'assistant'), '')
         if previous:
             followup['previous'] = retrieval.clip_words(re.sub(r'\s+', ' ', re.sub(r'\[\d+\]', '', previous)), 300)
+        if refine:
+            followup['refine'] = refine
+            usage['refinement'] = refine
         if standalone != query:
             usage['standalone_question'] = standalone
-        if mode in ('scrape', 'crawl'):
-            yield {'type': 'status', 'text': 'Reading the page' if mode == 'scrape' else 'Crawling up to five pages'}
+        if refine:
+            yield {'type': 'status', 'text': 'Reusing the earlier sources'}
+            sources = reuse
+            for n, source in enumerate(sources, 1):
+                source['n'] = n
+                source.pop('evidence_span', None)
+                source.pop('excerpt', None)
+            report = {'queries': [], 'search_calls': 0, 'ranking': 'reused sources from the previous answer',
+                      'candidate_urls': [x['url'] for x in sources], 'selected_urls': [x['url'] for x in sources]}
+        elif mode in ('scrape', 'crawl'):
+            yield {'type': 'status', 'text': 'Reading the page' if mode == 'scrape' else 'Reading up to five pages'}
             import web_ingest
             sources, report = measured('retrieval', web_ingest.collect, record['target_url'], mode, query)
         else:
-            yield {"type": "status", "text": "Searching the web"}
+            angles = len(retrieval.plan(query, history, mode, standalone))
+            yield {"type": "status", "text": f'Searching {angles} angles' if angles > 1 else 'Searching the web'}
             sources, report = measured('retrieval', retrieval.retrieve, query, history, mode, search, standalone, seed)
         import source_store
         sources, removed = source_store.excluded(sources)
@@ -325,10 +351,10 @@ def run(owner, record, history):
             for n, source in enumerate(sources, 1):
                 source['n'] = n
         if not sources:
-            raise Unavailable('No usable evidence was found. Try a more specific question.')
-        yield {'type': 'status', 'text': 'Reading sources'}
+            raise Unavailable('I could not find usable sources for this. Try a more specific question, or name the site or topic you care about.')
+        yield {'type': 'status', 'text': f'Reading {len(sources)} source' + ('' if len(sources) == 1 else 's')}
         import enrichment
-        sources, enrich_report = measured('enrichment', enrichment.enrich, sources, standalone) if mode not in ('scrape', 'crawl') else (
+        sources, enrich_report = measured('enrichment', enrichment.enrich, sources, standalone) if mode not in ('scrape', 'crawl') and not refine else (
             sources, {'scrape_calls': 0, 'enriched_pages': 0, 'cache_hits': 0, 'cache_errors': 0})
         for source in sources:
             source.setdefault('source_version_id', source_store.version_id(source))
@@ -337,7 +363,7 @@ def run(owner, record, history):
         yield {'type': 'research', 'report': report}
         db.save(owner, rid, status="streaming", sources=sources)
         yield {"type": "sources", "sources": sources}
-        yield {'type': 'status', 'text': 'Jev is judging the evidence'}
+        yield {'type': 'status', 'text': 'Choosing the most relevant evidence'}
         import jev_research
         judgment, selected, model_usage, candidates = measured('jev_selection', jev_research.judge, standalone, sources, mode)
         def apply_spans(found):
@@ -353,7 +379,7 @@ def run(owner, record, history):
         usage['input_tokens'] = model_usage.get('input_tokens', 0)
         if model_usage.get('estimated'):
             usage['usage_estimated'] = True
-        if mode == 'deep' and retrieval.needs_second_pass(judgment):
+        if mode == 'deep' and not refine and retrieval.needs_second_pass(judgment):
             # One gap-driven search inside the already reserved third provider call.
             yield {'type': 'status', 'text': 'Looking for what is missing'}
             extra = retrieval.gap_query(query, candidates, judgment, standalone)
@@ -367,7 +393,7 @@ def run(owner, record, history):
                     source.setdefault('source_version_id', source_store.version_id(source))
                 db.save(owner, rid, status='streaming', sources=sources)
                 yield {'type': 'sources', 'sources': sources}
-                yield {'type': 'status', 'text': 'Jev is judging the evidence'}
+                yield {'type': 'status', 'text': 'Choosing the most relevant evidence'}
                 judgment, selected, model_usage, candidates = measured('jev_reselection', jev_research.judge, standalone, sources, mode)
                 apply_spans(candidates)
                 db.save(owner, rid, status='streaming', sources=sources)
@@ -399,7 +425,7 @@ def run(owner, record, history):
             focus = [n for n in report.get('compare_focus', []) if n in existing] or [source['n'] for source in sources[:2]]
             draft_ids = list(dict.fromkeys(focus + draft_ids + [source['n'] for source in sources[:4]]))[:4]
         if draft_ids:
-            yield {'type': 'status', 'text': 'Writing from selected evidence'}
+            yield {'type': 'status', 'text': 'Writing the answer from those sources'}
             import writer
             import answer_contract
             try:
@@ -408,12 +434,12 @@ def run(owner, record, history):
                     usage['writer_attempts'] = 1
                 except writer.WriterError:
                     # Transient provider or format failure: retry once with the reserved second draft.
-                    yield {'type': 'status', 'text': 'Retrying the draft'}
+                    yield {'type': 'status', 'text': 'Trying the draft again'}
                     usage['writer_failed_attempts'] = 1
                     draft, writer_usage = measured('writer_retry', writer.compose, query, sources, draft_ids, mode, False, followup)
                     usage['writer_attempts'] = 2
                 usage['writer'] = writer_usage
-                yield {'type': 'status', 'text': 'Jev is checking the draft'}
+                yield {'type': 'status', 'text': 'Checking each claim against its source'}
                 approved, check, check_usage = measured('jev_verification', jev_research.verify, standalone, draft, sources, draft_ids, wide if mode == 'deep' else 4)
                 usage['input_tokens'] += check_usage.get('input_tokens', 0)
                 usage['draft_check'] = check
@@ -421,7 +447,7 @@ def run(owner, record, history):
                 if not approved and mode in ('standard', 'deep', 'compare') and usage['writer_attempts'] < 2 and not jev_research.supported_prefix(draft, check, limit):
                     # One bounded revision. The revised text is checked again
                     # against the same captured sources before it can be shown.
-                    yield {'type': 'status', 'text': 'Rechecking a shorter answer'}
+                    yield {'type': 'status', 'text': 'Shortening to what the sources support'}
                     try:
                         parts = answer_contract.units(draft, limit)
                         rejected = [parts[i] for i in jev_research.failing_units(draft, check, limit) if i < len(parts)]
@@ -467,9 +493,15 @@ def run(owner, record, history):
             usage['answer_format'] = 'captured_excerpts'
         _, removed = source_store.excluded(sources)
         if removed:
-            answer = 'This answer is unavailable because a source was removed.'
+            answer = 'This answer is no longer available because one of its sources was removed. Try asking again.'
             sources = []
             usage = {'redacted_source': True}
+            usage['followups'] = retrieval.suggest_followups(query, mode, None, [], (), 'redacted')
+        else:
+            abstained = usage.get('answer_format') in ('jev_selected_excerpt', 'captured_excerpts') and judgment['gate'] in ('abstain', 'review')
+            gap = retrieval.missing_terms(standalone, candidates, judgment) if judgment['gate'] != 'answer' else ()
+            usage['followups'] = retrieval.suggest_followups(
+                query, mode, report, sources, gap, 'abstained' if abstained else 'answered')
         yield {'type': 'delta', 'text': answer}
         finish_metrics()
         cost = estimate(usage)
@@ -487,6 +519,9 @@ def run(owner, record, history):
         usage['failure_stage'] = current_stage
         usage['failure_kind'] = type(exc).__name__
         finish_metrics()
-        message = str(exc) if isinstance(exc, (Unavailable, ValueError)) or type(exc).__name__ == "JevError" else "Research could not finish. Please try again."
+        if type(exc).__name__ == "JevError":
+            message = "The answer could not be checked against its sources, so nothing was shown. Please try again."
+        else:
+            message = str(exc) if isinstance(exc, (Unavailable, ValueError)) else "Something went wrong before the answer could be finished. Please try again, or ask a narrower question."
         db.save(owner, rid, status="error", answer=answer, sources=sources, usage=usage, error=message)
         yield {"type": "error", "id": rid, "error": message}

@@ -21,8 +21,8 @@ class EvaluationWorkflowTests(unittest.TestCase):
         data = run.supplement()
         extra = [case for case in data['cases'] if case['id'].startswith('sup-')]
         self.assertEqual(len(data['cases']), 100 + len(extra))
-        self.assertGreaterEqual(len(extra), 12)
-        for kind in ('followup', 'compare', 'quote', 'fresh'):
+        self.assertGreaterEqual(len(extra), 20)
+        for kind in ('followup', 'compare', 'quote', 'fresh', 'structure', 'refine', 'suggest'):
             self.assertTrue(any(kind in case['id'] for case in extra), kind)
         chosen = run.selection(data['cases'], ['sup-followup-03'], None, 1)
         self.assertEqual([case['id'] for case in chosen], ['current-01', 'sup-followup-03'])

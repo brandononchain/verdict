@@ -225,14 +225,47 @@ _FOLLOWUP_WORDS = re.compile(r"\b(it|its|that|this|they|them|their|those|these|h
                              r"another|same|former|latter|instead|above|previous|earlier)\b", re.I)
 
 
+_FOLLOWUP_START = ('and ', 'but ', 'also ', 'so ', 'what about', 'how about', 'why', 'how so', 'which one', 'which is better',
+                   'compare those', 'compare them', 'compare these', 'is that', 'does that', 'do they', 'is it', 'does it')
+
+
 def is_followup(query):
     text = query.strip().lower()
-    return (len(tokens(query)) <= 5 or bool(_FOLLOWUP_WORDS.search(text)) or
-            text.startswith(('and ', 'but ', 'also ', 'what about', 'how about', 'so ')))
+    return (len(tokens(query)) <= 5 or bool(_FOLLOWUP_WORDS.search(text)) or text.startswith(_FOLLOWUP_START))
+
+
+_REFINEMENTS = (
+    ('translate', re.compile(r"^(?:please\s+)?(?:translate\b|(?:say|write|give me)\s+(?:that|it|this)\s+in\b|in\s+(?:spanish|french|german|italian|portuguese|japanese|chinese|korean|arabic|hindi|dutch|russian)\b)", re.I)),
+    ('shorten', re.compile(r"^(?:please\s+)?(?:(?:make|keep)\s+(?:it|that|this)\s+(?:much\s+)?(?:shorter|briefer|more concise|concise|brief|short)|shorter|shorten\b|tl;?dr|too long|be (?:more )?(?:brief|concise)|(?:can you\s+)?summari[sz]e\s+(?:it|that|this)|in (?:one|two|a few) (?:sentences?|lines?|words?))", re.I)),
+    ('expand', re.compile(r"^(?:please\s+)?(?:(?:make|give)\s+(?:it|that|this|me)\s+(?:a bit |much )?(?:longer|more detailed|more detail)|longer|expand\b|elaborate\b|more detail|explain (?:that |it |this )?(?:more|further|in more detail)|go deeper|tell me more)", re.I)),
+    ('reformat', re.compile(r"^(?:please\s+)?(?:(?:put|show|give|write|turn|format|convert|rewrite)\s+(?:it|that|this|me)?\s*(?:in|as|into|to)\s+(?:a\s+|an\s+)?(?:table|list|bullets?|bullet points?|steps?|numbered list|outline|checklist)|as (?:a )?(?:table|list|bullets?|bullet points?|steps?|checklist)|bullet points?)", re.I)),
+)
+
+
+def refinement_intent(query):
+    """'shorten' | 'expand' | 'reformat' | 'translate' when the user only asks to reshape the previous answer, else None."""
+    text = re.sub(r'\s+', ' ', query.strip())
+    if not text or len(text) > 80:
+        return None
+    for name, pattern in _REFINEMENTS:
+        if pattern.match(text):
+            return name
+    return None
+
+
+def _first_sentence(text, limit=110):
+    text = re.sub(r'\s+', ' ', re.sub(r'\[\d+\]', '', re.sub(r'[#*`|>]', ' ', text or ''))).strip()
+    match = re.match(r'(.+?[.!?])(?:\s|$)', text)
+    return clip_words(match.group(1) if match else text, limit)
 
 
 def standalone_question(query, history, parent_titles=()):
-    """Deterministic standalone search question for a follow-up, at most 350 characters."""
+    """Deterministic standalone search question for a follow-up, at most 350 characters.
+
+    The previous user question anchors the topic; when it was a comparison the two
+    subjects are named explicitly ("compare those", "which is better"); the first
+    sentence of the previous answer and parent source titles fill any remaining room.
+    """
     query = query.strip()
     previous = [m['content'] for m in history if m.get('role') == 'user' and m.get('content')]
     if not previous or len(query) > 250 or not is_followup(query):
@@ -241,9 +274,15 @@ def standalone_question(query, history, parent_titles=()):
     if room < 40:
         return query
     context = re.sub(r'\s+', ' ', previous[-1]).strip()
-    titles = [re.sub(r'\s+', ' ', str(t)).strip() for t in parent_titles if t][:2]
-    if titles:
-        context += ' ; ' + ' ; '.join(titles)
+    subjects = compare_subjects(context)
+    if subjects and re.search(r'\b(those|them|these|both|which|better|differ\w*|compare|one)\b', query, re.I):
+        context = f'comparison of {subjects[0]} and {subjects[1]}'
+    answer = next((m['content'] for m in reversed(history) if m.get('role') == 'assistant' and m.get('content')), '')
+    lead = _first_sentence(answer) if len(query.split()) <= 6 else ''
+    extras = ([lead] if lead else []) + [re.sub(r'\s+', ' ', str(t)).strip() for t in parent_titles if t][:2]
+    for extra in extras:
+        if len(context) + 3 + len(extra) <= room:
+            context += ' ; ' + extra
     return f'{query} (context: {clip_words(context, room)})'
 
 
@@ -450,3 +489,64 @@ def second_pass(query, sources, extra_query, search, room=3):
         row['n'] = offset
     return added, {'second_pass_query': extra_query, 'second_pass_added': len(added),
                    'failed_searches': failed, 'search_failure_kinds': dict(kinds)}
+
+
+def missing_terms(query, candidates, judgment):
+    """Query words that no selected passage covers (the same signal that drives the second-pass search)."""
+    ids = {str(n) for n in ([judgment.get('selected')] if judgment.get('selected') else []) + list(judgment.get('relevant_ids', []))}
+    covered = set()
+    for candidate in candidates or []:
+        if not ids or candidate['id'] in ids:
+            covered |= set(stems(candidate.get('passage', '') + ' ' + candidate.get('title', '')))
+    return list(dict.fromkeys(t for t in tokens(query) if stem(t) not in covered))[:4]
+
+
+def _clean_label(text, limit=40):
+    text = re.sub(r'[\x00-\x1f\x7f\[\]<>`*_#|]', ' ', str(text or ''))
+    text = re.sub(r'https?://\S+', ' ', text)
+    return clip_words(re.sub(r'\s+', ' ', text).strip(' -:;,.'), limit)
+
+
+def suggest_followups(query, mode='standard', report=None, sources=None, missing=(), outcome='answered'):
+    """0-3 short follow-up questions. Deterministic, no model call, and never a factual claim.
+
+    outcome: 'answered' | 'abstained' | 'redacted' | 'market'.
+    """
+    query = re.sub(r'\s+', ' ', str(query or '')).strip()
+    sources = [s for s in (sources or []) if isinstance(s, dict)]
+    suggestions = []
+    if outcome == 'redacted':
+        suggestions = ['Ask a differently worded question']
+    elif outcome == 'market':
+        suggestions = ['How has the price moved over the past week?', 'Show the source and time of this quote']
+    else:
+        if outcome == 'abstained':
+            if mode == 'standard':
+                suggestions.append('Search with Deep research')
+            elif mode == 'deep':
+                suggestions.append('Ask with Compare or a narrower question')
+            name = _clean_label((sources[0].get('title') or sources[0].get('domain')) if sources else '')
+            if name:
+                suggestions.append(f'Narrow to {name}')
+        subjects = compare_subjects(query) if mode == 'compare' else None
+        if subjects:
+            left, right = (_clean_label(x, 30) for x in subjects)
+            if outcome == 'answered':
+                suggestions += [f'Which is better for my use case: {left} or {right}?', f'How do {left} and {right} differ on cost?']
+        elif outcome == 'answered':
+            for term in [_clean_label(t, 30) for t in list(missing)[:2]]:
+                if term:
+                    suggestions.append(f'What about {term}?')
+            domains = list(dict.fromkeys(s.get('domain') for s in sources if s.get('domain')))
+            if mode in ('scrape', 'crawl'):
+                suggestions += ['What are the key facts on this page?' if mode == 'scrape' else 'Which pages cover pricing or contact details?']
+            elif domains:
+                suggestions.append(f'What does {_clean_label(domains[0], 40)} say in more detail?')
+        if outcome == 'answered':
+            suggestions += ['Give a shorter version', 'Explain in more detail']
+    out = []
+    for text in suggestions:
+        text = clip_words(re.sub(r'\s+', ' ', text).strip(), 90)
+        if text and text.lower() not in {x.lower() for x in out} and text.lower().rstrip('?') != query.lower().rstrip('?'):
+            out.append(text)
+    return out[:3]
