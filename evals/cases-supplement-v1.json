@@ -140,6 +140,81 @@
       "temporal": "current",
       "evidence_expectation": "Same-day news coverage.",
       "review_focus": "Recency-filtered search; do not present old articles as today."
+    },
+    {
+      "id": "sup-structure-01",
+      "category": "synthesis",
+      "query": "How do heat pumps perform in cold climates, and what limits them?",
+      "mode": "deep",
+      "temporal": "stable",
+      "evidence_expectation": "Energy.gov or manufacturer/independent test data on cold-climate performance.",
+      "review_focus": "Direct answer first, then Key findings bullets, Limits section; a Where sources differ section only if sources conflict; every sentence cited."
+    },
+    {
+      "id": "sup-structure-02",
+      "category": "comparison",
+      "query": "Compare PostgreSQL and MySQL for a small web application",
+      "mode": "compare",
+      "temporal": "stable",
+      "evidence_expectation": "Official documentation for both databases.",
+      "review_focus": "One-line verdict or 'No clear winner' with conditions, then a compact cited table; missing side stated, not invented."
+    },
+    {
+      "id": "sup-structure-03",
+      "category": "synthesis",
+      "query": "Give a structured overview of what HTTP caching headers do",
+      "mode": "deep",
+      "temporal": "stable",
+      "evidence_expectation": "MDN or RFC 9111 material.",
+      "review_focus": "Scannable sections (Key findings, Limits) within the length cap; citations in every cell and bullet."
+    },
+    {
+      "id": "sup-refine-01",
+      "category": "followup",
+      "query": "Make that shorter",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "factual-01",
+      "evidence_expectation": "Same evidence as the parent answer; no new search.",
+      "review_focus": "Recognised as a refinement: reuses parent sources, skips search, remains cited and verified, drops detail without adding facts."
+    },
+    {
+      "id": "sup-refine-02",
+      "category": "followup",
+      "query": "Translate that to Spanish",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "factual-02",
+      "evidence_expectation": "Same evidence as the parent answer; no new search.",
+      "review_focus": "Faithful translation, citations preserved, no added claims."
+    },
+    {
+      "id": "sup-refine-03",
+      "category": "followup",
+      "query": "Put that in a table",
+      "mode": "standard",
+      "temporal": "stable",
+      "parent_case_id": "comparison-01",
+      "evidence_expectation": "Same evidence as the parent answer; no new search.",
+      "review_focus": "Reformatted as a cited table only from facts in the parent evidence."
+    },
+    {
+      "id": "sup-suggest-01",
+      "category": "unsupported",
+      "query": "What will the exact population of Lisbon be in 2075?",
+      "mode": "standard",
+      "temporal": "stable",
+      "evidence_expectation": "No reliable source; expect an abstention.",
+      "review_focus": "Abstention explains what is missing in plain language; usage.followups includes 'Search with Deep research' and a narrowing suggestion; suggestions are questions, not claims."
+    },
+    {
+      "id": "sup-suggest-02",
+      "category": "factual",
+      "query": "How does a heat pump work?",
+      "mode": "standard",
+      "temporal": "stable",
+      "evidence_expectation": "Energy.gov or similar explainer.",
+      "review_focus": "usage.followups has at most 3 suggestions of at most 90 characters, phrased as questions or commands, with no factual claims or links."
     }
   ]
 }
