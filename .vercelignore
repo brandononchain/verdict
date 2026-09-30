@@ -1,0 +1,8 @@
+tests
+docs
+data
+__pycache__
+*.pyc
+Dockerfile.visual
+BRAND.md
+README.md

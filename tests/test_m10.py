@@ -1,4 +1,5 @@
 import base64
+import importlib.util
 import io
 import json
 import os
@@ -125,6 +126,7 @@ class M10Tests(unittest.TestCase):
         self.assertTrue(workspace.delete_run('alice',parent['id']))
         self.assertEqual(db.get_run('alice',child['id'])['status'],'redacted')
 
+    @unittest.skipUnless(importlib.util.find_spec('reportlab'), 'reportlab is not installed')
     def test_research_brief_export_is_owner_scoped_and_revocable(self):
         class Handler:
             def __init__(self,path,cookie):

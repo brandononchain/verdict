@@ -11,6 +11,9 @@ import workspace_store as workspace
 
 def handle(handler, mutate=False):
     try:
+        if not mutate and not accounts.enabled():
+            # Sign-in is not configured (for example no session secret); say so instead of a 503.
+            return http.send_json(handler, 200, {'enabled': False, 'account': None, 'claim_available': False})
         db.ensure_schema()
         if not mutate:
             account = accounts.session(handler.headers)
@@ -21,15 +24,18 @@ def handle(handler, mutate=False):
         origin = handler.headers.get('Origin')
         if origin and urlsplit(origin).netloc != handler.headers.get('Host'):
             return http.send_json(handler, 403, {'error': 'Request origin is not allowed'})
-        length = int(handler.headers.get('Content-Length', '0'))
-        if not 1 <= length <= 2048 or not handler.headers.get('Content-Type', '').startswith('application/json'):
+        try:
+            length = http.content_length(handler.headers, 2048)
+        except ValueError:
+            raise ValueError('Expected a small JSON request')
+        if not handler.headers.get('Content-Type', '').startswith('application/json'):
             raise ValueError('Expected a small JSON request')
         body = json.loads(handler.rfile.read(length))
         if not isinstance(body, dict):
             raise ValueError('Expected an object')
         action = body.get('action')
         if action == 'request_code':
-            accounts.request_code(body.get('email'))
+            accounts.request_code(body.get('email'), http.client_ip(handler.headers))
             return http.send_json(handler, 200, {'result': 'If mail delivery is available, a sign-in code is on its way.'})
         if action == 'verify_code':
             token, account = accounts.verify(body.get('email'), body.get('code'))

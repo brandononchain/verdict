@@ -56,7 +56,7 @@ def enqueue(url, now=None):
             VALUES(?,'pending',0,?,0,?,?) ON CONFLICT(url) DO UPDATE SET
             state='pending', attempts=0, next_run=excluded.next_run,
             lease_until=0,last_error=NULL,updated=excluded.updated
-            WHERE source_revalidation_jobs.state IN ('complete','failed')""", (key, now, now, now))
+            WHERE source_revalidation_jobs.state IN ('complete','failed','canceled')""", (key, now, now, now))
     return key
 
 
@@ -132,7 +132,7 @@ def work_once():
         if not source_store.save(source):
             raise ValueError('Source cache policy or tombstone rejected the extract')
         finish(job)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except Exception as exc:  # includes research.Unavailable; a failed job must never crash the worker loop
         finish(job, type(exc).__name__)
     return True
 

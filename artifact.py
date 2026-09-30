@@ -2,6 +2,7 @@
 import io
 import csv
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
@@ -10,13 +11,17 @@ import research_http as http
 import research_store as db
 
 
+class TooLarge(ValueError):
+    pass
+
+
 def brief_text(run):
     when = datetime.fromtimestamp(run['created'], timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     lines = ['Zearch', 'A space for discovery.', '', f'Research brief · {when}', '',
              'Question', run['query'], '', 'Answer', run['answer'], '', 'Sources']
-    for source in run['sources'][:8]:
+    for at, source in enumerate(run['sources'][:8], 1):
         title = str(source.get('title') or 'Source').replace('\n', ' ')[:300]
-        label = f"[{source['n']}] {title}"
+        label = f"[{source.get('n', at)}] {title}"
         lines.append(label)
         if source.get('url'): lines.append(source['url'])
         else: lines.append('Private document' if source.get('document_id') else 'Private note')
@@ -152,8 +157,8 @@ def brief_pdf(run):
         at += 1
     y -= 12
     line('SOURCES', 'Helvetica-Bold', 9, 19)
-    for source in run['sources'][:8]:
-        line(f"[{source['n']}] {str(source.get('title') or 'Source')[:300]}", 'Helvetica-Bold', 9, 13)
+    for at, source in enumerate(run['sources'][:8], 1):
+        line(f"[{source.get('n', at)}] {str(source.get('title') or 'Source')[:300]}", 'Helvetica-Bold', 9, 13)
         line(str(source.get('url') or ('Private document' if source.get('document_id') else 'Private note')), 'Helvetica', 8, 12)
         if source.get('source_version_id'): line('Capture: ' + source['source_version_id'], 'Helvetica', 7, 12)
         y -= 7
@@ -163,7 +168,7 @@ def brief_pdf(run):
     pdf.save()
     data = output.getvalue()
     if not data.startswith(b'%PDF-') or len(data) > 1_000_000:
-        raise ValueError('Brief exceeded its size limit')
+        raise TooLarge('Brief exceeded its size limit')
     return data
 
 
@@ -197,5 +202,12 @@ def handle(handler):
         handler.send_header('X-Content-Type-Options', 'nosniff')
         handler.end_headers()
         handler.wfile.write(payload)
-    except Exception:
+    except ImportError as exc:
+        logging.warning('Zearch PDF renderer unavailable: %s', type(exc).__name__)
+        return http.send_json(handler, 503, {'error': 'PDF export is not available on this server. Try the text export.'})
+    except TooLarge as exc:
+        logging.warning('Zearch export rejected: %s', type(exc).__name__)
+        return http.send_json(handler, 413, {'error': 'This brief is too large to export. Try the text export.'})
+    except Exception as exc:
+        logging.warning('Zearch export failed: %s', type(exc).__name__)
         return http.send_json(handler, 503, {'error': 'Document export is temporarily unavailable'})

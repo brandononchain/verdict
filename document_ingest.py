@@ -29,7 +29,10 @@ def extract(filename, encoded):
                 part = archive.getinfo('word/document.xml')
                 if part.file_size > 1_000_000 or part.file_size > 100 * max(part.compress_size, 1):
                     raise ValueError('DOCX text is too large')
-                root = ElementTree.fromstring(archive.read(part))
+                xml = archive.read(part)
+                if b'\x00' in xml or re.search(rb'<!\s*(DOCTYPE|ENTITY)', xml, re.I):
+                    raise ValueError('DOCX contains unsupported XML declarations')
+                root = ElementTree.fromstring(xml)
                 paragraphs = []
                 for paragraph in root.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
                     line = ''.join(node.text or '' for node in paragraph.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'))

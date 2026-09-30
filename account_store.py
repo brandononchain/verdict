@@ -100,11 +100,22 @@ def send_code(email, code):
         client.send_message(message)
 
 
-def request_code(email):
+def request_code(email, ip=''):
     if not enabled():
         raise RuntimeError('Account sign-in is not configured')
     email = normalize(email)
     now = int(time.time())
+    if ip:
+        # Per-address daily bucket so one client cannot spend the shared mail cap.
+        bucket = 'signin:' + hmac.new(os.environ['ZEARCH_SESSION_SECRET'].encode(), ip.encode(), hashlib.sha256).hexdigest()[:32]
+        try:
+            cap = int(os.environ.get('ZEARCH_SIGNIN_IP_DAILY') or '10')
+        except ValueError:
+            cap = 10
+        try:
+            db.charge_bucket(bucket, cap, now)
+        except db.LimitReached:
+            raise ValueError('Too many sign-in requests. Try again later.')
     code = f'{secrets.randbelow(100_000_000):08d}'
     ident = uuid.uuid4().hex
     with db.connection() as (conn, marker):
@@ -139,12 +150,16 @@ def verify(email, code):
     with db.connection() as (conn, marker):
         if marker == '%s':
             conn.execute('SELECT pg_advisory_xact_lock(91270420)')
-        row = db.execute(conn, marker, '''SELECT id,digest,attempts FROM account_challenges
-            WHERE email=? AND expires>? AND used=0 ORDER BY created DESC,id DESC LIMIT 1''', (email, now)).fetchone()
-        if not row or row['attempts'] >= 5:
+        rows = db.execute(conn, marker, '''SELECT id,digest,attempts FROM account_challenges
+            WHERE email=? AND expires>? AND used=0 AND attempts<5 ORDER BY created DESC,id DESC LIMIT 5''', (email, now)).fetchall()
+        if not rows:
             raise ValueError('Invalid or expired sign-in code')
-        db.execute(conn, marker, 'UPDATE account_challenges SET attempts=attempts+1 WHERE id=?', (row['id'],))
-        invalid = not hmac.compare_digest(row['digest'], digest(row['id'] + ':' + code))
+        # A code from any unexpired challenge works, so a resend does not strand the first email.
+        matched = next((r for r in rows if hmac.compare_digest(r['digest'], digest(r['id'] + ':' + code))), None)
+        invalid = matched is None
+        if invalid:
+            for r in rows:
+                db.execute(conn, marker, 'UPDATE account_challenges SET attempts=attempts+1 WHERE id=?', (r['id'],))
         if not invalid:
             db.execute(conn, marker, 'UPDATE account_challenges SET used=1 WHERE email=?', (email,))
             account = db.execute(conn, marker, 'SELECT id FROM zearch_accounts WHERE email=?', (email,)).fetchone()

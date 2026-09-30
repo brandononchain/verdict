@@ -16,6 +16,15 @@ class LimitReached(Exception):
     pass
 
 
+# A run still pending/streaming after this long is treated as interrupted for
+# deletion and claim checks, so a crashed worker cannot block them forever.
+STALE_SECONDS = 600
+
+
+def active_cutoff(now=None):
+    return (int(time.time()) if now is None else now) - STALE_SECONDS
+
+
 _schema_lock = threading.Lock()
 _schema_ready_for = None
 
@@ -27,6 +36,9 @@ def connection():
         import psycopg
         from psycopg.rows import dict_row
         with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as conn:
+            # SET LOCAL works through transaction poolers, unlike startup options.
+            conn.execute("SET LOCAL lock_timeout='5s'")
+            conn.execute("SET LOCAL statement_timeout='60s'")
             yield conn, "%s"
     else:
         if os.environ.get("VERCEL"):
@@ -160,6 +172,20 @@ def reserve(owner, rid, request_id, query, parent_id, model, amount, limits, dep
         return result, True
 
 
+def charge_bucket(bucket, max_calls, now=None):
+    """Count one call against a per-day bucket without reserving spend."""
+    now = int(time.time()) if now is None else now
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    with connection() as (conn, marker):
+        execute(conn, marker, "INSERT INTO research_budgets(bucket,day,calls,reserved) VALUES(?,?,0,0) ON CONFLICT(bucket,day) DO NOTHING", (bucket, day))
+        if marker == "%s":
+            execute(conn, marker, "SELECT bucket FROM research_budgets WHERE bucket=? AND day=? FOR UPDATE", (bucket, day)).fetchone()
+        row = execute(conn, marker, "SELECT calls FROM research_budgets WHERE bucket=? AND day=?", (bucket, day)).fetchone()
+        if row["calls"] >= max_calls:
+            raise LimitReached("Research allowance reached. Please try again after the daily reset.")
+        execute(conn, marker, "UPDATE research_budgets SET calls=calls+1 WHERE bucket=? AND day=?", (bucket, day))
+
+
 def save(owner, rid, *, status, answer="", sources=None, usage=None, error=None, estimated_cost=None):
     with connection() as (conn, marker):
         if sources:
@@ -172,7 +198,7 @@ def save(owner, rid, *, status, answer="", sources=None, usage=None, error=None,
                     status, answer, sources, usage, error = ('redacted',
                         'This answer is unavailable because a source was removed.', [],
                         {'redacted_source': True}, None)
-        execute(conn, marker, "UPDATE research_runs SET status=?,answer=?,sources=?,usage=?,error=?,estimated_cost=?,updated=? WHERE owner=? AND id=? AND status<>'redacted'", (status, answer, json.dumps(sources or []), json.dumps(usage or {}), error, estimated_cost, int(time.time()), owner, rid))
+        execute(conn, marker, "UPDATE research_runs SET status=?,answer=?,sources=?,usage=?,error=?,estimated_cost=?,updated=? WHERE owner=? AND id=? AND status IN ('pending','streaming')", (status, answer, json.dumps(sources or []), json.dumps(usage or {}), error, estimated_cost, int(time.time()), owner, rid))
     # Reservations intentionally remain charged for the day, including failures.
     # Unknown upstream charges must never silently restore spend headroom.
 

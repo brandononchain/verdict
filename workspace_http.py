@@ -24,8 +24,11 @@ def handle(handler, mutate=False):
                 'documents': store.documents(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),
                 'batches': collection_batch.list_for(owner), 'discovery_enabled': discovery.enabled()}, cookie)
-        length = int(handler.headers.get('Content-Length', '0'))
-        if not 1 <= length <= 200000 or not handler.headers.get('Content-Type', '').startswith('application/json'):
+        try:
+            length = http.content_length(handler.headers, 200000)
+        except ValueError:
+            raise ValueError('Expected a JSON request up to 200 KB')
+        if not handler.headers.get('Content-Type', '').startswith('application/json'):
             raise ValueError('Expected a JSON request up to 200 KB')
         body = json.loads(handler.rfile.read(length))
         if not isinstance(body, dict):
