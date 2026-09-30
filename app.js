@@ -9,6 +9,7 @@
   };
   const form = $('composer'), query = $('query'), thread = $('thread'), empty = $('empty');
   const fine = document.querySelector('.fineprint'), dock = document.querySelector('.dock-inner');
+  const svgNS = 'http://www.w3.org/2000/svg';
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const coarse = window.matchMedia('(pointer: coarse)');
   const mobile = window.matchMedia('(max-width: 680px)');
@@ -20,25 +21,34 @@
     scrape: 'Reads one public page and extracts its facts.',
     crawl: 'Reads up to five pages of one public site.'
   };
-  const STARTERS = [
-    ['Compare', 'Compare PostgreSQL and MySQL for a small web app', 'compare'],
-    ['Explain', 'How do heat pumps work and when do they make sense?', 'standard'],
-    ['Look up', 'What changed in the latest stable Python release?', 'standard']
+  const DEPTH_HINT = {
+    standard: '1 query', deep: 'Up to 3 queries and a gap search', compare: 'Up to 3 queries, side by side',
+    scrape: '1 page', crawl: 'Up to 5 pages'
+  };
+  const SHORTCUTS = [
+    { mode: 'deep', icon: 'deep', title: 'Deep research', text: 'Reads more sources and searches for gaps before it answers.', example: 'How do heat pumps work and when do they make sense?' },
+    { mode: 'compare', icon: 'compare', title: 'Compare options', text: 'Puts choices side by side, with sources for each.', example: 'Compare PostgreSQL and MySQL for a small web app' },
+    { mode: 'crawl', icon: 'crawl', title: 'Crawl a site', text: 'Reads up to five pages of one public site.', example: 'A documentation site or a product page', url: true }
   ];
+  const VIEW_TITLES = { overview: 'Overview', library: 'Library', knowledge: 'Knowledge', monitors: 'Monitors', batches: 'Batches' };
+  const SURFACE_NODE = { research: 'feed', overview: 'view-overview', library: 'view-library', knowledge: 'view-knowledge', monitors: 'view-monitors', batches: 'view-batches' };
+  const icon = (name, cls) => {
+    const svg = document.createElementNS(svgNS, 'svg'), use = document.createElementNS(svgNS, 'use');
+    svg.setAttribute('class', 'ico' + (cls ? ' ' + cls : '')); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    use.setAttribute('href', '#i-' + name); svg.append(use); return svg;
+  };
 
   let parent = null, parentLabel = '', active = null, available = false, version = 0, recent = [];
-  let workspaceReady = false, workspaceLoaded = false, sessionReady = false, workspaceSeq = 0, shownId = null;
+  let workspaceReady = false, workspaceLoaded = false, sessionReady = false, workspaceSeq = 0, shownId = null, lastWorkspaceLoad = 0;
+  let surface = 'research', currentTitle = '';
   let availabilityMessage = 'Checking research availability…';
   let workspaceData = { notes: [], documents: [], investigations: [], batches: [], history: [] };
   let accountData = { enabled: false, account: null };
   const shownIds = new Set();
-  let hidden = new Set();
-  const notice = make('p', 'research-notice', availabilityMessage);
-  notice.setAttribute('role', 'status'); empty.append(notice);
+  const notice = $('research-notice'); notice.textContent = availabilityMessage;
   try {
     recent = JSON.parse(localStorage.getItem('zearch:research-history') || '[]')
       .filter(x => x && core.isRunId(x.id) && typeof x.query === 'string').slice(0, 100);
-    hidden = new Set(JSON.parse(localStorage.getItem('zearch:history-hidden') || '[]').filter(core.isRunId));
   } catch {}
 
   /* ---------- small helpers ---------- */
@@ -46,7 +56,7 @@
   const timeoutSignal = ms => (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined);
   const openDialog = () => document.querySelector('dialog[open]');
   const announce = text => { const node = $('announcer'); node.textContent = ''; setTimeout(() => { node.textContent = text; }, 40); };
-  const scrollBehavior = () => (reduceMotion.matches ? 'auto' : 'smooth');
+  const scrollBehavior = () => (reduceMotion.matches || document.documentElement.dataset.motion === 'reduce' ? 'auto' : 'smooth');
   function saveBlob(blob, filename) {
     const url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove();
@@ -91,8 +101,16 @@
   }
   const fail = error => toast(errorText(error), { error: true });
 
-  /* ---------- mobile rail ---------- */
-  let railOpen = false, railFocus = null;
+  /* ---------- rail: mobile drawer and desktop collapse ---------- */
+  let railOpen = false, railFocus = null, collapsed = false;
+  try { collapsed = localStorage.getItem('zearch:rail') === 'collapsed'; } catch {}
+  function setCollapsed(value, persist = true) {
+    collapsed = Boolean(value);
+    $('shell').classList.toggle('rail-collapsed', collapsed);
+    const toggle = $('rail-toggle');
+    toggle.setAttribute('aria-expanded', String(!collapsed)); toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    if (persist) { try { localStorage.setItem('zearch:rail', collapsed ? 'collapsed' : 'expanded'); } catch {} }
+  }
   function setRail(open) {
     const wasOpen = railOpen; railOpen = Boolean(open) && mobile.matches;
     $('shell').classList.toggle('rail-open', railOpen);
@@ -113,9 +131,38 @@
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
 
+  /* ---------- popover menus (topbar options, composer "More") ---------- */
+  function popMenu(trigger, menu) {
+    const items = () => [...menu.querySelectorAll('[role=menuitem]')];
+    const close = restore => {
+      if (menu.hidden) return;
+      menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); if (restore) trigger.focus();
+    };
+    const open = last => {
+      menu.hidden = false; trigger.setAttribute('aria-expanded', 'true');
+      const list = items(); (last ? list.at(-1) : list[0])?.focus();
+    };
+    trigger.addEventListener('click', () => (menu.hidden ? open(false) : close(true)));
+    trigger.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (menu.hidden) open(event.key === 'ArrowUp'); }
+    });
+    menu.addEventListener('keydown', event => {
+      const list = items(), at = list.indexOf(document.activeElement);
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
+      else if (event.key === 'Tab') close(false);
+      else if (event.key === 'ArrowDown') { event.preventDefault(); list[(at + 1) % list.length].focus(); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); list[(at - 1 + list.length) % list.length].focus(); }
+      else if (event.key === 'Home') { event.preventDefault(); list[0].focus(); }
+      else if (event.key === 'End') { event.preventDefault(); list.at(-1).focus(); }
+    });
+    menu.addEventListener('click', event => { if (event.target.closest('[role=menuitem]')) close(false); });
+    document.addEventListener('click', event => { if (!menu.hidden && !menu.contains(event.target) && !trigger.contains(event.target)) close(false); });
+    return { close };
+  }
+
   /* ---------- composer ---------- */
   function focusQuery() {
-    if (openDialog() || coarse.matches) return;
+    if (openDialog() || coarse.matches || surface !== 'research') return;
     const at = document.activeElement;
     if (!at || at === document.body || form.contains(at)) query.focus();
   }
@@ -125,6 +172,23 @@
     $('followup').title = parentLabel ? 'Follow-up to: ' + parentLabel : '';
   }
   function setParent(id, label) { parent = id || null; parentLabel = id ? core.truncate(label, 90) : ''; syncChip(); }
+  const chips = [...document.querySelectorAll('#mode-chips .mode-chip')];
+  /* The hidden #depth select stays the source of truth for the mode; the chips mirror it. */
+  function setMode(mode) {
+    if ($('depth').value === mode) return;
+    $('depth').value = mode; $('depth').dispatchEvent(new Event('change'));
+  }
+  for (const chip of chips) {
+    chip.addEventListener('click', () => { setMode(chip.dataset.mode); });
+    chip.addEventListener('keydown', event => {
+      const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+      if (!step && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const at = chips.indexOf(chip), next = event.key === 'Home' ? chips[0] : event.key === 'End' ? chips.at(-1) : chips[(at + step + chips.length) % chips.length];
+      setMode(next.dataset.mode); next.focus();
+    });
+  }
+  let pillText = '';
   function controls() {
     const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
     $('target-url').hidden = !collecting;
@@ -139,64 +203,125 @@
     $('decide').setAttribute('aria-label', active ? 'Stop research' : action);
     $('decide').dataset.busy = String(Boolean(active));
     $('depth').disabled = Boolean(active); $('use-knowledge').disabled = Boolean(active) || !workspaceReady || collecting;
+    for (const chip of chips) {
+      const on = chip.dataset.mode === mode;
+      chip.setAttribute('aria-checked', String(on)); chip.tabIndex = on ? 0 : -1; chip.disabled = Boolean(active);
+    }
+    $('depth-hint-text').textContent = DEPTH_HINT[mode] || '';
     $('mode-help').textContent = MODE_HELP[mode] || '';
     const allowance = workspaceData.allowance;
     if (allowance && Number.isFinite(allowance.daily_limit) && Number.isFinite(allowance.used)) {
       const left = Math.max(0, allowance.daily_limit - allowance.used);
-      $('allowance').textContent = `${left} of ${allowance.daily_limit} runs left today`;
-    } else $('allowance').textContent = '';
+      $('allowance-chip').hidden = false;
+      $('allowance').textContent = `${allowance.used}/${allowance.daily_limit} runs today`;
+      $('allowance-chip').title = `${left} of ${allowance.daily_limit} runs left today. Resets ${allowance.reset}.`;
+      $('menu-allowance').textContent = `${left} of ${allowance.daily_limit} runs left today`;
+    } else { $('allowance-chip').hidden = true; $('allowance').textContent = ''; $('menu-allowance').textContent = ''; }
+    const running = Math.max(Number(workspaceData.running) || 0, active ? 1 : 0), text = running === 1 ? '1 run in progress' : `${running} runs in progress`;
+    $('runs-pill').hidden = running < 1;
+    if (running >= 1 && text !== pillText) $('runs-pill-text').textContent = text;
+    pillText = running >= 1 ? text : '';
     const length = query.value.length, counter = $('char-count');
     counter.hidden = length < 1600; counter.textContent = `${length} / ${query.maxLength}`;
     query.style.height = 'auto'; query.style.height = Math.min(query.scrollHeight, 180) + 'px';
   }
 
-  /* ---------- recent searches ---------- */
+  /* ---------- recent research: compact rail list and the Home timeline ---------- */
   function persistHistory() {
-    try {
-      localStorage.setItem('zearch:research-history', JSON.stringify(recent));
-      localStorage.setItem('zearch:history-hidden', JSON.stringify([...hidden].slice(-500)));
-    } catch {}
+    try { localStorage.setItem('zearch:research-history', JSON.stringify(recent)); } catch {}
     listHistory();
   }
   function listHistory() {
     const list = $('history'); list.replaceChildren();
-    const items = recent.filter(x => !hidden.has(x.id));
-    for (const item of items) {
+    for (const item of recent.slice(0, 5)) {
       const li = make('li'), control = make('button', 'h-q', item.query);
       control.type = 'button'; control.title = item.query;
-      if (item.id === shownId) control.setAttribute('aria-current', 'page');
+      if (item.id === shownId && surface === 'research') control.setAttribute('aria-current', 'page');
       control.onclick = () => openRun(item.id);
       li.append(control); list.append(li);
     }
+    list.hidden = !list.children.length;
+    renderRecent();
+  }
+  function renderRecent() {
+    const section = $('recent'), list = $('recent-list'); list.replaceChildren();
+    section.hidden = !workspaceLoaded;
+    const items = (workspaceData.history || []).filter(x => core.isRunId(x.id)).slice(0, 5);
+    $('recent-more').hidden = !items.length;
+    for (const item of items) {
+      const li = make('li', 'tl-item'), dot = make('span', 'dot'), meta = make('span', 'tl-meta');
+      dot.dataset.tone = core.statusTone(item.status); dot.setAttribute('aria-hidden', 'true');
+      const title = make('button', 'tl-title', item.query); title.type = 'button'; title.title = item.query;
+      title.onclick = () => openRun(item.id);
+      meta.textContent = [core.statusLabel(item.status), core.relativeTime(item.created)].filter(Boolean).join(' · ');
+      li.append(dot, title, meta); list.append(li);
+    }
     if (!items.length) {
-      const li = make('li', 'h-empty', 'Your searches will appear here.'); list.append(li);
+      const li = make('li', 'tl-empty'), ask = make('button', 'link-btn', 'Ask your first question'); ask.type = 'button';
+      ask.onclick = () => { query.focus(); };
+      li.append(make('span', '', 'Nothing here yet. '), ask); list.append(li);
     }
   }
   function remember(run) {
-    hidden.delete(run.id);
     recent = [{ id: run.id, query: run.query }, ...recent.filter(x => x.id !== run.id)].slice(0, 100);
     persistHistory();
   }
 
   /* ---------- views and routing ---------- */
+  function syncTitle() {
+    const name = surface === 'research' ? currentTitle : VIEW_TITLES[surface];
+    document.title = name ? `${core.truncate(name, 70)} — Zearch` : DEFAULT_TITLE;
+  }
   function setTitle(text) {
-    const short = text ? core.truncate(text, 70) : '';
-    document.title = short ? `${short} — Zearch` : DEFAULT_TITLE;
-    $('crumb-title').textContent = short || 'New search';
-    const heading = $('thread-title'); heading.hidden = !short; heading.textContent = short;
+    currentTitle = text ? core.truncate(text, 70) : '';
+    const heading = $('thread-title'); heading.hidden = !currentTitle; heading.textContent = currentTitle;
+    syncTitle();
+  }
+  /* One place decides what is on screen: the Research feed (home or an answer) or one view panel. */
+  function showSurface(name, options = {}) {
+    if (!SURFACE_NODE[name]) name = 'research';
+    const changed = surface !== name; surface = name;
+    for (const [key, id] of Object.entries(SURFACE_NODE)) $(id).hidden = key !== name;
+    document.querySelector('.dock').hidden = name !== 'research';
+    $('main').dataset.surface = name;
+    for (const link of document.querySelectorAll('#rail .nav-item[data-view]')) {
+      const on = link.dataset.view === (name === 'research' ? 'home' : name);
+      if (on) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+    }
+    const tabbed = name === 'research' || name === 'overview';
+    $('subbar').hidden = !tabbed;
+    for (const [key, tab] of [['research', $('tab-research')], ['overview', $('tab-overview')]]) {
+      tab.setAttribute('aria-selected', String(key === name)); tab.tabIndex = key === name ? 0 : -1;
+    }
+    syncTitle(); listHistory();
+    if (name !== 'research') {
+      if (name === 'overview') loadStats(); else if (!workspaceLoaded || Date.now() - lastWorkspaceLoad > 2000) { if (!workspaceLoaded) showWorkspaceSkeleton(); loadWorkspace(false); }
+      if (options.focus !== false && changed) $(SURFACE_NODE[name]).focus({ preventScroll: true });
+      $(SURFACE_NODE[name]).scrollTop = 0;
+    }
+  }
+  function goView(name) {
+    if (location.hash === core.viewHash(name)) route(true); else window.history.pushState(null, '', core.viewHash(name)), route(true);
   }
   function showThread() {
     empty.classList.add('hidden'); form.classList.remove('home-composer'); dock.append(form, fine);
   }
   function showHomeLayout() {
-    empty.classList.remove('hidden'); empty.insertBefore(form, notice); empty.insertBefore(fine, notice); form.classList.add('home-composer');
+    empty.classList.remove('hidden'); $('composer-slot').append(form, fine); form.classList.add('home-composer');
   }
   function home(options = {}) {
-    if (active) return;
+    if (active) {
+      const current = active.runId ? '#r/' + active.runId : '';
+      if (location.hash !== current) window.history.replaceState(null, '', current || location.pathname + location.search);
+      showSurface('research', { focus: false }); return;
+    }
     version++; setParent(null); shownId = null; shownIds.clear();
     thread.replaceChildren(); showHomeLayout(); notice.textContent = availabilityMessage;
-    if (options.push) { if (location.hash) window.history.pushState(null, '', location.pathname + location.search); }
-    else if (location.hash) window.history.replaceState(null, '', location.pathname + location.search);
+    if (!options.keepSurface) {
+      if (options.push) { if (location.hash) window.history.pushState(null, '', location.pathname + location.search); }
+      else if (location.hash) window.history.replaceState(null, '', location.pathname + location.search);
+      showSurface('research', { focus: false });
+    }
     setTitle(null); query.value = ''; $('target-url').value = ''; controls(); listHistory(); setRail(false);
     if (options.focus !== false) focusQuery();
   }
@@ -212,6 +337,7 @@
   async function route(force) {
     await sessionPromise;
     const target = core.parseRoute(location.hash);
+    if (target.type === 'view') { showSurface(target.view); return; }
     if (active) {
       // Back/forward during a run: keep the URL in step with what is on screen.
       const current = active.runId ? '#r/' + active.runId : '';
@@ -219,11 +345,12 @@
         window.history.replaceState(null, '', current || location.pathname + location.search);
         if (target.type !== 'other') toast('Stop the current research before opening another answer.');
       }
+      if (target.type !== 'other') showSurface('research', { focus: false });
       return;
     }
     if (target.type === 'other') return;
-    if (target.type === 'home') { if (shownId || thread.childElementCount || force === true) home(); return; }
-    if (force !== true && target.id === shownId) return;
+    if (target.type === 'home') { if (shownId || thread.childElementCount || force === true) home(); else showSurface('research', { focus: false }); return; }
+    if (force !== true && target.id === shownId) { showSurface('research', { focus: false }); return; }
     const revision = ++version;
     try {
       const records = [], seen = new Set(); let next = target.id;
@@ -236,7 +363,7 @@
       if (revision !== version) return;
       thread.replaceChildren(); showThread(); shownIds.clear(); records.forEach(record => shownIds.add(record.id));
       const views = records.map(record => turn(record)), last = records.at(-1);
-      shownId = target.id; setTitle(last?.query || ''); listHistory();
+      shownId = target.id; showSurface('research', { focus: false }); setTitle(last?.query || ''); listHistory();
       setParent(last?.status === 'complete' ? target.id : null, last?.query || '');
       if (next) toast('Showing the latest 20 answers.');
       const view = views.at(-1);
@@ -302,10 +429,17 @@
     sentTo = ''; clearInterval(resendTimer);
     $('account-code-form').hidden = true; $('account-email-form').hidden = false; $('account-email').focus();
   }
+  function renderAccountCard() {
+    const email = accountData.account && accountData.account.email;
+    $('account-avatar').textContent = email ? email.trim().charAt(0).toUpperCase() : 'G';
+    $('account-name').textContent = email || 'Guest';
+    $('account-sub').textContent = email ? 'Signed in' : accountData.enabled ? 'Sign in to keep your research' : 'Private to this browser';
+    $('account-card').setAttribute('aria-label', `Account and data: ${email || 'Guest'}`);
+  }
   async function loadAccount() {
     try {
       const data = await core.fetchJson('/api/account');
-      accountData = data;
+      accountData = data; renderAccountCard();
       $('account-section').hidden = !data.enabled;
       $('workspace-identity').textContent = data.account ? `Signed in as ${data.account.email}. Your research follows this account across devices.` :
         data.enabled ? 'Private to this browser until you sign in. You can move its research into your account.' :
@@ -316,7 +450,7 @@
       $('claim-workspace').hidden = !data.account || !data.claim_available;
       $('account-signout').hidden = !data.account;
       $('account-delete').hidden = !data.account;
-    } catch { $('account-section').hidden = true; }
+    } catch { $('account-section').hidden = true; accountData = { enabled: false, account: null }; renderAccountCard(); }
   }
 
   /* ---------- citation preview ---------- */
@@ -797,7 +931,10 @@
       } else {
         view.run.status = 'interrupted'; view.run.error = failure; view.update();
       }
-    } finally { active = null; controls(); focusQuery(); loadWorkspace(false); }
+    } finally {
+      active = null; controls(); focusQuery(); loadWorkspace(false);
+      statsState.stale = true; if (surface === 'overview') loadStats();
+    }
   }
 
   /* ---------- workspace ---------- */
@@ -813,6 +950,36 @@
     for (const id of LISTS) {
       const list = $(id); list.replaceChildren();
       for (let i = 0; i < 2; i++) { const li = make('li', 'skeleton'); li.setAttribute('aria-hidden', 'true'); list.append(li); }
+    }
+  }
+  function renderLibrary() {
+    const list = $('research-list'), all = workspaceData.history || [], needle = $('library-search').value.trim().toLowerCase();
+    const items = all.filter(item => core.isRunId(item.id) && (!needle || String(item.query).toLowerCase().includes(needle)));
+    list.replaceChildren();
+    $('library-count').textContent = !all.length ? '' : needle ? `${items.length} of ${all.length} shown` : `${all.length} saved`;
+    for (const item of items) {
+      const li = make('li', 'library-item'), dot = make('span', 'dot'), meta = make('span', 'lib-meta');
+      dot.dataset.tone = core.statusTone(item.status); dot.setAttribute('aria-hidden', 'true');
+      const seconds = core.toSeconds(item.created);
+      meta.textContent = [core.statusLabel(item.status), seconds ? new Date(seconds * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''].filter(Boolean).join(' · ');
+      if (seconds) meta.title = new Date(seconds * 1000).toLocaleString();
+      const open = button(item.query, () => openRun(item.id), 'workspace-title', `Open answer: ${item.query}`);
+      const del = button('Delete', async () => {
+        if (active) throw Error('Wait for the current research to finish.');
+        if (!window.confirm('Delete this answer and its evidence from the server? Follow-up answers derived from it will be redacted.')) return;
+        await api('delete_run', { id: item.id });
+        if (parent === item.id) setParent(null);
+        if (shownIds.has(item.id)) home({ focus: false, keepSurface: surface !== 'research' });
+        recent = recent.filter(x => x.id !== item.id); persistHistory();
+        await loadWorkspace(); toast('Answer deleted');
+      }, 'ghost-btn', `Delete answer: ${item.query}`);
+      li.append(dot, open, meta, del); list.append(li);
+    }
+    if (!items.length) {
+      const li = make('li', 'empty-note');
+      li.append(make('span', '', all.length ? `No saved answers match “${core.truncate(needle, 40)}”.` : EMPTY['research-list'] + ' '));
+      if (!all.length) { const ask = make('button', 'solid-btn', 'Ask a question'); ask.type = 'button'; ask.onclick = () => home({ push: true }); li.append(ask); }
+      list.append(li);
     }
   }
   function renderWorkspace() {
@@ -831,19 +998,7 @@
         await api('delete_document', { id: item.id }); await loadWorkspace(); toast('Document deleted');
       }, 'ghost-btn', `Delete document: ${item.filename}`)); $('documents-list').append(li);
     }
-    for (const item of data.history || []) {
-      const li = make('li');
-      li.append(button(item.query, () => openRun(item.id), 'workspace-title', `Open answer: ${item.query}`));
-      li.append(button('Delete', async () => {
-        if (active) throw Error('Wait for the current research to finish.');
-        if (!window.confirm('Delete this answer and its evidence from the server? Follow-up answers derived from it will be redacted.')) return;
-        await api('delete_run', { id: item.id });
-        if (parent === item.id) setParent(null);
-        if (shownIds.has(item.id)) home({ focus: false });
-        recent = recent.filter(x => x.id !== item.id); persistHistory();
-        await loadWorkspace(); toast('Answer deleted');
-      }, 'ghost-btn', `Delete answer: ${item.query}`)); $('research-list').append(li);
-    }
+    renderLibrary();
     for (const item of data.investigations || []) {
       const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
       li.append(make('p', 'workspace-title', `${item.depth === 'scrape' || item.depth === 'crawl' ? 'Site monitor' : 'Investigation'} · ${item.query}`));
@@ -898,7 +1053,7 @@
       const data = await core.fetchJson('/api/workspace');
       if (seq !== workspaceSeq) return;   // a newer load is in flight or finished
       workspaceData = { notes: [], documents: [], investigations: [], batches: [], history: [], ...data };
-      workspaceReady = true; workspaceLoaded = true;
+      workspaceReady = true; workspaceLoaded = true; lastWorkspaceLoad = Date.now();
       recent = (workspaceData.history || []).filter(x => core.isRunId(x.id)).map(x => ({ id: x.id, query: x.query })).slice(0, 100);
       persistHistory(); renderWorkspace(); controls();
     } catch (error) {
@@ -909,11 +1064,12 @@
     }
   }
   function openWorkspace() {
-    $('workspace').showModal(); closeRail();
+    const dialog = $('workspace'); if (openDialog() && openDialog() !== dialog) openDialog().close();
+    dialog.showModal(); closeRail();
     if (!workspaceLoaded) showWorkspaceSkeleton();
     loadWorkspace(); loadAccount();
   }
-  $('btn-workspace').onclick = openWorkspace;
+  $('account-card').onclick = openWorkspace; $('menu-account').onclick = openWorkspace;
   $('workspace-close').onclick = () => $('workspace').close();
   $('note-form').onsubmit = async event => {
     event.preventDefault(); const submitter = event.submitter; submitter.disabled = true;
@@ -982,7 +1138,7 @@
     try { await accountApi('claim_workspace'); await loadWorkspace(); await loadAccount(); toast('Browser research moved to your account'); }
     catch (error) { fail(error); } finally { control.disabled = false; }
   };
-  const afterIdentityChange = () => { recent = []; hidden = new Set(); persistHistory(); home({ focus: false }); };
+  const afterIdentityChange = () => { recent = []; statsState.data = null; persistHistory(); home({ focus: false, keepSurface: surface !== 'research' }); };
   $('account-signout').onclick = async () => {
     if (active) { toast('Wait for the current research to finish.'); return; }
     try { await accountApi('sign_out'); afterIdentityChange(); await loadAccount(); await loadWorkspace(); toast('Signed out'); }
@@ -994,8 +1150,8 @@
     try { await accountApi('delete_account'); afterIdentityChange(); await loadAccount(); await loadWorkspace(); toast('Account deleted'); }
     catch (error) { fail(error); }
   };
-  $('export-workspace').onclick = async () => {
-    const control = $('export-workspace'); control.disabled = true;
+  async function exportWorkspace(control) {
+    control.disabled = true;
     try {
       const exportData = { version: 1, exported_at: new Date().toISOString(), account: null, notes: [], documents: [], investigations: [], runs: [] };
       let cursor = null, pages = 0;
@@ -1010,7 +1166,9 @@
       saveBlob(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }), 'zearch-workspace.json');
       toast('Download started');
     } catch (error) { fail(error); } finally { control.disabled = false; }
-  };
+  }
+  $('export-workspace').onclick = () => exportWorkspace($('export-workspace'));
+  $('menu-export').onclick = () => exportWorkspace($('menu-export'));
   $('delete-workspace').onclick = async () => {
     if (active) { toast('Wait for the current research to finish.'); return; }
     if (!window.confirm('Permanently delete all saved answers, notes, investigations and evidence in this browser workspace?')) return;
@@ -1019,6 +1177,299 @@
       await api('delete_workspace'); afterIdentityChange(); await loadWorkspace(); toast('Workspace deleted');
     } catch (error) { fail(error); } finally { control.disabled = false; }
   };
+
+  /* ---------- overview: analytics computed from the owner's own runs ---------- */
+  const statsState = { days: 30, status: 'idle', data: null, error: '', stale: false, sort: { key: 'created', dir: 'desc' } };
+  let statsSeq = 0, overviewBuilt = false, overviewFocus = null;
+  const overviewContent = () => $('overview-content');
+  function buildOverview() {
+    if (overviewBuilt) return; overviewBuilt = true;
+    const body = $('overview-body'), head = make('header', 'view-head');
+    const title = make('div'); title.append(make('h1', '', 'Overview'), make('p', 'hint', 'Computed from your own runs. Nothing here is estimated beyond what each figure says.'));
+    const range = make('div', 'segmented', ''); range.id = 'stats-range'; range.setAttribute('role', 'group'); range.setAttribute('aria-label', 'Time range');
+    for (const days of [7, 30]) {
+      const choice = make('button', '', `Last ${days} days`); choice.type = 'button'; choice.dataset.days = String(days);
+      choice.onclick = () => { if (statsState.days === days) return; statsState.data = null; statsState.days = days; loadStats(days); };
+      range.append(choice);
+    }
+    head.append(title, range);
+    const content = make('div', 'overview-content'); content.id = 'overview-content';
+    body.append(head, content);
+  }
+  async function loadStats(days = statsState.days) {
+    buildOverview();
+    const seq = ++statsSeq; statsState.days = days; statsState.stale = false;
+    if (!statsState.data) statsState.status = 'loading';
+    renderOverview();
+    try {
+      const data = await core.fetchJson('/api/workspace?stats=1&days=' + days);
+      if (seq !== statsSeq) return;
+      statsState.data = data; statsState.status = 'ready'; statsState.error = '';
+    } catch (error) {
+      if (seq !== statsSeq) return;
+      statsState.status = statsState.data ? 'ready' : 'error'; statsState.error = errorText(error);
+      if (statsState.data) toast('Could not refresh the overview. Showing the last figures loaded.', { error: true });
+    }
+    renderOverview();
+  }
+  function skeleton(cls) { const node = make('div', 'skeleton ' + (cls || '')); node.setAttribute('aria-hidden', 'true'); return node; }
+  function legend(parts) {
+    const list = make('ul', 'legend');
+    for (const [label, count, tone] of parts) {
+      const li = make('li'), swatch = make('span', 'swatch'); swatch.dataset.tone = tone; swatch.setAttribute('aria-hidden', 'true');
+      li.append(swatch, make('span', '', label), make('b', '', String(count))); list.append(li);
+    }
+    return list;
+  }
+  function stack(counts, keys, labels, tones, describe) {
+    const parts = core.segments(counts, keys), bar = make('div', 'stack');
+    bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', describe);
+    for (const part of parts) {
+      if (!part.count) continue;
+      const seg = make('span', 'seg'); seg.dataset.tone = tones[part.key]; seg.style.flexGrow = String(part.count); bar.append(seg);
+    }
+    if (!parts.length) bar.classList.add('stack-empty');
+    return { bar, legend: legend(keys.map(key => [labels[key], Number(counts[key]) || 0, tones[key]])) };
+  }
+  function statCard(name, value, sub, foot) {
+    const card = make('article', 'card stat'), title = make('h3', 'stat-title', name);
+    card.append(title, make('p', 'stat-value', value), make('p', 'stat-sub', sub || ''));
+    const slot = make('div', 'stat-visual'); card.append(slot);
+    if (foot) card.append(make('p', 'stat-foot', foot));
+    card.visual = slot; return card;
+  }
+  function spark(values, label) {
+    const points = core.sparkPoints(values, 120, 32, 3);
+    if (!points) return null;
+    const svg = document.createElementNS(svgNS, 'svg'), line = document.createElementNS(svgNS, 'polyline');
+    svg.setAttribute('viewBox', '0 0 120 32'); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('class', 'spark'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label);
+    line.setAttribute('points', points); svg.append(line);
+    return svg;
+  }
+  const runsWord = count => `${count} ${count === 1 ? 'run' : 'runs'}`;
+  function statusPill(status) {
+    const pill = make('span', 'pill'); pill.dataset.tone = core.statusTone(status);
+    const dot = make('span', 'dot'); dot.setAttribute('aria-hidden', 'true'); pill.append(dot, make('span', '', core.statusLabel(status))); return pill;
+  }
+  function renderActivity(data) {
+    const card = make('section', 'card activity'), head = make('header', 'section-head'), rows = core.sortActivity(data.activity || [], statsState.sort.key, statsState.sort.dir);
+    card.setAttribute('aria-labelledby', 'activity-title');
+    const shown = rows.length, total = data.totals.runs;
+    head.append(make('h2', '', 'Activity log'), make('span', 'hint', shown < total ? `Latest ${shown} of ${total} runs` : runsWord(total)));
+    head.firstChild.id = 'activity-title'; card.append(head);
+    const wrap = make('div', 'table-wrap'), table = make('table', 'log');
+    table.append(Object.assign(make('caption', 'sr-only', 'Recent runs. Use the column buttons to sort.')));
+    const thead = make('thead'), tr = make('tr');
+    const columns = [['created', 'Time'], ['query', 'Question'], ['depth', 'Mode'], ['status', 'Status'], ['total_ms', 'Duration'], ['sources', 'Sources']];
+    for (const [key, label] of columns) {
+      const th = make('th'); th.scope = 'col'; th.dataset.col = key;
+      const active = statsState.sort.key === key;
+      th.setAttribute('aria-sort', active ? (statsState.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+      const sort = make('button', 'th-sort'); sort.type = 'button'; sort.dataset.sort = key; sort.append(make('span', '', label), icon('sort'));
+      sort.onclick = () => {
+        const same = statsState.sort.key === key;
+        statsState.sort = { key, dir: same ? (statsState.sort.dir === 'desc' ? 'asc' : 'desc') : (['query', 'depth', 'status'].includes(key) ? 'asc' : 'desc') };
+        overviewFocus = `[data-sort="${key}"]`; renderOverview();
+      };
+      th.append(sort); tr.append(th);
+    }
+    thead.append(tr); table.append(thead);
+    const tbody = make('tbody');
+    for (const row of rows) {
+      const line = make('tr'), seconds = core.toSeconds(row.created);
+      const cell = (label, node) => { const td = make('td'); td.dataset.label = label; td.append(node); line.append(td); return td; };
+      const time = make('time', '', core.relativeTime(row.created));
+      if (seconds) { time.dateTime = new Date(seconds * 1000).toISOString(); time.title = new Date(seconds * 1000).toLocaleString(); }
+      cell('Time', time);
+      const open = make('button', 'row-link', row.query); open.type = 'button'; open.title = row.query;
+      open.setAttribute('aria-label', `Open answer: ${row.query}`); open.onclick = () => openRun(row.id);
+      cell('Question', open).classList.add('q');
+      cell('Mode', make('span', '', core.modeLabel(row.depth)));
+      cell('Status', statusPill(row.status));
+      cell('Duration', make('span', 'num', core.formatMs(row.total_ms)));
+      cell('Sources', make('span', 'num', row.status === 'redacted' ? '—' : String(row.sources ?? '—')));
+      tbody.append(line);
+    }
+    table.append(tbody); wrap.append(table); card.append(wrap);
+    return card;
+  }
+  function renderOverview() {
+    buildOverview();
+    for (const choice of $('stats-range').children) choice.setAttribute('aria-pressed', String(Number(choice.dataset.days) === statsState.days));
+    const host = overviewContent(); host.replaceChildren(); host.setAttribute('aria-busy', String(statsState.status === 'loading'));
+    if (statsState.status === 'loading' || statsState.status === 'idle') {
+      const grid = make('div', 'stat-grid');
+      for (let i = 0; i < 4; i++) grid.append(skeleton('sk-card'));
+      host.append(grid, skeleton('sk-wide')); return;
+    }
+    if (statsState.status === 'error') {
+      const card = make('div', 'card empty-card'); card.setAttribute('role', 'alert');
+      card.append(make('h2', '', 'Overview is not available right now'), make('p', 'hint', statsState.error || 'Please try again in a moment.'));
+      const retry = make('button', 'ghost-btn', 'Try again'); retry.type = 'button'; retry.onclick = () => loadStats(); card.append(retry); host.append(card); return;
+    }
+    const data = statsState.data, totals = data.totals || {}, measured = data.measured || {};
+    if (!totals.runs) {
+      const card = make('div', 'card empty-card');
+      card.append(make('h2', '', `No research in the last ${statsState.days} days`),
+        make('p', 'hint', statsState.days === 7 ? 'Try the last 30 days, or ask a question. Overview is computed from your own runs.' : 'Ask a question and this page fills in with the checks, timings and sources of your own runs. Nothing is shown until then.'));
+      const start = make('button', 'solid-btn', 'Start researching'); start.type = 'button'; start.onclick = () => home({ push: true }); card.append(start); host.append(card); return;
+    }
+    const parts = [runsWord(totals.runs)];
+    for (const [key, label] of [['complete', 'complete'], ['interrupted', 'interrupted'], ['error', 'with errors'], ['redacted', 'redacted']]) if (totals[key]) parts.push(`${totals[key]} ${label}`);
+    host.append(make('p', 'overview-summary', `${parts.join(' · ')} in the last ${data.days || statsState.days} days`));
+    const grid = make('div', 'stat-grid');
+    // Verified answers
+    const verified = statCard('Verified answers', core.formatPercent(data.verified_rate), data.verified_rate === null || data.verified_rate === undefined ? 'No checked answers yet' : 'had direct evidence',
+      measured.gates ? `Across ${measured.gates} checked ${measured.gates === 1 ? 'answer' : 'answers'}` : 'Older runs carry no evidence check');
+    const gates = data.gates || {}, gateStack = stack(gates, ['answer', 'review', 'abstain'], { answer: 'Answered', review: 'Needs review', abstain: 'Withheld' },
+      { answer: 'ok', review: 'warn', abstain: 'idle' }, `Checked answers: ${gates.answer || 0} answered, ${gates.review || 0} need review, ${gates.abstain || 0} withheld`);
+    verified.visual.append(gateStack.bar, gateStack.legend);
+    // Latency
+    const latency = data.latency_ms || {}, times = (data.activity || []).map(row => row.total_ms).filter(v => typeof v === 'number').reverse();
+    const speed = statCard('Research time', core.formatMs(latency.p50), latency.p95 != null ? `median · 95% under ${core.formatMs(latency.p95)}` : 'median',
+      measured.latency ? `Across ${measured.latency} timed ${measured.latency === 1 ? 'run' : 'runs'}` : 'Older runs carry no timing');
+    const line = spark(times, `Research time of the latest ${times.length} timed runs, oldest to newest, from ${core.formatMs(times[0])} to ${core.formatMs(times.at(-1))}`);
+    if (line) { speed.visual.append(line, make('p', 'spark-cap', `Latest ${times.length} runs, oldest to newest`)); }
+    // Cost
+    const cost = data.cost_usd || {};
+    const spend = statCard('Estimated cost', measured.cost ? core.formatCost(cost.total) : '—', cost.average != null ? `${core.formatCost(cost.average)} average per run` : 'No cost data yet',
+      measured.cost ? `Across ${measured.cost} ${measured.cost === 1 ? 'run' : 'runs'} with cost data. An estimate, not a bill.` : 'Older runs carry no cost data');
+    // Source mix
+    const tiers = data.source_tiers || {}, tierTotal = (tiers.primary || 0) + (tiers.web || 0) + (tiers.private || 0);
+    const mix = statCard('Source mix', tierTotal ? String(tierTotal) : '—', tierTotal ? `cited ${tierTotal === 1 ? 'source' : 'sources'}` : 'No cited sources yet',
+      measured.tiers ? `Across ${measured.tiers} ${measured.tiers === 1 ? 'run' : 'runs'} with sources` : 'Older runs carry no source data');
+    const tierStack = stack(tiers, ['primary', 'web', 'private'], { primary: 'Primary publisher', web: 'Web', private: 'Your notes' },
+      { primary: 'c1', web: 'c2', private: 'c3' }, `Cited sources: ${tiers.primary || 0} primary, ${tiers.web || 0} web, ${tiers.private || 0} from your notes`);
+    mix.visual.append(tierStack.bar, tierStack.legend);
+    grid.append(verified, speed, spend, mix); host.append(grid);
+    // Runs per day + insights
+    const split = make('div', 'overview-split');
+    const daily = data.daily || [], heights = core.barHeights(daily), peak = Math.max(0, ...daily.map(d => d.runs || 0));
+    const chart = make('section', 'card'), chartHead = make('header', 'section-head');
+    chart.setAttribute('aria-labelledby', 'daily-title');
+    chartHead.append(make('h2', '', 'Runs per day'), make('span', 'hint', `Last ${daily.length} days`)); chartHead.firstChild.id = 'daily-title';
+    const bars = make('div', 'bars'); bars.setAttribute('role', 'img');
+    const sum = daily.reduce((n, d) => n + (d.runs || 0), 0), busiest = daily.reduce((best, d) => ((d.runs || 0) > (best.runs || 0) ? d : best), {});
+    bars.setAttribute('aria-label', `Runs per day over the last ${daily.length} days: ${sum} in total${peak ? `, busiest day ${busiest.day} with ${peak}` : ''}`);
+    daily.forEach((day, index) => {
+      const col = make('div', 'bar'); col.setAttribute('aria-hidden', 'true'); col.title = `${day.day}: ${runsWord(day.runs || 0)}`;
+      const fill = make('span', 'bar-fill'); fill.style.height = Math.max(day.runs ? 4 : 0, Math.round(heights[index] * 100)) + '%'; col.append(fill); bars.append(col);
+    });
+    const axis = make('div', 'bar-axis'); axis.setAttribute('aria-hidden', 'true');
+    const label = day => { const d = new Date(day + 'T00:00:00Z'); return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }); };
+    axis.append(make('span', '', daily.length ? label(daily[0].day) : ''), make('span', '', peak ? `Busiest: ${peak}` : 'No runs'), make('span', '', daily.length ? label(daily.at(-1).day) : ''));
+    chart.append(chartHead, bars, axis);
+    const modes = Object.entries(data.by_mode || {}).filter(([, count]) => count > 0);
+    if (modes.length) {
+      const list = make('ul', 'chip-list'); list.setAttribute('aria-label', 'Runs by mode');
+      for (const [mode, count] of modes) list.append(make('li', 'stat-chip', `${core.modeLabel(mode)} ${count}`));
+      chart.append(list);
+    }
+    const noticed = make('section', 'card insights'), noticedHead = make('header', 'section-head');
+    noticed.setAttribute('aria-labelledby', 'noticed-title');
+    noticedHead.append(make('h2', '', 'What Zearch noticed')); noticedHead.firstChild.id = 'noticed-title'; noticed.append(noticedHead);
+    const sentences = core.insights(data), list = make('ul', 'insight-list');
+    for (const sentence of sentences) list.append(make('li', '', sentence));
+    if (!sentences.length) list.append(make('li', 'hint', 'Not enough measured runs yet to say anything reliable.'));
+    noticed.append(list, make('p', 'hint', 'Written from your stored run data by fixed rules, not by a model.'));
+    split.append(chart, noticed); host.append(split);
+    host.append(renderActivity(data));
+    if (overviewFocus) { const target = host.querySelector(overviewFocus); overviewFocus = null; if (target) target.focus(); }
+  }
+
+  /* ---------- command palette ---------- */
+  const palette = $('palette'), paletteInput = $('palette-input'), paletteList = $('palette-list');
+  let paletteItems = [], paletteIndex = 0;
+  function startMode(mode, text) {
+    home({ push: true, focus: false }); setMode(mode);
+    if (text && mode !== 'scrape' && mode !== 'crawl') query.value = text;
+    controls(); (mode === 'scrape' || mode === 'crawl' ? $('target-url') : query).focus();
+  }
+  function paletteSource(needle) {
+    const go = hash => () => { if (hash === '') home({ push: true }); else goView(hash); };
+    const items = [
+      { label: 'New research', keywords: 'home ask question start', group: 'Go to', icon: 'plus', run: () => home({ push: true }) },
+      { label: 'Library', keywords: 'saved answers history delete', group: 'Go to', icon: 'library', run: go('library') },
+      { label: 'Knowledge', keywords: 'notes documents private', group: 'Go to', icon: 'knowledge', run: go('knowledge') },
+      { label: 'Monitors', keywords: 'investigations refresh schedule', group: 'Go to', icon: 'monitors', run: go('monitors') },
+      { label: 'Batches', keywords: 'collection pages urls', group: 'Go to', icon: 'batches', run: go('batches') },
+      { label: 'Overview', keywords: 'analytics stats insights activity', group: 'Go to', icon: 'overview', run: go('overview') },
+      { label: 'Settings', keywords: 'theme dark light motion', group: 'Open', icon: 'settings', run: () => $('settings').showModal() },
+      { label: 'Account and data', keywords: 'sign in export delete', group: 'Open', icon: 'user', run: openWorkspace },
+      { label: 'Help and About', keywords: 'about jev how it works', group: 'Open', icon: 'help', run: () => $('thesis').showModal() }
+    ];
+    for (const mode of ['standard', 'deep', 'compare', 'scrape', 'crawl']) {
+      items.push({ label: `${core.modeLabel(mode)} mode`, keywords: `start ${mode} research`, group: 'Start', icon: mode === 'standard' ? 'search' : mode === 'deep' ? 'deep' : mode, run: () => startMode(mode, '') });
+    }
+    const runs = (workspaceData.history || []).filter(x => core.isRunId(x.id)).slice(0, 100);
+    runs.forEach((item, index) => items.push({ label: item.query, group: 'Library', icon: 'library', meta: core.relativeTime(item.created), rank: -index * 0.01, run: () => openRun(item.id) }));
+    const shown = core.paletteFilter(items, needle, needle ? 12 : 10);
+    if (needle) {
+      const text = core.truncate(needle, 80);
+      shown.push({ label: `Search: ${text}`, group: 'Ask', icon: 'search', run: () => { startMode('standard', needle); form.requestSubmit(); } },
+        { label: `Deep research: ${text}`, group: 'Ask', icon: 'deep', run: () => { startMode('deep', needle); form.requestSubmit(); } });
+    }
+    return shown;
+  }
+  function renderPalette() {
+    paletteItems = paletteSource(paletteInput.value.trim());
+    paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
+    paletteList.replaceChildren();
+    paletteItems.forEach((item, index) => {
+      const li = make('li', 'palette-item'); li.id = 'palette-opt-' + index; li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', String(index === paletteIndex));
+      li.append(icon(item.icon), make('span', 'p-label', item.label), make('span', 'p-group', item.meta ? `${item.group} · ${item.meta}` : item.group));
+      li.onmousemove = () => { if (paletteIndex !== index) { paletteIndex = index; markPalette(); } };
+      li.onclick = () => runPalette(index);
+      paletteList.append(li);
+    });
+    if (!paletteItems.length) paletteList.append(Object.assign(make('li', 'palette-none', 'No matches. Try a shorter word.')));
+    markPalette();
+    $('palette-status').textContent = paletteItems.length ? `${paletteItems.length} results` : 'No results';
+  }
+  function markPalette() {
+    [...paletteList.querySelectorAll('[role=option]')].forEach((node, index) => {
+      node.setAttribute('aria-selected', String(index === paletteIndex));
+      if (index === paletteIndex) { node.scrollIntoView({ block: 'nearest' }); paletteInput.setAttribute('aria-activedescendant', node.id); }
+    });
+    if (!paletteItems.length) paletteInput.removeAttribute('aria-activedescendant');
+  }
+  function runPalette(index) {
+    const item = paletteItems[index]; if (!item) return;
+    palette.close(); closeRail(); item.run();
+  }
+  function openPalette() {
+    if (palette.open) return;
+    const other = openDialog(); if (other) return;
+    paletteInput.value = ''; paletteIndex = 0; renderPalette(); palette.showModal(); paletteInput.focus();
+    if (!workspaceLoaded) loadWorkspace(false).then(() => { if (palette.open) renderPalette(); });
+  }
+  paletteInput.addEventListener('input', () => { paletteIndex = 0; renderPalette(); });
+  paletteInput.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault(); if (!paletteItems.length) return;
+      paletteIndex = (paletteIndex + (event.key === 'ArrowDown' ? 1 : -1) + paletteItems.length) % paletteItems.length; markPalette();
+    } else if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); runPalette(paletteIndex); }
+  });
+
+  /* ---------- settings: theme and motion ---------- */
+  function syncSettings() {
+    let theme = 'system', motion = false;
+    try { theme = core.normalizeTheme(localStorage.getItem('zearch:theme')); motion = localStorage.getItem('zearch:motion') === 'reduce'; } catch {}
+    for (const radio of document.querySelectorAll('input[name=theme]')) radio.checked = radio.value === theme;
+    $('reduce-motion').checked = motion;
+  }
+  function savePreference(key, value) {
+    try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch {}
+    try { core.applyPreferences(document, localStorage); } catch {}
+    const chosen = document.documentElement.getAttribute('data-theme');
+    for (const meta of document.querySelectorAll('meta[name=theme-color]')) {
+      if (!meta.dataset.base) meta.dataset.base = meta.getAttribute('content');
+      meta.setAttribute('content', chosen === 'dark' ? '#212121' : chosen === 'light' ? '#f6f7f9' : meta.dataset.base);
+    }
+  }
+  for (const radio of document.querySelectorAll('input[name=theme]')) radio.addEventListener('change', () => { if (radio.checked) savePreference('zearch:theme', radio.value === 'system' ? null : radio.value); });
+  $('reduce-motion').addEventListener('change', () => savePreference('zearch:motion', $('reduce-motion').checked ? 'reduce' : null));
 
   /* ---------- wiring ---------- */
   form.addEventListener('submit', submit); query.addEventListener('input', controls);
@@ -1030,13 +1481,28 @@
   });
   $('followup-clear').onclick = () => { setParent(null); query.focus(); };
   $('new-btn').onclick = () => home({ push: true }); $('brand').onclick = event => { event.preventDefault(); home({ push: true }); };
-  $('clear-history').onclick = () => {
-    for (const item of recent) hidden.add(item.id);
-    persistHistory(); toast('Recent searches hidden. Saved research is still in Your workspace.');
-  };
-  $('btn-settings').onclick = () => $('settings').showModal(); $('btn-thesis').onclick = () => $('thesis').showModal();
+  $('nav-home').onclick = event => { event.preventDefault(); home({ push: true }); };
+  $('recent-more').onclick = () => closeRail();
+  for (const link of document.querySelectorAll('#rail .nav-item[href^="#"]')) link.addEventListener('click', () => closeRail());
+  const openSettings = () => { const other = openDialog(); if (other) other.close(); syncSettings(); $('settings').showModal(); closeRail(); };
+  const openThesis = () => { closeRail(); $('thesis').showModal(); };
+  $('btn-settings').onclick = openSettings; $('menu-settings').onclick = openSettings; $('btn-thesis').onclick = openThesis;
+  $('settings-account').onclick = () => { $('settings').close(); openWorkspace(); };
+  $('rail-search').onclick = () => { closeRail(); openPalette(); };
+  $('rail-toggle').onclick = () => setCollapsed(!collapsed);
   $('menu-btn').onclick = () => setRail(true); $('rail-close').onclick = closeRail; $('scrim').onclick = closeRail;
-  $('skip-link').onclick = event => { event.preventDefault(); (query.hidden ? $('main') : query).focus(); };
+  popMenu($('more-btn'), $('more-menu')); popMenu($('more-modes'), $('more-modes-menu'));
+  $('library-search').addEventListener('input', renderLibrary);
+  $('tab-research').onclick = () => { if (surface === 'research') return; if (active) home(); else if (shownId) openRun(shownId); else home({ push: true }); };
+  $('tab-overview').onclick = () => goView('overview');
+  $('subbar').addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = [$('tab-research'), $('tab-overview')], at = tabs.indexOf(document.activeElement); if (at < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[1] : tabs[(at + 1) % 2];
+    next.focus(); next.click();
+  });
+  $('skip-link').onclick = event => { event.preventDefault(); (surface === 'research' && !empty.classList.contains('hidden') || surface === 'research' && !query.hidden ? query : $(SURFACE_NODE[surface])).focus(); };
   for (const dialog of document.querySelectorAll('dialog')) {
     let downOnBackdrop = false;
     dialog.addEventListener('mousedown', event => { downOnBackdrop = event.target === dialog; });
@@ -1051,7 +1517,7 @@
   document.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
-      if (!openDialog()) home({ push: true });
+      if (palette.open) palette.close(); else openPalette();
     }
     if (event.key === 'Escape') { hidePreview(); if (railOpen) closeRail(); }
   });
@@ -1060,12 +1526,17 @@
   const scheduleRoute = () => { if (routeQueued) return; routeQueued = true; setTimeout(() => { routeQueued = false; route(); }, 0); };
   window.addEventListener('hashchange', scheduleRoute);
   window.addEventListener('popstate', scheduleRoute);
-  STARTERS.forEach(([label, prompt, mode], index) => {
+  SHORTCUTS.forEach((card, index) => {
     const starter = make('button', 'starter'); starter.type = 'button'; starter.style.animationDelay = `${index * 40}ms`;
-    starter.append(make('span', 'starter-label', label), make('span', 'starter-prompt', prompt));
-    starter.onclick = () => { $('depth').value = mode; query.value = prompt; controls(); query.focus(); };
+    const head = make('span', 'starter-head'); head.append(icon(card.icon), make('span', 'starter-label', card.title));
+    starter.append(head, make('span', 'starter-text', card.text), make('span', 'starter-example', card.url ? card.example : `Try: ${card.example}`));
+    starter.onclick = () => {
+      setMode(card.mode); controls();
+      if (card.url) $('target-url').focus(); else { query.value = card.example; controls(); query.focus(); }
+    };
     $('starters').append(starter);
   });
+  setCollapsed(collapsed, false); syncSettings();
   setRail(false); listHistory(); controls(); syncChip();
 
   /* Initialize the session before enabling requests, so parallel first requests do not each mint a cookie. */
@@ -1076,7 +1547,7 @@
       available = Boolean(data.available);
       availabilityMessage = available ? '' : 'Research setup is incomplete. You can send a question to check its status.';
     } catch { availabilityMessage = 'Research is temporarily unavailable. Please try again later.'; }
-    finally { sessionReady = true; if (!thread.childElementCount) notice.textContent = availabilityMessage; controls(); }
+    finally { sessionReady = true; if (!thread.childElementCount) notice.textContent = availabilityMessage; controls(); loadAccount(); }
   })();
   route().then(() => { if (!shownId) focusQuery(); });
 })();
