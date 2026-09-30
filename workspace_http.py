@@ -20,9 +20,16 @@ def handle(handler, mutate=False):
             params = parse_qs(urlsplit(handler.path).query)
             if params.get('export') == ['1']:
                 return http.send_json(handler, 200, store.export_page(owner, params.get('cursor', [None])[0]), cookie)
+            if params.get('stats') == ['1']:
+                try:
+                    days = int(params.get('days', ['30'])[0])
+                except ValueError:
+                    days = 30
+                return http.send_json(handler, 200, store.stats(owner, days), cookie)
             return http.send_json(handler, 200, {'history': store.history(owner), 'notes': store.notes(owner),
                 'documents': store.documents(owner),
                 'investigations': store.saved(owner), 'allowance': store.allowance(owner),
+                'running': store.running_count(owner),
                 'batches': collection_batch.list_for(owner), 'discovery_enabled': discovery.enabled()}, cookie)
         try:
             length = http.content_length(handler.headers, 200000)

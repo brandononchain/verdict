@@ -164,6 +164,79 @@ def history(owner):
         return [dict(row) for row in db.execute(conn, marker, 'SELECT id,query,status,created FROM research_runs WHERE owner=? ORDER BY created DESC,id DESC LIMIT 100', (owner,)).fetchall()]
 
 
+def running_count(owner):
+    with db.connection() as (conn, marker):
+        return _running(conn, marker, owner)
+
+
+def _running(conn, marker, owner):
+    return db.execute(conn, marker, "SELECT COUNT(*) AS n FROM research_runs WHERE owner=? AND status IN ('pending','streaming') AND updated>?",
+                      (owner, db.active_cutoff())).fetchone()['n']
+
+
+MODES = ('standard', 'deep', 'compare', 'scrape', 'crawl')
+
+
+def _rate(part, whole):
+    return round(part / whole, 4) if whole else None
+
+
+def stats(owner, days=30):
+    """Owner-scoped aggregates over stored runs. Adds no prompt or answer text beyond the history query."""
+    import datetime
+    import usage_report as ur
+    utc = datetime.timezone.utc
+    days = max(1, min(90, int(days)))
+    now = int(time.time())
+    today = datetime.datetime.fromtimestamp(now, utc).date()
+    day_list = [(today - datetime.timedelta(days=n)).isoformat() for n in range(13, -1, -1)]
+    since = now - days * 86400
+    spark_from = int(datetime.datetime.combine(today - datetime.timedelta(days=13), datetime.time(), utc).timestamp())
+    with db.connection() as (conn, marker):
+        rows = [dict(r) for r in db.execute(conn, marker, """SELECT r.id,r.query,r.status,r.created,r.estimated_cost,r.usage,r.sources,o.depth
+            FROM research_runs r LEFT JOIN research_options o ON o.run_id=r.id
+            WHERE r.owner=? AND r.created>=? ORDER BY r.created DESC,r.id DESC""", (owner, min(since, spark_from))).fetchall()]
+        running = _running(conn, marker, owner)
+    windowed = [r for r in rows if r['created'] >= since]
+    live = [r for r in windowed if r['status'] != 'redacted']
+    done = [r for r in live if r['status'] == 'complete']
+    traces = [ur.load_json(r['usage'], {}) for r in done]
+    sources = [ur.load_json(r['sources'], []) for r in done]
+    gates = ur.gate_counts(traces)
+    gated = sum(gates.values())
+    latency = ur.total_ms_values(traces)
+    costs = [r['estimated_cost'] for r in done if r['estimated_cost'] is not None]
+    tiers = ur.tier_counts(s for s in sources if s)
+    fallback = sum(ur.fallback_reasons(traces).values())
+    by_status = {name: sum(r['status'] == name for r in windowed) for name in ('complete', 'interrupted', 'error', 'redacted')}
+    per_day = {}
+    for r in rows:
+        key = datetime.datetime.fromtimestamp(r['created'], utc).date().isoformat()
+        per_day[key] = per_day.get(key, 0) + 1
+    activity = []
+    for r in windowed[:20]:
+        redacted = r['status'] == 'redacted'
+        total = None if redacted else ur.load_json(r['usage'], {}).get('total_ms')
+        activity.append({'id': r['id'], 'query': r['query'], 'depth': r['depth'] or 'standard', 'status': r['status'],
+            'created': r['created'], 'total_ms': total if type(total) is int else None,
+            'sources': 0 if redacted else len(ur.load_json(r['sources'], []))})
+    return {
+        'days': days,
+        'totals': dict(runs=len(windowed), running=running, **by_status),
+        'measured': {'latency': len(latency), 'cost': len(costs), 'tiers': sum(1 for s in sources if s), 'gates': gated},
+        'verified_rate': _rate(gates.get('answer', 0), gated),
+        'gates': {name: gates.get(name, 0) for name in ('answer', 'review', 'abstain')},
+        'fallback_rate': _rate(fallback, len(done)),
+        'latency_ms': {'p50': ur.percentile(latency, .5), 'p95': ur.percentile(latency, .95)},
+        'cost_usd': {'total': round(sum(costs) / 1000000, 6),
+                     'average': round(sum(costs) / len(costs) / 1000000, 6) if costs else None},
+        'source_tiers': {name: tiers.get(name, 0) for name in ('primary', 'web', 'private')},
+        'by_mode': {mode: sum((r['depth'] or 'standard') == mode for r in live) for mode in MODES},
+        'daily': [{'day': d, 'runs': per_day.get(d, 0)} for d in day_list],
+        'activity': activity,
+    }
+
+
 def has_workspace(owner):
     if not owner:
         return False
