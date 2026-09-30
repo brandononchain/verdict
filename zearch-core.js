@@ -281,6 +281,23 @@
   /* Whether any row carries a depth, so the UI knows if the mode filter can work. */
   const hasDepth = items => (items || []).some(item => item && typeof item.depth === 'string' && item.depth);
 
+  /* ---------- floating popover placement ---------- */
+  /* Places a floating layer for an anchor button. The layer prefers the space below the container (the whole composer), so it never
+     covers the input; it flips above the anchor when below is too tight, and otherwise uses the larger side and scrolls.
+     Rects are {left, top, right, bottom}; viewport is {width, height}; inset.top is chrome that stays on screen (the top bar). */
+  function placePopover(options) {
+    const a = options.anchor, c = options.container || a, v = options.viewport, w = Math.min(options.width, v.width - 2 * (options.margin ?? 12));
+    const gap = options.gap ?? 8, margin = options.margin ?? 12, top = (options.inset && options.inset.top) || 0, height = options.height;
+    const belowStart = Math.max(a.bottom, c.bottom) + gap, spaceBelow = v.height - belowStart - margin;
+    const aboveEnd = a.top - gap, spaceAbove = aboveEnd - Math.max(top, 0) - margin;
+    const need = Math.min(height, options.maxHeight ?? 440);
+    const side = spaceBelow >= need ? 'below' : spaceAbove >= need ? 'above' : spaceBelow >= spaceAbove ? 'below' : 'above';
+    const room = Math.max(120, Math.floor(side === 'below' ? spaceBelow : spaceAbove)), maxHeight = Math.min(room, options.maxHeight ?? 440);
+    const shown = Math.min(height, maxHeight);
+    const left = Math.round(Math.min(Math.max(a.left, margin), Math.max(margin, v.width - w - margin)));
+    return { side, left, width: Math.round(w), maxHeight, top: Math.round(side === 'below' ? belowStart : aboveEnd - shown) };
+  }
+
   /* ---------- theme ---------- */
   const THEMES = ['system', 'light', 'dark'];
   function normalizeTheme(value) { return THEMES.includes(value) ? value : 'system'; }
@@ -293,7 +310,7 @@
     return { theme, motion };
   }
 
-  const api = { VIEWS, isRunId, parseRoute, routeHash, viewHash, modeLabel, formatPercent, formatMs, formatCost, toSeconds, relativeTime, statusLabel, statusTone, segments, sparkPoints, barHeights, insights, sortActivity, paletteScore, paletteFilter, normalizeTheme, applyPreferences, RAIL_MIN, RAIL_DEFAULT, railMaxWidth, clampRailWidth, validateTargetUrl, followupSuggestions, filterLibrary, hasDepth, readNdjson, backoffDelay, shouldPoll, friendlyStatus, httpError, fetchJson, newRequestId, hostOf, truncate };
+  const api = { VIEWS, isRunId, parseRoute, routeHash, viewHash, modeLabel, formatPercent, formatMs, formatCost, toSeconds, relativeTime, statusLabel, statusTone, segments, sparkPoints, barHeights, insights, sortActivity, paletteScore, paletteFilter, normalizeTheme, applyPreferences, RAIL_MIN, RAIL_DEFAULT, railMaxWidth, clampRailWidth, validateTargetUrl, followupSuggestions, filterLibrary, hasDepth, placePopover, readNdjson, backoffDelay, shouldPoll, friendlyStatus, httpError, fetchJson, newRequestId, hostOf, truncate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else {
     root.ZearchCore = api;

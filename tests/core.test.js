@@ -221,4 +221,17 @@ assert.deepEqual(core.filterLibrary(lib, { mode: 'deep' }).map(r => r.id), [1]);
 assert.deepEqual(core.filterLibrary(lib, { status: 'running' }).map(r => r.id), [3]);
 assert.deepEqual(core.filterLibrary(lib, { status: 'error', mode: 'compare' }).map(r => r.id), [2]);
 assert.equal(core.hasDepth(lib), true); assert.equal(core.hasDepth([{ query: 'a' }]), false);
+// ---- Popover placement: never over the input, flips, clamps, scrolls when both sides are tight ----
+{
+  const v = { width: 1440, height: 900 }, btn = { left: 100, top: 300, right: 240, bottom: 340 }, box = { left: 80, top: 290, right: 860, bottom: 560 };
+  let p = core.placePopover({ anchor: btn, container: box, viewport: v, width: 468, height: 330, inset: { top: 60 } });
+  assert.equal(p.side, 'below'); assert.equal(p.top, 568); assert.equal(p.left, 100); assert.ok(p.top >= box.bottom, 'starts below the whole composer');
+  p = core.placePopover({ anchor: { left: 100, top: 780, right: 200, bottom: 820 }, container: { left: 80, top: 770, right: 800, bottom: 850 }, viewport: v, width: 468, height: 330, inset: { top: 60 } });
+  assert.equal(p.side, 'above'); assert.equal(p.top + 330, 780 - 8, 'ends just above the anchor');
+  p = core.placePopover({ anchor: { left: 1400, top: 300, right: 1430, bottom: 340 }, container: box, viewport: v, width: 468, height: 330, inset: { top: 60 } });
+  assert.equal(p.left, 1440 - 468 - 12, 'clamped inside the viewport');
+  p = core.placePopover({ anchor: { left: 20, top: 200, right: 120, bottom: 240 }, container: { left: 12, top: 190, right: 378, bottom: 460 }, viewport: { width: 390, height: 600 }, width: 468, height: 400, inset: { top: 60 } });
+  assert.equal(p.width, 366); assert.ok(p.maxHeight < 400 && p.maxHeight >= 120, 'scrolls inside when neither side fits');
+  assert.ok(p.side === 'below' ? p.top >= 460 : p.top + Math.min(400, p.maxHeight) <= 200, 'never overlaps the composer');
+}
 console.log('Core display, insight, sort and palette tests passed');

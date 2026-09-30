@@ -29,9 +29,9 @@
   const MODE_KEYS = Object.keys(MODES);
   const isCollecting = mode => mode === 'scrape' || mode === 'crawl';
   const SHORTCUTS = [
-    { mode: 'deep', icon: 'deep', title: 'Deep research', text: 'Up to 3 queries and a gap search, then Jev checks each claim.', example: 'How do heat pumps work and when do they make sense?' },
-    { mode: 'compare', icon: 'compare', title: 'Compare options', text: 'Up to 3 queries. Puts choices side by side, with sources for each.', example: 'Compare PostgreSQL and MySQL for a small web app' },
-    { mode: 'crawl', icon: 'crawl', title: 'Crawl a site', text: 'Crawls up to 5 pages of one public site.', example: 'A documentation site or a product page', url: true }
+    { mode: 'deep', icon: 'deep', tag: 'Most thorough', steps: [['Search', 'up to 3 queries'], ['Gap search', 'looks for what is missing'], ['Verify', 'Jev checks each claim']], title: 'Deep research', text: 'Up to 3 queries and a gap search, then Jev checks each claim.', example: 'How do heat pumps work and when do they make sense?' },
+    { mode: 'compare', icon: 'compare', tag: 'Side by side', title: 'Compare options', text: 'Up to 3 queries. Puts choices side by side, with sources for each.', example: 'Compare PostgreSQL and MySQL for a small web app' },
+    { mode: 'crawl', icon: 'crawl', tag: 'Whole site', title: 'Crawl a site', text: 'Crawls up to 5 pages of one public site.', example: 'A documentation site or a product page', url: true }
   ];
   const VIEW_TITLES = { overview: 'Overview', library: 'Library', knowledge: 'Knowledge', monitors: 'Monitors', batches: 'Batches' };
   const SURFACE_NODE = { research: 'feed', overview: 'view-overview', library: 'view-library', knowledge: 'view-knowledge', monitors: 'view-monitors', batches: 'view-batches' };
@@ -39,6 +39,14 @@
     const svg = document.createElementNS(svgNS, 'svg'), use = document.createElementNS(svgNS, 'use');
     svg.setAttribute('class', 'ico' + (cls ? ' ' + cls : '')); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
     use.setAttribute('href', '#i-' + name); svg.append(use); return svg;
+  };
+
+  /* A primary pill button; the trailing icon sits in its own circular island. */
+  const solidButton = (label, iconName) => {
+    const node = make('button', 'solid-btn'); node.type = 'button';
+    node.append(make('span', 'btn-label', label));
+    if (iconName) { const island = make('span', 'btn-island'); island.setAttribute('aria-hidden', 'true'); island.append(icon(iconName)); node.append(island); }
+    return node;
   };
 
   let parent = null, parentLabel = '', active = null, available = false, version = 0, recent = [];
@@ -93,7 +101,8 @@
     const close = make('button', 'toast-close'); close.type = 'button'; close.setAttribute('aria-label', 'Dismiss message');
     close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
     close.onclick = dismissToast;
-    node.append(icon(options.error ? 'alert' : 'check', 'toast-ico'), make('span', 'toast-text', text), close);
+    const badge = make('span', 'toast-badge'); badge.setAttribute('aria-hidden', 'true'); badge.append(icon(options.error ? 'alert' : 'check', 'toast-ico'));
+    node.append(badge, make('span', 'toast-text', text), close);
     host.append(node); toastNode = node;
     if (!options.error) {
       armToast(5000);
@@ -177,6 +186,75 @@
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
 
+  /* ---------- phone viewport: keyboard-aware height, compact composer, drawer swipe ---------- */
+  const visual = window.visualViewport, rootEl = document.documentElement;
+  let kbOpen = false, baseH = window.innerHeight, baseW = window.innerWidth;
+  const typing = () => {
+    const at = document.activeElement;
+    return Boolean(at) && (at.tagName === 'TEXTAREA' || (at.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'range', 'button', 'submit'].includes(at.type)));
+  };
+  /* Keep the newest message or the composer on screen after the keyboard changes the height. */
+  function keepComposerVisible() {
+    const feedEl = $('feed');
+    if (surface !== 'research' || !typing()) return;
+    if (thread.childElementCount && empty.classList.contains('hidden')) { feedEl.scrollTop = feedEl.scrollHeight; return; }
+    const box = form.getBoundingClientRect(), view = feedEl.getBoundingClientRect();
+    if (box.bottom > view.bottom - 8) feedEl.scrollTop += box.bottom - view.bottom + 12;
+    else if (box.top < view.top) feedEl.scrollTop -= view.top - box.top + 8;
+  }
+  function syncViewport() {
+    if (visual && visual.scale > 1.02) return;   // pinch-zoomed: the visual viewport shrinks, the layout must not
+    const small = mobile.matches || coarse.matches, h = visual ? visual.height : window.innerHeight;
+    if (window.innerWidth !== baseW) { baseW = window.innerWidth; baseH = window.innerHeight; kbOpen = false; }   // rotation or resize
+    if (!kbOpen) baseH = Math.max(baseH, window.innerHeight);
+    const open = small && h < baseH * 0.8 && typing();
+    rootEl.style.setProperty('--app-h', small ? Math.round(h) + 'px' : '');
+    if (!small) rootEl.style.removeProperty('--app-h');
+    if (open !== kbOpen) { kbOpen = open; rootEl.classList.toggle('kb', open); applyCompact(); if (open) closeModes(false); }
+    if (open) requestAnimationFrame(keepComposerVisible);
+    if (small && visual && visual.offsetTop > 0) window.scrollTo(0, 0);
+  }
+  if (visual) { visual.addEventListener('resize', syncViewport); visual.addEventListener('scroll', syncViewport); }
+  window.addEventListener('resize', syncViewport);
+  document.addEventListener('focusin', () => { syncViewport(); if (typing() && (mobile.matches || coarse.matches)) setTimeout(() => { syncViewport(); keepComposerVisible(); }, 350); });
+  document.addEventListener('focusout', () => setTimeout(syncViewport, 0));
+  /* Drawer: swipe left inside it to close, swipe right from the left edge to open. Touch pointers only; vertical scrolling is left alone. */
+  (() => {
+    const drawer = $('rail'), main = $('edge-swipe'); let drag = null, edge = null;
+    const release = node => { node.style.transition = ''; node.style.transform = ''; $('scrim').style.opacity = ''; };
+    drawer.addEventListener('pointerdown', event => {
+      if (!railOpen || event.pointerType === 'mouse') return;
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, locked: false, time: performance.now() };
+    });
+    drawer.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+      if (!drag.locked) {
+        if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2) { drag.locked = true; drag.x = event.clientX; try { drawer.setPointerCapture(event.pointerId); } catch {} drawer.style.transition = 'none'; }
+        else { if (Math.abs(dy) > 10) drag = null; return; }
+      }
+      drag.dx = Math.min(0, event.clientX - drag.x); drawer.style.transform = `translateX(${drag.dx}px)`;
+      $('scrim').style.opacity = String(Math.max(0, 1 + drag.dx / drawer.getBoundingClientRect().width));
+    });
+    const finish = event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const done = drag; drag = null; if (!done.locked) return;
+      const fast = done.dx / Math.max(1, performance.now() - done.time) < -0.45, far = done.dx < -drawer.getBoundingClientRect().width * 0.3;
+      release(drawer); if (event.type !== 'pointercancel' && (fast || far)) closeRail();
+    };
+    drawer.addEventListener('pointerup', finish); drawer.addEventListener('pointercancel', finish);
+    main.addEventListener('pointerdown', event => {
+      if (railOpen || !mobile.matches || event.pointerType === 'mouse') return;
+      edge = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    });
+    main.addEventListener('pointermove', event => {
+      if (!edge || event.pointerId !== edge.id) return;
+      const dx = event.clientX - edge.x, dy = event.clientY - edge.y;
+      if (dx > 56 && dx > Math.abs(dy) * 1.5) { edge = null; setRail(true); } else if (Math.abs(dy) > 24) edge = null;
+    });
+    main.addEventListener('pointerup', () => { edge = null; }); main.addEventListener('pointercancel', () => { edge = null; });
+  })();
+
   /* ---------- popover menus (topbar options, composer "More") ---------- */
   function popMenu(trigger, menu) {
     const items = () => [...menu.querySelectorAll('[role=menuitem]')];
@@ -224,13 +302,14 @@
     $('depth').value = mode; $('depth').dispatchEvent(new Event('change'));
   }
   const modeBtn = $('mode-btn'), modePanel = $('mode-panel'), modeList = $('mode-list');
-  let modeOpen = false, modeAt = 0, typed = '', typedTimer = 0;
+  let modeOpen = false, modeOpenedAt = 0, modeAt = 0, typed = '', typedTimer = 0;
   for (const key of MODE_KEYS) {
     const m = MODES[key], li = make('li', 'mode-opt'), ic = make('span', 'mode-opt-ico'), main = make('span', 'mode-opt-main');
     li.id = 'mode-opt-' + key; li.dataset.mode = key; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', 'false');
     ic.setAttribute('aria-hidden', 'true'); ic.append(icon(m.icon));
-    main.append(make('span', 'mode-opt-name', m.label), make('span', 'mode-opt-desc', m.desc));
-    li.append(ic, main, make('span', 'mode-opt-cost', m.cost));
+    const head = make('span', 'mode-opt-head'); head.append(make('span', 'mode-opt-name', m.label), make('span', 'mode-opt-cost', m.cost));
+    main.append(head, make('span', 'mode-opt-desc', m.desc));
+    li.append(ic, main);
     li.addEventListener('click', () => pickMode(key));
     modeList.append(li);
   }
@@ -239,17 +318,54 @@
       li.classList.toggle('is-active', index === modeAt); li.setAttribute('aria-selected', String(li.dataset.mode === $('depth').value));
     });
     modeList.setAttribute('aria-activedescendant', modeList.children[modeAt].id);
-    modeList.children[modeAt].scrollIntoView({ block: 'nearest' });
+    // scroll only the popover's own list; scrollIntoView would also scroll the page behind it
+    const scroller = modePanel.querySelector('.mode-panel-core'), box = scroller.getBoundingClientRect(), row = modeList.children[modeAt].getBoundingClientRect();
+    if (row.top < box.top) scroller.scrollTop -= box.top - row.top; else if (row.bottom > box.bottom) scroller.scrollTop += row.bottom - box.bottom;
+  }
+  /* The popover is a fixed floating layer: it opens below the whole composer, flips above the button when below is tight,
+     and scrolls inside when neither side fits. It never sits over the input. */
+  function placeModes() {
+    if (!modeOpen) return;
+    const sheet = mobile.matches;
+    modePanel.toggleAttribute('data-sheet', sheet); $('mode-scrim').hidden = !sheet;
+    if (sheet) {   // phones: a bottom sheet with a grip and a scrim
+      for (const prop of ['left', 'top', 'width']) modePanel.style[prop] = '';
+      modePanel.style.setProperty('--mh', Math.round(window.innerHeight * 0.8) + 'px'); modePanel.removeAttribute('data-side'); return;
+    }
+    const anchor = modeBtn.getBoundingClientRect(), box = form.querySelector('.composer-card').getBoundingClientRect();
+    const bar = document.querySelector('.topbar').getBoundingClientRect();
+    modePanel.style.setProperty('--mh', '2000px');
+    const natural = modePanel.offsetHeight, width = Math.min(468, window.innerWidth - 24);
+    const spot = core.placePopover({ anchor, container: box, viewport: { width: window.innerWidth, height: window.innerHeight },
+      width, height: natural, inset: { top: bar.bottom } });
+    modePanel.dataset.side = spot.side; modePanel.style.width = spot.width + 'px'; modePanel.style.left = spot.left + 'px'; modePanel.style.top = spot.top + 'px';
+    modePanel.style.setProperty('--mh', spot.maxHeight + 'px');
+    modePanel.style.setProperty('--ox', Math.max(16, anchor.left + anchor.width / 2 - spot.left) + 'px');
   }
   function openModes() {
     if (modeBtn.disabled) return;
-    modeOpen = true; modePanel.hidden = false; modeBtn.setAttribute('aria-expanded', 'true');
+    modeOpen = true; modeOpenedAt = performance.now(); modePanel.hidden = false; modeBtn.setAttribute('aria-expanded', 'true'); placeModes();
     modeAt = Math.max(0, MODE_KEYS.indexOf($('depth').value)); markModes(); modeList.focus({ preventScroll: true });
   }
   function closeModes(restore) {
     if (!modeOpen) return;
-    modeOpen = false; modePanel.hidden = true; modeBtn.setAttribute('aria-expanded', 'false'); if (restore) modeBtn.focus();
+    modeOpen = false; modePanel.hidden = true; $('mode-scrim').hidden = true; modePanel.style.transform = ''; modeBtn.setAttribute('aria-expanded', 'false'); if (restore) modeBtn.focus();
   }
+  window.addEventListener('resize', placeModes);
+  $('mode-scrim').addEventListener('click', () => closeModes(true));
+  /* swipe down on the sheet header to dismiss it */
+  (() => {
+    const head = $('mode-panel-head'); let drag = null;
+    head.addEventListener('pointerdown', event => { if (!modePanel.hasAttribute('data-sheet') || event.pointerType === 'mouse') return; drag = { id: event.pointerId, y: event.clientY, dy: 0, time: performance.now() }; try { head.setPointerCapture(event.pointerId); } catch {} modePanel.style.animation = 'none'; });
+    head.addEventListener('pointermove', event => { if (!drag || event.pointerId !== drag.id) return; drag.dy = Math.max(0, event.clientY - drag.y); modePanel.style.transition = 'none'; modePanel.style.transform = `translateY(${drag.dy}px)`; });
+    const end = event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const done = drag; drag = null; modePanel.style.transition = ''; modePanel.style.animation = ''; modePanel.style.transform = '';
+      if (event.type !== 'pointercancel' && (done.dy > 90 || done.dy / Math.max(1, performance.now() - done.time) > 0.5)) closeModes(true);
+    };
+    head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
+  })();
+  $('feed').addEventListener('scroll', () => { if (performance.now() - modeOpenedAt > 400) closeModes(false); }, { passive: true });
   function pickMode(key) { setMode(key); closeModes(true); }
   modeBtn.addEventListener('click', () => (modeOpen ? closeModes(true) : openModes()));
   modeBtn.addEventListener('keydown', event => {
@@ -324,7 +440,7 @@
       $('runs-left').hidden = false; $('runs-left').textContent = `${left} ${left === 1 ? 'run' : 'runs'} left today`; $('runs-left').title = `Resets ${allowance.reset}`;
     } else { $('allowance-chip').hidden = true; $('allowance').textContent = ''; $('menu-allowance').textContent = ''; $('runs-left').hidden = true; $('runs-left').textContent = ''; }
     const running = Math.max(Number(workspaceData.running) || 0, active ? 1 : 0), text = running === 1 ? '1 run in progress' : `${running} runs in progress`;
-    $('runs-pill').hidden = running < 1;
+    $('runs-pill').hidden = running < 1; $('menu-runs').textContent = running >= 1 ? text : '';
     if (running >= 1 && text !== pillText) $('runs-pill-text').textContent = text;
     pillText = running >= 1 ? text : '';
     const length = query.value.length, counter = $('char-count');
@@ -390,7 +506,7 @@
     for (const [key, id] of Object.entries(SURFACE_NODE)) $(id).hidden = key !== name;
     document.querySelector('.dock').hidden = name !== 'research';
     $('main').dataset.surface = name;
-    for (const link of document.querySelectorAll('#rail .nav-item[data-view]')) {
+    for (const link of document.querySelectorAll('#rail .nav-item[data-view], .tabbar [data-view]')) {
       const on = link.dataset.view === (name === 'research' ? 'home' : name);
       if (on) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
     }
@@ -399,7 +515,7 @@
     for (const [key, tab] of [['research', $('tab-research')], ['overview', $('tab-overview')]]) {
       tab.setAttribute('aria-selected', String(key === name)); tab.tabIndex = key === name ? 0 : -1;
     }
-    syncTitle(); listHistory();
+    syncTitle(); listHistory(); syncDockClass();
     if (name !== 'research') {
       if (name === 'overview') loadStats(); else if (!workspaceLoaded || Date.now() - lastWorkspaceLoad > 2000) { if (!workspaceLoaded) showWorkspaceSkeleton(); loadWorkspace(false); }
       if (options.focus !== false && changed) $(SURFACE_NODE[name]).focus({ preventScroll: true });
@@ -409,12 +525,17 @@
   function goView(name) {
     if (location.hash === core.viewHash(name)) route(true); else window.history.pushState(null, '', core.viewHash(name)), route(true);
   }
+  /* The composer is compact in the dock, and on phones while the keyboard is open. */
+  const applyCompact = () => form.classList.toggle('compact', !form.classList.contains('home-composer') || kbOpen);
+  const syncDockClass = () => rootEl.classList.toggle('has-dock', surface === 'research' && Boolean($('main').dataset.thread));
   function showThread() {
     empty.classList.add('hidden'); form.classList.remove('home-composer'); dock.append(form, fine); closeModes(false);
+    $('main').dataset.thread = '1'; applyCompact(); syncDockClass();
   }
   function showHomeLayout() {
     empty.classList.remove('hidden'); $('composer-slot').append(form, fine); form.classList.add('home-composer');
     form.classList.remove('opts-open'); $('composer-options').setAttribute('aria-expanded', 'false'); closeModes(false);
+    delete $('main').dataset.thread; applyCompact(); syncDockClass();
   }
   function home(options = {}) {
     if (active) {
@@ -507,8 +628,9 @@
   }
   const accountApi = (action, fields = {}) => core.fetchJson('/api/account', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...fields }) });
-  function button(label, callback, cls = 'ghost-btn', accessibleName) {
-    const node = make('button', cls, label); node.type = 'button';
+  function button(label, callback, cls = 'ghost-btn', accessibleName, iconName) {
+    const node = make('button', cls, iconName ? '' : label); node.type = 'button';
+    if (iconName) node.append(icon(iconName), make('span', 'btn-label', label));
     if (accessibleName) node.setAttribute('aria-label', accessibleName);
     node.onclick = async () => {
       node.disabled = true; node.setAttribute('aria-busy', 'true');
@@ -661,22 +783,22 @@
     body.addEventListener('mouseout', event => { if (event.target.closest('button[data-citation-id]')) hidePreview(); });
     body.addEventListener('focusout', event => { if (event.target.closest('button[data-citation-id]')) hidePreview(); });
 
-    const copy = button('Copy answer', async () => { await copyText(run.answer || ''); toast('Answer copied'); });
+    const copy = button('Copy answer', async () => { await copyText(run.answer || ''); toast('Answer copied'); }, 'ghost-btn', undefined, 'copy');
     const link = button('Copy link', async () => {
       await copyText(location.origin + location.pathname + core.routeHash(run.id)); toast('Link copied');
-    });
+    }, 'ghost-btn', undefined, 'link');
     const again = button('Regenerate', () => {
       if (active) throw Error('Wait for the current research to finish.');
       startRun({ question: run.query, mode: run.depth || 'standard', targetUrl: run.target_url || null, parentId: run.parent_id || null });
-    });
+    }, 'ghost-btn', undefined, 'refresh');
     const save = button('Save', async () => {
       await api('save_investigation', { id: run.id }); toast('Investigation saved'); await loadWorkspace(false);
-    });
+    }, 'ghost-btn', undefined, 'bookmark');
     const monitor = button('Monitor daily', async () => {
       await api('monitor_collection', { id: run.id }); monitor.hidden = true; toast('Daily monitor saved'); await loadWorkspace(false);
-    });
+    }, 'ghost-btn', undefined, 'monitors');
     const exportMenu = make('details', 'export-menu');
-    const exportOptions = make('div', 'export-options'), exportSummary = make('summary', '', 'Export');
+    const exportOptions = make('div', 'export-options'), exportSummary = make('summary'); exportSummary.append(icon('download'), make('span', '', 'Export'));
     exportMenu.append(exportSummary, exportOptions);
     for (const [format, label] of [['pdf', 'PDF'], ['txt', 'Text'], ...(collecting ? [['json', 'Data JSON'], ['csv', 'Inventory CSV']] : [])]) {
       exportOptions.append(button(label, async () => {
@@ -759,7 +881,7 @@
       status.dataset.busy = String(core.shouldPoll(run.status) && !run.error);
       const finished = ['complete', 'error', 'interrupted'].includes(run.status);
       actions.hidden = !finished;
-      copy.hidden = !run.answer; again.hidden = !finished || collecting && !run.target_url; again.textContent = run.status === 'complete' ? 'Regenerate' : 'Retry';
+      copy.hidden = !run.answer; again.hidden = !finished || collecting && !run.target_url; again.querySelector('.btn-label').textContent = run.status === 'complete' ? 'Regenerate' : 'Retry';
       link.hidden = !core.isRunId(run.id);
       exportMenu.hidden = run.status !== 'complete';
       save.hidden = run.status !== 'complete' || collecting; sources.replaceChildren();
@@ -1083,7 +1205,7 @@
   function emptyState(id) {
     const spec = EMPTY_STATE[id], li = make('li', 'empty-state'), tile = make('span', 'empty-ico');
     tile.setAttribute('aria-hidden', 'true'); tile.append(icon(spec.icon));
-    const cta = make('button', 'solid-btn', spec.cta); cta.type = 'button'; cta.onclick = spec.run;
+    const cta = solidButton(spec.cta, 'arrow'); cta.onclick = spec.run;
     li.append(tile, make('h3', '', spec.title), make('p', '', EMPTY[id]), cta); return li;
   }
   function showWorkspaceSkeleton() {
@@ -1180,7 +1302,8 @@
       if (seconds) date.title = new Date(seconds * 1000).toLocaleString();
       const actions = make('span', 'lib-actions');
       actions.append(confirmAction('Delete', 'Delete this answer? Follow-ups from it are redacted.', 'Delete', () => deleteRuns([item.id]), `Delete answer: ${item.query}`));
-      li.append(check, open, statusPill(item.status), date, actions); list.append(li);
+      const hit = make('label', 'lib-hit'); hit.append(check);
+      li.append(hit, open, statusPill(item.status), date, actions); list.append(li);
     }
     if (!items.length) {
       if (!all.length) list.append(emptyState('research-list'));
@@ -1481,16 +1604,16 @@
   const overviewContent = () => $('overview-content');
   function buildOverview() {
     if (overviewBuilt) return; overviewBuilt = true;
-    const body = $('overview-body'), head = make('header', 'page-head'), tile = make('span', 'page-ico'), actions = make('div', 'page-actions');
-    tile.setAttribute('aria-hidden', 'true'); tile.append(icon('overview'));
-    const title = make('div', 'page-titles'); title.append(make('h1', '', 'Overview'), make('p', 'page-sub', 'Computed from your own runs. Nothing here is estimated beyond what each figure says.'));
+    const body = $('overview-body'), head = make('header', 'page-head'), actions = make('div', 'page-actions');
+    const eyebrow = make('span', 'eyebrow'); eyebrow.append(icon('overview'), document.createTextNode('Insights'));
+    const title = make('div', 'page-titles'); title.append(eyebrow, make('h1', '', 'Overview'), make('p', 'page-sub', 'Computed from your own runs. Nothing here is estimated beyond what each figure says.'));
     const range = make('div', 'segmented', ''); range.id = 'stats-range'; range.setAttribute('role', 'group'); range.setAttribute('aria-label', 'Time range');
     for (const days of [7, 30]) {
       const choice = make('button', '', `Last ${days} days`); choice.type = 'button'; choice.dataset.days = String(days);
       choice.onclick = () => { if (statsState.days === days) return; statsState.data = null; statsState.days = days; loadStats(days); };
       range.append(choice);
     }
-    actions.append(range); head.append(tile, title, actions);
+    actions.append(range); head.append(title, actions);
     const content = make('div', 'overview-content'); content.id = 'overview-content';
     body.append(head, content);
   }
@@ -1529,8 +1652,8 @@
     if (!parts.length) bar.classList.add('stack-empty');
     return { bar, legend: legend(keys.map(key => [labels[key], Number(counts[key]) || 0, tones[key]])) };
   }
-  function statCard(name, value, sub, foot) {
-    const card = make('article', 'card stat'), title = make('h3', 'stat-title', name);
+  function statCard(name, value, sub, foot, kind) {
+    const card = make('article', 'card stat' + (kind ? ' stat-' + kind : '')), title = make('h3', 'stat-title', name);
     card.append(title, make('p', 'stat-value', value), make('p', 'stat-sub', sub || ''));
     const slot = make('div', 'stat-visual'); card.append(slot);
     if (foot) card.append(make('p', 'stat-foot', foot));
@@ -1610,7 +1733,7 @@
       const card = make('div', 'card empty-card');
       card.append(make('h2', '', `No research in the last ${statsState.days} days`),
         make('p', 'hint', statsState.days === 7 ? 'Try the last 30 days, or ask a question. Overview is computed from your own runs.' : 'Ask a question and this page fills in with the checks, timings and sources of your own runs. Nothing is shown until then.'));
-      const start = make('button', 'solid-btn', 'Start researching'); start.type = 'button'; start.onclick = () => home({ push: true }); card.append(start); host.append(card); return;
+      const start = solidButton('Start researching', 'arrow'); start.onclick = () => home({ push: true }); card.append(start); host.append(card); return;
     }
     const parts = [runsWord(totals.runs)];
     for (const [key, label] of [['complete', 'complete'], ['interrupted', 'interrupted'], ['error', 'with errors'], ['redacted', 'redacted']]) if (totals[key]) parts.push(`${totals[key]} ${label}`);
@@ -1618,32 +1741,32 @@
     const grid = make('div', 'stat-grid');
     // Verified answers
     const verified = statCard('Verified answers', core.formatPercent(data.verified_rate), data.verified_rate === null || data.verified_rate === undefined ? 'No checked answers yet' : 'had direct evidence',
-      measured.gates ? `Across ${measured.gates} checked ${measured.gates === 1 ? 'answer' : 'answers'}` : 'Older runs carry no evidence check');
+      measured.gates ? `Across ${measured.gates} checked ${measured.gates === 1 ? 'answer' : 'answers'}` : 'Older runs carry no evidence check', 'verified');
     const gates = data.gates || {}, gateStack = stack(gates, ['answer', 'review', 'abstain'], { answer: 'Answered', review: 'Needs review', abstain: 'Withheld' },
       { answer: 'ok', review: 'warn', abstain: 'idle' }, `Checked answers: ${gates.answer || 0} answered, ${gates.review || 0} need review, ${gates.abstain || 0} withheld`);
     verified.visual.append(gateStack.bar, gateStack.legend);
     // Latency
     const latency = data.latency_ms || {}, times = (data.activity || []).map(row => row.total_ms).filter(v => typeof v === 'number').reverse();
     const speed = statCard('Research time', core.formatMs(latency.p50), latency.p95 != null ? `median · 95% under ${core.formatMs(latency.p95)}` : 'median',
-      measured.latency ? `Across ${measured.latency} timed ${measured.latency === 1 ? 'run' : 'runs'}` : 'Older runs carry no timing');
+      measured.latency ? `Across ${measured.latency} timed ${measured.latency === 1 ? 'run' : 'runs'}` : 'Older runs carry no timing', 'speed');
     const line = spark(times, `Research time of the latest ${times.length} timed runs, oldest to newest, from ${core.formatMs(times[0])} to ${core.formatMs(times.at(-1))}`);
     if (line) { speed.visual.append(line, make('p', 'spark-cap', `Latest ${times.length} runs, oldest to newest`)); }
     // Cost
     const cost = data.cost_usd || {};
     const spend = statCard('Estimated cost', measured.cost ? core.formatCost(cost.total) : '—', cost.average != null ? `${core.formatCost(cost.average)} average per run` : 'No cost data yet',
-      measured.cost ? `Across ${measured.cost} ${measured.cost === 1 ? 'run' : 'runs'} with cost data. An estimate, not a bill.` : 'Older runs carry no cost data');
+      measured.cost ? `Across ${measured.cost} ${measured.cost === 1 ? 'run' : 'runs'} with cost data. An estimate, not a bill.` : 'Older runs carry no cost data', 'cost');
     // Source mix
     const tiers = data.source_tiers || {}, tierTotal = (tiers.primary || 0) + (tiers.web || 0) + (tiers.private || 0);
     const mix = statCard('Source mix', tierTotal ? String(tierTotal) : '—', tierTotal ? `cited ${tierTotal === 1 ? 'source' : 'sources'}` : 'No cited sources yet',
-      measured.tiers ? `Across ${measured.tiers} ${measured.tiers === 1 ? 'run' : 'runs'} with sources` : 'Older runs carry no source data');
+      measured.tiers ? `Across ${measured.tiers} ${measured.tiers === 1 ? 'run' : 'runs'} with sources` : 'Older runs carry no source data', 'mix');
     const tierStack = stack(tiers, ['primary', 'web', 'private'], { primary: 'Primary publisher', web: 'Web', private: 'Your notes' },
       { primary: 'c1', web: 'c2', private: 'c3' }, `Cited sources: ${tiers.primary || 0} primary, ${tiers.web || 0} web, ${tiers.private || 0} from your notes`);
     mix.visual.append(tierStack.bar, tierStack.legend);
-    grid.append(verified, speed, spend, mix); host.append(grid);
-    // Runs per day + insights
-    const split = make('div', 'overview-split');
+    grid.append(verified, speed, spend, mix);
+    // Runs per day + insights join the same bento grid
+
     const daily = data.daily || [], heights = core.barHeights(daily), peak = Math.max(0, ...daily.map(d => d.runs || 0));
-    const chart = make('section', 'card'), chartHead = make('header', 'section-head');
+    const chart = make('section', 'card stat-daily'), chartHead = make('header', 'section-head');
     chart.setAttribute('aria-labelledby', 'daily-title');
     chartHead.append(make('h2', '', 'Runs per day'), make('span', 'hint', `Last ${daily.length} days`)); chartHead.firstChild.id = 'daily-title';
     const bars = make('div', 'bars'); bars.setAttribute('role', 'img');
@@ -1663,14 +1786,14 @@
       for (const [mode, count] of modes) list.append(make('li', 'stat-chip', `${core.modeLabel(mode)} ${count}`));
       chart.append(list);
     }
-    const noticed = make('section', 'card insights'), noticedHead = make('header', 'section-head');
+    const noticed = make('section', 'card stat-insights insights'), noticedHead = make('header', 'section-head');
     noticed.setAttribute('aria-labelledby', 'noticed-title');
     noticedHead.append(make('h2', '', 'What Zearch noticed')); noticedHead.firstChild.id = 'noticed-title'; noticed.append(noticedHead);
     const sentences = core.insights(data), list = make('ul', 'insight-list');
     for (const sentence of sentences) list.append(make('li', '', sentence));
     if (!sentences.length) list.append(make('li', 'hint', 'Not enough measured runs yet to say anything reliable.'));
     noticed.append(list, make('p', 'hint', 'Written from your stored run data by fixed rules, not by a model.'));
-    split.append(chart, noticed); host.append(split);
+    grid.append(chart, noticed); host.append(grid);
     host.append(renderActivity(data));
     if (overviewFocus) { const target = host.querySelector(overviewFocus); overviewFocus = null; if (target) target.focus(); }
   }
@@ -1766,7 +1889,7 @@
     const chosen = document.documentElement.getAttribute('data-theme');
     for (const meta of document.querySelectorAll('meta[name=theme-color]')) {
       if (!meta.dataset.base) meta.dataset.base = meta.getAttribute('content');
-      meta.setAttribute('content', chosen === 'dark' ? '#212121' : chosen === 'light' ? '#f6f7f9' : meta.dataset.base);
+      meta.setAttribute('content', chosen === 'dark' ? '#060608' : chosen === 'light' ? '#eef0f6' : meta.dataset.base);
     }
   }
   for (const radio of document.querySelectorAll('input[name=theme]')) radio.addEventListener('change', () => { if (radio.checked) savePreference('zearch:theme', radio.value === 'system' ? null : radio.value); });
@@ -1782,6 +1905,7 @@
   });
   $('followup-clear').onclick = () => { setParent(null); query.focus(); };
   $('new-btn').onclick = () => home({ push: true }); $('brand').onclick = event => { event.preventDefault(); home({ push: true }); };
+  $('top-brand').onclick = event => { event.preventDefault(); home({ push: true }); };
   $('nav-home').onclick = event => { event.preventDefault(); home({ push: true }); };
   $('recent-more').onclick = () => closeRail();
   for (const link of document.querySelectorAll('#rail .nav-item[href^="#"]')) link.addEventListener('click', () => closeRail());
@@ -1791,7 +1915,8 @@
   $('settings-account').onclick = () => { $('settings').close(); openWorkspace(); };
   $('rail-search').onclick = () => { closeRail(); openPalette(); };
   $('rail-toggle').onclick = () => setCollapsed(!collapsed);
-  $('menu-btn').onclick = () => setRail(true); $('rail-close').onclick = closeRail; $('scrim').onclick = closeRail;
+  $('menu-btn').onclick = () => setRail(true); $('rail-close').onclick = closeRail; $('scrim').onclick = closeRail; $('tb-more').onclick = () => setRail(true);
+  $('tb-home').onclick = event => { event.preventDefault(); home({ push: true }); };
   popMenu($('more-btn'), $('more-menu'));
   $('library-search').addEventListener('input', renderLibrary);
   $('library-clear').onclick = () => { $('library-search').value = ''; renderLibrary(); $('library-search').focus(); };
@@ -1830,15 +1955,24 @@
   window.addEventListener('hashchange', scheduleRoute);
   window.addEventListener('popstate', scheduleRoute);
   SHORTCUTS.forEach((card, index) => {
-    const starter = make('button', 'starter'); starter.type = 'button'; starter.style.animationDelay = `${index * 40}ms`;
+    const starter = make('button', 'starter'); starter.type = 'button'; starter.style.animationDelay = `${index * 70}ms`;
     const head = make('span', 'starter-head'); head.append(icon(card.icon), make('span', 'starter-label', card.title));
-    starter.append(head, make('span', 'starter-text', card.text), make('span', 'starter-example', card.url ? card.example : `Try: ${card.example}`));
+    const go = make('span', 'starter-go'); go.setAttribute('aria-hidden', 'true'); go.append(icon('arrow'));
+    const tag = make('span', 'eyebrow starter-tag', card.tag);
+    starter.append(head, tag, make('span', 'starter-text', card.text));
+    if (card.steps) {
+      const list = make('ol', 'starter-steps');
+      for (const [name, detail] of card.steps) { const item = make('li'); item.append(make('b', '', name), make('span', '', detail)); list.append(item); }
+      starter.append(list);
+    }
+    starter.append(make('span', 'starter-example', card.url ? card.example : `Try: ${card.example}`), go);
     starter.onclick = () => {
       setMode(card.mode); controls();
       if (card.url) $('target-url').focus(); else { query.value = card.example; controls(); query.focus(); }
     };
     $('starters').append(starter);
   });
+  $('depth').value = 'standard';   // browsers may restore a hidden select after reload
   setCollapsed(collapsed, false); paintRail(); syncSettings(); batchCheck();
   setRail(false); listHistory(); controls(); syncChip();
 
