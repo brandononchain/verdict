@@ -14,21 +14,24 @@
   const coarse = window.matchMedia('(pointer: coarse)');
   const mobile = window.matchMedia('(max-width: 680px)');
   const DEFAULT_TITLE = document.title;
-  const MODE_HELP = {
-    standard: 'Searches the web and answers with cited sources.',
-    deep: 'Reads more sources for a fuller answer. Takes longer.',
-    compare: 'Compares options side by side, with sources for each.',
-    scrape: 'Reads one public page and extracts its facts.',
-    crawl: 'Reads up to five pages of one public site.'
+  const MODES = {
+    standard: { label: 'Search', icon: 'search', desc: 'Web search with cited sources', cost: '1 query', verb: 'Search',
+      help: 'Searches the web and answers with cited sources.', placeholder: 'Ask a question or compare options…' },
+    deep: { label: 'Deep research', icon: 'deep', desc: 'Reads more sources and looks for gaps', cost: 'Up to 3 queries + gap search', verb: 'Search',
+      help: 'Reads more sources and searches for gaps before it answers. Takes longer.', placeholder: 'Ask a bigger question…' },
+    compare: { label: 'Compare', icon: 'compare', desc: 'Options side by side, with sources', cost: 'Up to 3 queries', verb: 'Compare',
+      help: 'Compares options side by side, with sources for each.', placeholder: 'Which options should Zearch compare?' },
+    scrape: { label: 'Scrape', icon: 'scrape', desc: 'Extract facts from one public page', cost: 'Reads 1 page', verb: 'Scrape',
+      help: 'Reads one public page and extracts its facts.', placeholder: 'What should Zearch extract? (optional)' },
+    crawl: { label: 'Crawl', icon: 'crawl', desc: 'Read across one public site', cost: 'Crawls up to 5 pages', verb: 'Crawl',
+      help: 'Reads up to five pages of one public site.', placeholder: 'What should Zearch extract? (optional)' }
   };
-  const DEPTH_HINT = {
-    standard: '1 query', deep: 'Up to 3 queries and a gap search', compare: 'Up to 3 queries, side by side',
-    scrape: '1 page', crawl: 'Up to 5 pages'
-  };
+  const MODE_KEYS = Object.keys(MODES);
+  const isCollecting = mode => mode === 'scrape' || mode === 'crawl';
   const SHORTCUTS = [
-    { mode: 'deep', icon: 'deep', title: 'Deep research', text: 'Reads more sources and searches for gaps before it answers.', example: 'How do heat pumps work and when do they make sense?' },
-    { mode: 'compare', icon: 'compare', title: 'Compare options', text: 'Puts choices side by side, with sources for each.', example: 'Compare PostgreSQL and MySQL for a small web app' },
-    { mode: 'crawl', icon: 'crawl', title: 'Crawl a site', text: 'Reads up to five pages of one public site.', example: 'A documentation site or a product page', url: true }
+    { mode: 'deep', icon: 'deep', title: 'Deep research', text: 'Up to 3 queries and a gap search, then Jev checks each claim.', example: 'How do heat pumps work and when do they make sense?' },
+    { mode: 'compare', icon: 'compare', title: 'Compare options', text: 'Up to 3 queries. Puts choices side by side, with sources for each.', example: 'Compare PostgreSQL and MySQL for a small web app' },
+    { mode: 'crawl', icon: 'crawl', title: 'Crawl a site', text: 'Crawls up to 5 pages of one public site.', example: 'A documentation site or a product page', url: true }
   ];
   const VIEW_TITLES = { overview: 'Overview', library: 'Library', knowledge: 'Knowledge', monitors: 'Monitors', batches: 'Batches' };
   const SURFACE_NODE = { research: 'feed', overview: 'view-overview', library: 'view-library', knowledge: 'view-knowledge', monitors: 'view-monitors', batches: 'view-batches' };
@@ -90,7 +93,7 @@
     const close = make('button', 'toast-close'); close.type = 'button'; close.setAttribute('aria-label', 'Dismiss message');
     close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
     close.onclick = dismissToast;
-    node.append(make('span', 'toast-text', text), close);
+    node.append(icon(options.error ? 'alert' : 'check', 'toast-ico'), make('span', 'toast-text', text), close);
     host.append(node); toastNode = node;
     if (!options.error) {
       armToast(5000);
@@ -109,6 +112,7 @@
     $('shell').classList.toggle('rail-collapsed', collapsed);
     const toggle = $('rail-toggle');
     toggle.setAttribute('aria-expanded', String(!collapsed)); toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    if (typeof paintRail === 'function' && typeof resizer !== 'undefined') paintRail();
     if (persist) { try { localStorage.setItem('zearch:rail', collapsed ? 'collapsed' : 'expanded'); } catch {} }
   }
   function setRail(open) {
@@ -121,7 +125,49 @@
     else if (!railOpen && wasOpen) { const back = railFocus && railFocus.isConnected ? railFocus : $('menu-btn'); railFocus = null; back.focus(); }
   }
   const closeRail = () => setRail(false);
-  mobile.addEventListener('change', () => setRail(false));
+  mobile.addEventListener('change', () => { setRail(false); paintRail(); });
+  /* Resizable rail: a CSS variable on <html>, clamped between 224px and 20% of the viewport. */
+  const resizer = $('rail-resizer'), rootStyle = document.documentElement.style;
+  let railWidth = core.RAIL_DEFAULT, railDrag = null;
+  try { const saved = Number(localStorage.getItem('zearch:rail-width')); if (Number.isFinite(saved) && saved > 0) railWidth = saved; } catch {}
+  const railResizable = () => !mobile.matches && !collapsed;
+  function paintRail() {
+    const width = core.clampRailWidth(railWidth, window.innerWidth), on = railResizable();
+    rootStyle.setProperty('--rail-width', width + 'px');
+    resizer.setAttribute('aria-valuemin', String(core.RAIL_MIN)); resizer.setAttribute('aria-valuemax', String(core.railMaxWidth(window.innerWidth)));
+    resizer.setAttribute('aria-valuenow', String(width)); resizer.setAttribute('aria-valuetext', width + ' pixels');
+    resizer.hidden = !on; resizer.setAttribute('aria-disabled', String(!on)); resizer.tabIndex = on ? 0 : -1;
+    return width;
+  }
+  function setRailWidth(px, persist) {
+    railWidth = core.clampRailWidth(px, window.innerWidth); paintRail();
+    if (persist) { try { localStorage.setItem('zearch:rail-width', String(railWidth)); } catch {} }
+  }
+  resizer.addEventListener('pointerdown', event => {
+    if (!railResizable() || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault(); try { resizer.setPointerCapture(event.pointerId); } catch {}
+    railDrag = { id: event.pointerId, x: event.clientX, width: paintRail() };
+    $('shell').classList.add('is-resizing'); resizer.classList.add('is-dragging');
+  });
+  resizer.addEventListener('pointermove', event => {
+    if (!railDrag || event.pointerId !== railDrag.id) return;
+    setRailWidth(railDrag.width + event.clientX - railDrag.x, false);
+  });
+  const endDrag = event => {
+    if (!railDrag || event.pointerId !== railDrag.id) return;
+    try { resizer.releasePointerCapture(event.pointerId); } catch {}
+    railDrag = null; $('shell').classList.remove('is-resizing'); resizer.classList.remove('is-dragging'); setRailWidth(railWidth, true);
+  };
+  resizer.addEventListener('pointerup', endDrag); resizer.addEventListener('pointercancel', endDrag);
+  resizer.addEventListener('keydown', event => {
+    if (!railResizable()) return;
+    const current = core.clampRailWidth(railWidth, window.innerWidth), step = event.shiftKey ? 48 : 16;
+    const next = event.key === 'ArrowLeft' ? current - step : event.key === 'ArrowRight' ? current + step : event.key === 'Home' ? core.RAIL_MIN : event.key === 'End' ? core.railMaxWidth(window.innerWidth) : null;
+    if (next === null) return;
+    event.preventDefault(); setRailWidth(next, true);
+  });
+  resizer.addEventListener('dblclick', () => { railWidth = core.RAIL_DEFAULT; try { localStorage.removeItem('zearch:rail-width'); } catch {} paintRail(); });
+  window.addEventListener('resize', paintRail);
   $('rail').addEventListener('keydown', event => {
     if (event.key !== 'Tab' || !railOpen) return;
     const nodes = [...$('rail').querySelectorAll('a[href], button:not([disabled])')].filter(node => node.offsetParent !== null);
@@ -172,43 +218,102 @@
     $('followup').title = parentLabel ? 'Follow-up to: ' + parentLabel : '';
   }
   function setParent(id, label) { parent = id || null; parentLabel = id ? core.truncate(label, 90) : ''; syncChip(); }
-  const chips = [...document.querySelectorAll('#mode-chips .mode-chip')];
-  /* The hidden #depth select stays the source of truth for the mode; the chips mirror it. */
+  /* The hidden #depth select stays the source of truth for the mode; the menu and tiles mirror it. */
   function setMode(mode) {
     if ($('depth').value === mode) return;
     $('depth').value = mode; $('depth').dispatchEvent(new Event('change'));
   }
-  for (const chip of chips) {
-    chip.addEventListener('click', () => { setMode(chip.dataset.mode); });
-    chip.addEventListener('keydown', event => {
-      const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
-      if (!step && event.key !== 'Home' && event.key !== 'End') return;
-      event.preventDefault();
-      const at = chips.indexOf(chip), next = event.key === 'Home' ? chips[0] : event.key === 'End' ? chips.at(-1) : chips[(at + step + chips.length) % chips.length];
-      setMode(next.dataset.mode); next.focus();
-    });
+  const modeBtn = $('mode-btn'), modePanel = $('mode-panel'), modeList = $('mode-list');
+  let modeOpen = false, modeAt = 0, typed = '', typedTimer = 0;
+  for (const key of MODE_KEYS) {
+    const m = MODES[key], li = make('li', 'mode-opt'), ic = make('span', 'mode-opt-ico'), main = make('span', 'mode-opt-main');
+    li.id = 'mode-opt-' + key; li.dataset.mode = key; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', 'false');
+    ic.setAttribute('aria-hidden', 'true'); ic.append(icon(m.icon));
+    main.append(make('span', 'mode-opt-name', m.label), make('span', 'mode-opt-desc', m.desc));
+    li.append(ic, main, make('span', 'mode-opt-cost', m.cost));
+    li.addEventListener('click', () => pickMode(key));
+    modeList.append(li);
   }
+  function markModes() {
+    [...modeList.children].forEach((li, index) => {
+      li.classList.toggle('is-active', index === modeAt); li.setAttribute('aria-selected', String(li.dataset.mode === $('depth').value));
+    });
+    modeList.setAttribute('aria-activedescendant', modeList.children[modeAt].id);
+    modeList.children[modeAt].scrollIntoView({ block: 'nearest' });
+  }
+  function openModes() {
+    if (modeBtn.disabled) return;
+    modeOpen = true; modePanel.hidden = false; modeBtn.setAttribute('aria-expanded', 'true');
+    modeAt = Math.max(0, MODE_KEYS.indexOf($('depth').value)); markModes(); modeList.focus({ preventScroll: true });
+  }
+  function closeModes(restore) {
+    if (!modeOpen) return;
+    modeOpen = false; modePanel.hidden = true; modeBtn.setAttribute('aria-expanded', 'false'); if (restore) modeBtn.focus();
+  }
+  function pickMode(key) { setMode(key); closeModes(true); }
+  modeBtn.addEventListener('click', () => (modeOpen ? closeModes(true) : openModes()));
+  modeBtn.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (!modeOpen) openModes(); }
+  });
+  modePanel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeModes(true); return; }
+    if (event.key === 'Tab') { closeModes(false); return; }
+    if (event.target !== modeList) return;
+    const last = MODE_KEYS.length - 1;
+    if (event.key === 'ArrowDown') modeAt = modeAt >= last ? 0 : modeAt + 1;
+    else if (event.key === 'ArrowUp') modeAt = modeAt <= 0 ? last : modeAt - 1;
+    else if (event.key === 'Home') modeAt = 0;
+    else if (event.key === 'End') modeAt = last;
+    else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pickMode(MODE_KEYS[modeAt]); return; }
+    else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      typed += event.key.toLowerCase(); clearTimeout(typedTimer); typedTimer = setTimeout(() => { typed = ''; }, 600);
+      const hit = MODE_KEYS.findIndex(key => MODES[key].label.toLowerCase().startsWith(typed));
+      if (hit >= 0) { modeAt = hit; markModes(); }
+      return;
+    } else return;
+    event.preventDefault(); markModes();
+  });
+  modePanel.addEventListener('click', event => { if (event.target.closest('.mode-more a')) closeModes(false); });
+  document.addEventListener('click', event => { if (modeOpen && !$('mode-wrap').contains(event.target)) closeModes(false); });
+  $('composer-options').addEventListener('click', () => {
+    const open = form.classList.toggle('opts-open'); $('composer-options').setAttribute('aria-expanded', String(open));
+  });
+  $('compare-example').addEventListener('click', () => {
+    if (query.value.trim()) { query.focus(); return; }
+    query.value = 'Compare X vs Y'; controls(); query.focus(); query.setSelectionRange(8, 9);
+  });
+  const countWord = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   let pillText = '';
   function controls() {
-    const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
-    $('target-url').hidden = !collecting;
-    $('target-url').disabled = Boolean(active) || !collecting;
-    $('target-url').placeholder = mode === 'crawl' ? 'https://example.com (up to five pages)' : 'https://example.com/page';
-    query.placeholder = collecting ? 'What should Zearch extract? (optional)' : 'Ask a question or compare options…';
-    if (collecting) $('use-knowledge').checked = false;
-    $('use-knowledge').closest('label').hidden = collecting;
-    $('decide').disabled = !active && (!sessionReady || (collecting ? !$('target-url').value.trim() : !query.value.trim()));
-    const action = mode === 'scrape' ? 'Scrape' : mode === 'crawl' ? 'Crawl' : 'Search';
-    $('decide').querySelector('span').textContent = active ? 'Stop' : action;
-    $('decide').setAttribute('aria-label', active ? 'Stop research' : action);
+    const mode = MODES[$('depth').value] ? $('depth').value : 'standard', m = MODES[mode], collecting = isCollecting(mode);
+    form.dataset.mode = mode; if (collecting) form.dataset.collect = ''; else delete form.dataset.collect;
+    $('mode-btn-use').setAttribute('href', '#i-' + m.icon); $('mode-btn-name').textContent = m.label;
+    modeBtn.setAttribute('aria-label', `Research mode: ${m.label}`); modeBtn.disabled = Boolean(active); if (active) closeModes(false);
+    $('tile-url').hidden = !collecting; $('tile-compare').hidden = mode !== 'compare'; $('tile-deep').hidden = mode !== 'deep';
+    $('tile-search').hidden = mode !== 'standard'; $('tile-notes').hidden = collecting;
+    const url = $('target-url'), check = collecting ? core.validateTargetUrl(url.value) : { ok: false, empty: true };
+    url.disabled = Boolean(active) || !collecting;
+    url.placeholder = mode === 'crawl' ? 'https://example.com (up to five pages)' : 'https://example.com/page';
+    url.setAttribute('aria-invalid', String(collecting && !check.ok && !check.empty));
+    $('tile-url').dataset.state = !collecting || check.empty ? '' : check.ok ? 'ok' : 'bad';
+    const hint = check.empty ? (mode === 'crawl' ? 'Public https:// site. Zearch reads up to five of its pages.' : 'Public https:// pages only.') :
+      check.ok ? (mode === 'crawl' ? 'Looks good. Zearch will read up to five pages of this site.' : 'Looks good. Zearch will read this one page.') : check.reason;
+    if ($('url-hint').textContent !== hint) $('url-hint').textContent = hint;
+    query.placeholder = m.placeholder;
+    const notes = (workspaceData.notes || []).length, docs = (workspaceData.documents || []).length, kn = $('use-knowledge');
+    const canUse = workspaceLoaded && notes + docs > 0;
+    if (!canUse || collecting) kn.checked = false;
+    kn.disabled = Boolean(active) || !canUse || collecting;
+    $('notes-sub').textContent = !workspaceLoaded ? 'Checking your notes…' : !canUse ? 'No notes or documents yet. Add one in Knowledge to search it.' :
+      `${countWord(notes, 'note', 'notes')} and ${countWord(docs, 'document', 'documents')} available`;
+    $('notes-link').hidden = !(workspaceLoaded && !canUse);
+    $('decide').disabled = !active && (!sessionReady || (collecting ? !check.ok : !query.value.trim()));
+    $('decide').querySelector('.decide-label').textContent = active ? 'Stop' : m.verb;
+    $('decide').setAttribute('aria-label', active ? 'Stop research' : m.verb);
     $('decide').dataset.busy = String(Boolean(active));
-    $('depth').disabled = Boolean(active); $('use-knowledge').disabled = Boolean(active) || !workspaceReady || collecting;
-    for (const chip of chips) {
-      const on = chip.dataset.mode === mode;
-      chip.setAttribute('aria-checked', String(on)); chip.tabIndex = on ? 0 : -1; chip.disabled = Boolean(active);
-    }
-    $('depth-hint-text').textContent = DEPTH_HINT[mode] || '';
-    $('mode-help').textContent = MODE_HELP[mode] || '';
+    $('depth').disabled = Boolean(active);
+    for (const chip of document.querySelectorAll('.followup-chip')) chip.disabled = Boolean(active);
+    $('depth-hint-text').textContent = m.cost; $('mode-help').textContent = m.help;
     const allowance = workspaceData.allowance;
     if (allowance && Number.isFinite(allowance.daily_limit) && Number.isFinite(allowance.used)) {
       const left = Math.max(0, allowance.daily_limit - allowance.used);
@@ -216,13 +321,14 @@
       $('allowance').textContent = `${allowance.used}/${allowance.daily_limit} runs today`;
       $('allowance-chip').title = `${left} of ${allowance.daily_limit} runs left today. Resets ${allowance.reset}.`;
       $('menu-allowance').textContent = `${left} of ${allowance.daily_limit} runs left today`;
-    } else { $('allowance-chip').hidden = true; $('allowance').textContent = ''; $('menu-allowance').textContent = ''; }
+      $('runs-left').hidden = false; $('runs-left').textContent = `${left} ${left === 1 ? 'run' : 'runs'} left today`; $('runs-left').title = `Resets ${allowance.reset}`;
+    } else { $('allowance-chip').hidden = true; $('allowance').textContent = ''; $('menu-allowance').textContent = ''; $('runs-left').hidden = true; $('runs-left').textContent = ''; }
     const running = Math.max(Number(workspaceData.running) || 0, active ? 1 : 0), text = running === 1 ? '1 run in progress' : `${running} runs in progress`;
     $('runs-pill').hidden = running < 1;
     if (running >= 1 && text !== pillText) $('runs-pill-text').textContent = text;
     pillText = running >= 1 ? text : '';
     const length = query.value.length, counter = $('char-count');
-    counter.hidden = length < 1600; counter.textContent = `${length} / ${query.maxLength}`;
+    counter.textContent = `${length} / ${query.maxLength}`; counter.classList.toggle('warn', length >= query.maxLength * 0.9);
     query.style.height = 'auto'; query.style.height = Math.min(query.scrollHeight, 180) + 'px';
   }
 
@@ -304,10 +410,11 @@
     if (location.hash === core.viewHash(name)) route(true); else window.history.pushState(null, '', core.viewHash(name)), route(true);
   }
   function showThread() {
-    empty.classList.add('hidden'); form.classList.remove('home-composer'); dock.append(form, fine);
+    empty.classList.add('hidden'); form.classList.remove('home-composer'); dock.append(form, fine); closeModes(false);
   }
   function showHomeLayout() {
     empty.classList.remove('hidden'); $('composer-slot').append(form, fine); form.classList.add('home-composer');
+    form.classList.remove('opts-open'); $('composer-options').setAttribute('aria-expanded', 'false'); closeModes(false);
   }
   function home(options = {}) {
     if (active) {
@@ -519,8 +626,11 @@
     selectTab('Overview');
     const summary = make('summary'), sources = make('ol'), actions = make('div', 'turn-actions');
     const trace = make('details', 'research-trace'), traceTitle = make('summary', '', 'How this answer was checked');
-    const traceBody = make('p'); trace.append(traceTitle, traceBody); trace.hidden = true;
-    question.append(make('div', 'user-bubble', run.query));
+    const traceBody = make('ul', 'trace-list'); trace.append(traceTitle, traceBody); trace.hidden = true;
+    const followups = make('div', 'followups'); followups.setAttribute('role', 'group'); followups.setAttribute('aria-label', 'Suggested follow-up questions'); followups.hidden = true;
+    const head = make('div', 'assistant-head'), mark = make('span', 'mark'); mark.setAttribute('aria-hidden', 'true'); mark.append(icon('mark')); head.append(mark, make('span', '', 'Zearch'));
+    const who = make('div', 'user-label'); who.append(make('span', '', 'You'), make('span', 'tag', core.modeLabel(run.depth || 'standard')));
+    question.append(who, make('div', 'user-bubble', run.query));
     if (run.target_url) question.append(make('small', 'source-meta', run.target_url));
     response.setAttribute('aria-label', 'Zearch answer'); status.setAttribute('role', 'status');
     details.append(summary, sources);
@@ -589,8 +699,8 @@
       }
     });
     actions.setAttribute('aria-label', 'Answer actions');
-    actions.append(copy, link, again, exportMenu, save, monitor);
-    response.append(status, collecting ? dashboard : body, actions, details, trace); root.append(question, response); thread.append(root);
+    actions.append(copy, link, again, make('span', 'spacer'), exportMenu, save, monitor);
+    response.append(head, status, collecting ? dashboard : body, actions, followups, details, trace); root.append(question, response); thread.append(root);
 
     function sourceCard(source) {
       const li = make('li', 'evidence-card');
@@ -646,6 +756,7 @@
       const message = run.error || run.usage?.citation_warnings?.join(' ') || STATUS_TEXT[run.status] || (run.status === 'complete' ? '' : 'Partial answer');
       status.textContent = message;
       status.dataset.tone = ['error', 'interrupted'].includes(run.status) || run.error ? 'error' : run.status === 'redacted' ? 'notice' : '';
+      status.dataset.busy = String(core.shouldPoll(run.status) && !run.error);
       const finished = ['complete', 'error', 'interrupted'].includes(run.status);
       actions.hidden = !finished;
       copy.hidden = !run.answer; again.hidden = !finished || collecting && !run.target_url; again.textContent = run.status === 'complete' ? 'Regenerate' : 'Retry';
@@ -656,6 +767,7 @@
       for (const source of run.sources || []) sources.append(sourceCard(source));
       details.hidden = !sources.children.length;
       summary.textContent = `View ${sources.children.length} ${sources.children.length === 1 ? 'source' : 'sources'}`;
+      renderFollowups();
       if (collecting) renderCollection();
       if (collecting && run.status === 'complete' && core.isRunId(run.id) && !visualLoaded) {
         visualLoaded = true; loadVisual();
@@ -673,7 +785,22 @@
         if (run.usage.draft_fallback_reason) lines.push('Some draft claims could not be supported');
         if (run.usage.total_ms != null) lines.push(`Research time: ${(run.usage.total_ms / 1000).toFixed(1)}s`);
         if (Number.isInteger(run.estimated_cost)) lines.push(`Estimated cost: $${(run.estimated_cost / 1000000).toFixed(6)}`);
-        traceBody.textContent = lines.join('\n');
+        traceBody.replaceChildren(...lines.map(line => make('li', '', line)));
+      }
+    }
+    function renderFollowups() {
+      const list = run.status === 'complete' && !collecting && core.isRunId(run.id) ? core.followupSuggestions(run.usage) : [];
+      followups.replaceChildren(); followups.hidden = !list.length;
+      if (!list.length) return;
+      followups.append(make('p', 'followups-title', 'Follow up'));
+      for (const text of list) {
+        const chip = make('button', 'followup-chip', text); chip.type = 'button'; chip.disabled = Boolean(active);
+        chip.onclick = () => {
+          if (active || !sessionReady) return;
+          setParent(run.id, run.query); query.value = text;
+          startRun({ question: text, mode: run.depth && !isCollecting(run.depth) ? run.depth : 'standard', targetUrl: null, parentId: run.id, fromComposer: true });
+        };
+        followups.append(chip);
       }
     }
     /* Visual capture: load once, then follow a queued or running capture with capped backoff. */
@@ -859,10 +986,10 @@
     event.preventDefault();
     if (active) { if (event.submitter === $('decide')) active.abort(); return; }   // Enter never stops a run
     if (!sessionReady) return;
-    const mode = $('depth').value, collecting = mode === 'scrape' || mode === 'crawl';
+    const mode = $('depth').value, collecting = isCollecting(mode);
     const targetUrl = collecting ? $('target-url').value.trim() : null;
     const question = query.value.trim() || (mode === 'scrape' ? 'Summarize this page and extract its key facts.' : mode === 'crawl' ? 'Summarize the core product and main sections from the captured pages of this site.' : '');
-    if (!question || (collecting && !targetUrl)) return;
+    if (!question || (collecting && !core.validateTargetUrl(targetUrl).ok)) return;
     startRun({ question, mode, targetUrl, parentId: parent, fromComposer: true });
   }
   async function startRun({ question, mode, targetUrl, parentId, fromComposer = false }) {
@@ -946,67 +1073,185 @@
     'investigations-list': 'No investigations yet. Choose Save under an answer to refresh it later.',
     'batches-list': 'No batches yet. Add page URLs above to collect several pages at once.'
   };
+  const EMPTY_STATE = {
+    'notes-list': { icon: 'note', title: 'No notes yet', cta: 'Write a note', run: () => $('note-title').focus() },
+    'documents-list': { icon: 'file', title: 'No documents yet', cta: 'Choose a file', run: () => $('document-file').focus() },
+    'research-list': { icon: 'library', title: 'Nothing saved yet', cta: 'Ask a question', run: () => home({ push: true }) },
+    'investigations-list': { icon: 'monitors', title: 'No monitors yet', cta: 'Start researching', run: () => home({ push: true }) },
+    'batches-list': { icon: 'batches', title: 'No batches yet', cta: 'Add page URLs', run: () => $('batch-urls').focus() }
+  };
+  function emptyState(id) {
+    const spec = EMPTY_STATE[id], li = make('li', 'empty-state'), tile = make('span', 'empty-ico');
+    tile.setAttribute('aria-hidden', 'true'); tile.append(icon(spec.icon));
+    const cta = make('button', 'solid-btn', spec.cta); cta.type = 'button'; cta.onclick = spec.run;
+    li.append(tile, make('h3', '', spec.title), make('p', '', EMPTY[id]), cta); return li;
+  }
   function showWorkspaceSkeleton() {
     for (const id of LISTS) {
       const list = $(id); list.replaceChildren();
       for (let i = 0; i < 2; i++) { const li = make('li', 'skeleton'); li.setAttribute('aria-hidden', 'true'); list.append(li); }
     }
   }
-  function renderLibrary() {
-    const list = $('research-list'), all = workspaceData.history || [], needle = $('library-search').value.trim().toLowerCase();
-    const items = all.filter(item => core.isRunId(item.id) && (!needle || String(item.query).toLowerCase().includes(needle)));
-    list.replaceChildren();
-    $('library-count').textContent = !all.length ? '' : needle ? `${items.length} of ${all.length} shown` : `${all.length} saved`;
-    for (const item of items) {
-      const li = make('li', 'library-item'), dot = make('span', 'dot'), meta = make('span', 'lib-meta');
-      dot.dataset.tone = core.statusTone(item.status); dot.setAttribute('aria-hidden', 'true');
-      const seconds = core.toSeconds(item.created);
-      meta.textContent = [core.statusLabel(item.status), seconds ? new Date(seconds * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''].filter(Boolean).join(' · ');
-      if (seconds) meta.title = new Date(seconds * 1000).toLocaleString();
-      const open = button(item.query, () => openRun(item.id), 'workspace-title', `Open answer: ${item.query}`);
-      const del = button('Delete', async () => {
-        if (active) throw Error('Wait for the current research to finish.');
-        if (!window.confirm('Delete this answer and its evidence from the server? Follow-up answers derived from it will be redacted.')) return;
-        await api('delete_run', { id: item.id });
-        if (parent === item.id) setParent(null);
-        if (shownIds.has(item.id)) home({ focus: false, keepSurface: surface !== 'research' });
-        recent = recent.filter(x => x.id !== item.id); persistHistory();
-        await loadWorkspace(); toast('Answer deleted');
-      }, 'ghost-btn', `Delete answer: ${item.query}`);
-      li.append(dot, open, meta, del); list.append(li);
-    }
-    if (!items.length) {
-      const li = make('li', 'empty-note');
-      li.append(make('span', '', all.length ? `No saved answers match “${core.truncate(needle, 40)}”.` : EMPTY['research-list'] + ' '));
-      if (!all.length) { const ask = make('button', 'solid-btn', 'Ask a question'); ask.type = 'button'; ask.onclick = () => home({ push: true }); li.append(ask); }
-      list.append(li);
+  const fmtBytes = n => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+  const whenText = value => { const s = core.toSeconds(value); return s ? new Date(s * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+  let confirmId = 0;
+  /* A button that asks "are you sure?" in place instead of using a browser dialog. */
+  function confirmAction(label, message, confirmLabel, action, accessibleName) {
+    const wrap = make('span', 'confirm-wrap'), ask = make('button', 'ghost-btn danger', label), id = 'confirm-msg-' + (++confirmId);
+    ask.type = 'button'; if (accessibleName) ask.setAttribute('aria-label', accessibleName);
+    const hide = () => { wrap.replaceChildren(ask); wrap.removeAttribute('role'); wrap.removeAttribute('aria-labelledby'); ask.focus(); };
+    ask.onclick = () => {
+      const msg = make('span', 'confirm-msg', message); msg.id = id;
+      const yes = button(confirmLabel, action, 'solid-btn danger'), no = make('button', 'ghost-btn', 'Cancel'); no.type = 'button'; no.onclick = hide;
+      wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-labelledby', id); wrap.replaceChildren(msg, yes, no); no.focus();
+    };
+    wrap.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !wrap.contains(ask)) { event.preventDefault(); event.stopPropagation(); hide(); }
+    });
+    wrap.append(ask); return wrap;
+  }
+  const itemRow = (iconName, title, meta, control) => {
+    const li = make('li'), tile = make('span', 'item-ico'), main = make('span', 'item-main');
+    tile.setAttribute('aria-hidden', 'true'); tile.append(icon(iconName));
+    const name = make('span', 'item-title', title); name.title = title;
+    main.append(name, make('span', 'item-meta', meta)); li.append(tile, main, control); return li;
+  };
+
+  /* Library: filters, selection and inline confirmation. */
+  const libState = { mode: 'all', status: 'all' }, libSelected = new Set();
+  let libVisible = [];
+  const LIB_STATUS = [['all', 'All'], ['complete', 'Complete'], ['running', 'Running'], ['interrupted', 'Interrupted'], ['error', 'Error']];
+  function chipGroup(host, options, key) {
+    for (const [value, label] of options) {
+      const chip = make('button', 'filter-btn', label); chip.type = 'button'; chip.dataset.value = value; chip.setAttribute('aria-pressed', 'false');
+      chip.onclick = () => { libState[key] = value; renderLibrary(); };
+      host.append(chip);
     }
   }
+  chipGroup($('lib-status'), LIB_STATUS, 'status');
+  chipGroup($('lib-mode'), [['all', 'All modes'], ...MODE_KEYS.map(key => [key, MODES[key].label])], 'mode');
+  async function deleteRuns(ids) {
+    if (active) throw Error('Wait for the current research to finish.');
+    let done = 0, failed = 0, last = null;
+    for (const id of ids) {
+      try {
+        await api('delete_run', { id }); done++; libSelected.delete(id);
+        if (parent === id) setParent(null);
+        if (shownIds.has(id)) home({ focus: false, keepSurface: surface !== 'research' });
+        recent = recent.filter(x => x.id !== id);
+      } catch (error) { failed++; last = error; }
+    }
+    persistHistory(); await loadWorkspace();
+    if (failed) toast(`${done} deleted, ${failed} could not be deleted. ${errorText(last)}`, { error: true });
+    else toast(done === 1 ? 'Answer deleted' : `${done} answers deleted`);
+  }
+  function updateBulk() {
+    const bar = $('lib-bulk'), n = libSelected.size, all = $('lib-all'), shown = libVisible.length;
+    const picked = libVisible.filter(item => libSelected.has(item.id)).length;
+    all.checked = shown > 0 && picked === shown; all.indeterminate = picked > 0 && picked < shown; all.disabled = !shown;
+    bar.hidden = !n; bar.replaceChildren();
+    if (!n) return;
+    const label = make('span', '', `${n} selected`), actions = make('div', 'bulkbar-actions');
+    const clear = make('button', 'ghost-btn', 'Clear selection'); clear.type = 'button';
+    clear.onclick = () => { libSelected.clear(); renderLibrary(); };
+    actions.append(confirmAction(`Delete ${n}`, `Delete ${countWord(n, 'answer', 'answers')}? Follow-ups from them are redacted.`, `Delete ${n}`,
+      () => deleteRuns([...libSelected]), `Delete ${countWord(n, 'selected answer', 'selected answers')}`), clear);
+    bar.append(label, actions);
+  }
+  function renderLibrary() {
+    const list = $('research-list'), all = (workspaceData.history || []).filter(item => core.isRunId(item.id)), needle = $('library-search').value.trim();
+    const withDepth = core.hasDepth(all);
+    $('lib-mode').hidden = !withDepth; if (!withDepth) libState.mode = 'all';
+    for (const chip of $('lib-status').children) chip.setAttribute('aria-pressed', String(chip.dataset.value === libState.status));
+    for (const chip of $('lib-mode').children) chip.setAttribute('aria-pressed', String(chip.dataset.value === libState.mode));
+    $('library-clear').hidden = !needle; $('lib-toolbar').hidden = !all.length;
+    for (const id of [...libSelected]) if (!all.some(item => item.id === id)) libSelected.delete(id);
+    const items = core.filterLibrary(all, { needle, mode: libState.mode, status: libState.status }); libVisible = items;
+    list.replaceChildren();
+    const filtered = Boolean(needle) || libState.mode !== 'all' || libState.status !== 'all';
+    $('library-count').textContent = !all.length ? '' : filtered ? `${items.length} of ${all.length} shown` : countWord(all.length, 'saved answer', 'saved answers');
+    for (const item of items) {
+      const li = make('li', 'library-item'), check = make('input', 'lib-check'), seconds = core.toSeconds(item.created);
+      li.dataset.id = item.id; li.classList.toggle('is-selected', libSelected.has(item.id));
+      check.type = 'checkbox'; check.checked = libSelected.has(item.id); check.setAttribute('aria-label', `Select answer: ${item.query}`);
+      check.onchange = () => { if (check.checked) libSelected.add(item.id); else libSelected.delete(item.id); li.classList.toggle('is-selected', check.checked); updateBulk(); };
+      const open = button(item.query, () => openRun(item.id), 'workspace-title', `Open answer: ${item.query}`); open.title = item.query;
+      const date = make('span', 'lib-date', [item.depth ? core.modeLabel(item.depth) : '', core.relativeTime(item.created)].filter(Boolean).join(' · '));
+      if (seconds) date.title = new Date(seconds * 1000).toLocaleString();
+      const actions = make('span', 'lib-actions');
+      actions.append(confirmAction('Delete', 'Delete this answer? Follow-ups from it are redacted.', 'Delete', () => deleteRuns([item.id]), `Delete answer: ${item.query}`));
+      li.append(check, open, statusPill(item.status), date, actions); list.append(li);
+    }
+    if (!items.length) {
+      if (!all.length) list.append(emptyState('research-list'));
+      else {
+        const li = make('li', 'empty-state'), tile = make('span', 'empty-ico'), reset = make('button', 'ghost-btn', 'Clear filters'); reset.type = 'button';
+        tile.setAttribute('aria-hidden', 'true'); tile.append(icon('search'));
+        reset.onclick = () => { $('library-search').value = ''; libState.mode = 'all'; libState.status = 'all'; renderLibrary(); };
+        li.append(tile, make('h3', '', 'No matching answers'), make('p', '', needle ? `Nothing saved matches “${core.truncate(needle, 40)}” with these filters.` : 'Nothing saved matches these filters.'), reset); list.append(li);
+      }
+    }
+    updateBulk();
+  }
+  $('research-list').addEventListener('keydown', event => {
+    const title = event.target.closest('.workspace-title'); if (!title) return;
+    const titles = [...$('research-list').querySelectorAll('.workspace-title')], at = titles.indexOf(title);
+    const next = event.key === 'ArrowDown' ? titles[at + 1] : event.key === 'ArrowUp' ? titles[at - 1] : event.key === 'Home' ? titles[0] : event.key === 'End' ? titles.at(-1) : null;
+    if (next) { event.preventDefault(); next.focus(); }
+    else if (event.key === 'Delete') { event.preventDefault(); title.closest('li').querySelector('.lib-actions button')?.click(); }
+  });
+  $('lib-all').addEventListener('change', () => {
+    for (const item of libVisible) { if ($('lib-all').checked) libSelected.add(item.id); else libSelected.delete(item.id); }
+    renderLibrary();
+  });
+  function pill(label, tone) {
+    const node = make('span', 'pill'); node.dataset.tone = tone;
+    const dot = make('span', 'dot'); dot.setAttribute('aria-hidden', 'true'); node.append(dot, make('span', '', label)); return node;
+  }
+  const batchTone = status => (status === 'complete' ? 'ok' : status === 'running' ? 'run' : ['failed', 'error'].includes(status) ? 'bad' : ['canceled', 'cancelled'].includes(status) ? 'warn' : 'idle');
+  const capital = text => String(text || '').charAt(0).toUpperCase() + String(text || '').slice(1);
+  function jobHead(iconName, kind, title, sub, status) {
+    const head = make('div', 'job-head'), tile = make('span', 'item-ico'), titles = make('div', 'job-titles');
+    tile.setAttribute('aria-hidden', 'true'); tile.append(icon(iconName));
+    titles.append(make('p', 'job-kind', kind), make('h3', 'job-title', title)); if (sub) titles.append(make('p', 'job-sub', sub));
+    head.append(tile, titles, status); return head;
+  }
+  function metaList(pairs) {
+    const rows = pairs.filter(pair => pair[1]); if (!rows.length) return null;
+    const dl = make('dl', 'job-meta');
+    for (const [key, value] of rows) { const div = make('div'); div.append(make('dt', '', key), make('dd', '', value)); dl.append(div); }
+    return dl;
+  }
+  const scheduleText = hours => (hours === 24 ? 'Daily' : hours === 168 ? 'Weekly' : hours > 0 ? `Every ${hours} h` : 'Paused');
   function renderWorkspace() {
     const data = workspaceData, allowance = data.allowance;
     $('workspace-status').textContent = allowance ? `${allowance.plan} plan · ${allowance.used} of ${allowance.daily_limit} runs used today · resets ${allowance.reset}. Daily usage limits also apply.` : '';
     for (const id of LISTS) $(id).replaceChildren();
+    for (const [id, key] of [['notes-count', 'notes'], ['documents-count', 'documents']]) { const n = (data[key] || []).length; $(id).hidden = !n; $(id).textContent = String(n); }
     for (const note of data.notes || []) {
-      const li = make('li'); li.append(make('span', '', note.title), button('Delete', async () => {
-        if (!window.confirm('Delete this stored note and redact saved answers that used it?')) return;
+      $('notes-list').append(itemRow('note', note.title, core.relativeTime(note.created) ? `Added ${core.relativeTime(note.created)}` : 'Note', confirmAction('Delete', 'Delete this note? Answers that used it are redacted.', 'Delete', async () => {
         await api('delete_note', { id: note.id }); await loadWorkspace(); toast('Note deleted');
-      }, 'ghost-btn', `Delete note: ${note.title}`)); $('notes-list').append(li);
+      }, `Delete note: ${note.title}`)));
     }
     for (const item of data.documents || []) {
-      const li = make('li'); li.append(make('span', '', item.filename), button('Delete', async () => {
-        if (!window.confirm('Delete this document and redact saved answers that used it?')) return;
+      const meta = [Number.isFinite(item.byte_count) ? fmtBytes(item.byte_count) : '', core.relativeTime(item.created)].filter(Boolean).join(' · ');
+      $('documents-list').append(itemRow('file', item.filename, meta || 'Document', confirmAction('Delete', 'Delete this document? Answers that used it are redacted.', 'Delete', async () => {
         await api('delete_document', { id: item.id }); await loadWorkspace(); toast('Document deleted');
-      }, 'ghost-btn', `Delete document: ${item.filename}`)); $('documents-list').append(li);
+      }, `Delete document: ${item.filename}`)));
     }
     renderLibrary();
     for (const item of data.investigations || []) {
-      const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
-      li.append(make('p', 'workspace-title', `${item.depth === 'scrape' || item.depth === 'crawl' ? 'Site monitor' : 'Investigation'} · ${item.query}`));
-      if (item.target_url) li.append(make('p', 'hint', item.target_url));
+      const li = make('li', 'job-card investigation-item'), collectingItem = isCollecting(item.depth), actions = make('div', 'job-actions');
+      const failed = Boolean(item.job && item.job.error), refreshing = Boolean(item.job && ['queued', 'running'].includes(item.job.status));
+      const state = failed ? pill('Refresh failed', 'bad') : refreshing ? pill('Refreshing', 'run') : item.interval_hours > 0 ? pill('Scheduled', 'ok') : pill('Paused', 'idle');
+      li.append(jobHead(collectingItem ? 'crawl' : 'monitors', collectingItem ? 'Site monitor' : 'Investigation', item.query, item.target_url, state));
       const changes = item.last_changes || {}, count = key => (Array.isArray(changes[key]) ? changes[key].length : 0);
       const summary = changes.check ? `${count('added')} new sources · ${count('changed')} changed excerpts · ${count('removed')} removed sources.${changes.answer_changed ? ' The answer changed; review the saved runs before relying on it.' : ''} No verified fact-change alert was sent.` : 'No refresh comparison yet.';
-      li.append(make('p', 'hint', summary));
-      if (item.job) li.append(make('p', 'hint', item.job.error || `Refresh ${item.job.status}`));
+      li.append(make('p', 'job-summary', summary));
+      if (item.job) li.append(make('p', 'job-sub', item.job.error || `Refresh ${item.job.status}`));
+      const meta = metaList([['Schedule', data.discovery_enabled || item.interval_hours ? scheduleText(item.interval_hours) : ''],
+        ['Next refresh', item.interval_hours > 0 ? whenText(item.next_run) : ''], ['Saved', core.relativeTime(item.created)], ['Schedule expires', whenText(item.expires)]]);
+      if (meta) li.append(meta);
       if (item.last_run) actions.append(button('Open latest', () => openRun(item.last_run), 'ghost-btn', `Open latest answer: ${item.query}`));
       if (data.discovery_enabled) {
         actions.append(button('Refresh', async () => { await api('refresh', { id: item.id }); await loadWorkspace(); toast('Refresh queued'); }, 'ghost-btn', `Refresh: ${item.query}`));
@@ -1021,31 +1266,37 @@
           catch (error) { select.value = item.interval_hours; fail(error); }
           finally { select.disabled = false; }
         };
-        wrap.append(select); wrap.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>');
-        actions.append(wrap);
-      } else li.append(make('p', 'hint', 'Scheduled refresh is not enabled on this deployment.'));
-      actions.append(button('Remove', async () => {
-        if (!window.confirm('Remove this investigation and its schedule? Saved answers will remain.')) return;
+        wrap.append(select, icon('chevron')); actions.append(wrap);
+      } else li.append(make('p', 'job-sub', 'Scheduled refresh is not enabled on this deployment.'));
+      actions.append(confirmAction('Remove', 'Remove this monitor and its schedule? Saved answers remain.', 'Remove', async () => {
         await api('delete_investigation', { id: item.id }); await loadWorkspace(); toast('Investigation removed');
-      }, 'ghost-btn', `Remove investigation: ${item.query}`)); li.append(actions); $('investigations-list').append(li);
+      }, `Remove investigation: ${item.query}`)); li.append(actions); $('investigations-list').append(li);
     }
     $('batch-form').querySelector('button').disabled = !data.discovery_enabled;
     $('batch-disabled').hidden = Boolean(data.discovery_enabled);
     for (const batch of data.batches || []) {
-      const items = batch.items || [];
-      const li = make('li', 'investigation-item'), actions = make('div', 'turn-actions');
-      li.append(make('p', 'workspace-title', `${items.filter(x => x.status === 'complete').length}/${items.length} pages · ${batch.status}`));
-      for (const item of items) {
-        const row = make('div', 'batch-row'); row.append(make('span', '', item.target_url), make('small', '', item.error || item.status));
-        if (item.run_id) row.append(button('Open', () => openRun(item.run_id), 'ghost-btn', `Open answer for ${item.target_url}`));
-        li.append(row);
+      const items = batch.items || [], done = items.filter(x => x.status === 'complete').length;
+      const li = make('li', 'job-card investigation-item'), actions = make('div', 'job-actions');
+      li.append(jobHead('batches', 'Batch', `${done}/${items.length} pages`, core.relativeTime(batch.created) ? `Queued ${core.relativeTime(batch.created)}${batch.query ? ' · ' + core.truncate(batch.query, 80) : ''}` : batch.query, pill(capital(batch.status), batchTone(batch.status))));
+      const bar = make('div', 'progress'), fill = make('span'); bar.dataset.tone = batchTone(batch.status);
+      bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Pages complete'); bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', String(items.length)); bar.setAttribute('aria-valuenow', String(done));
+      fill.style.width = items.length ? Math.round(done / items.length * 100) + '%' : '0%'; bar.append(fill); li.append(bar);
+      if (items.length) {
+        const rows = make('ul', 'batch-rows');
+        for (const item of items) {
+          const row = make('li'); row.append(make('span', 'batch-url', item.target_url), item.error ? make('small', 'job-sub', item.error) : pill(capital(item.status), batchTone(item.status)));
+          if (item.run_id) row.append(button('Open', () => openRun(item.run_id), 'ghost-btn', `Open answer for ${item.target_url}`));
+          rows.append(row);
+        }
+        li.append(rows);
       }
       if (['queued', 'running'].includes(batch.status)) actions.append(button('Cancel queued', async () => {
         await api('cancel_batch', { id: batch.id }); await loadWorkspace(); toast('Batch canceled');
-      }));
-      li.append(actions); $('batches-list').append(li);
+      }, 'ghost-btn danger'));
+      if (actions.children.length) li.append(actions);
+      $('batches-list').append(li);
     }
-    for (const id of LISTS) if (!$(id).children.length) $(id).append(make('li', 'empty-note', EMPTY[id]));
+    for (const id of LISTS) if (!$(id).children.length) $(id).append(emptyState(id));
   }
   async function loadWorkspace(showErrors = true) {
     const seq = ++workspaceSeq;
@@ -1058,7 +1309,7 @@
       persistHistory(); renderWorkspace(); controls();
     } catch (error) {
       if (seq !== workspaceSeq) return;
-      if (!workspaceLoaded) for (const id of LISTS) { $(id).replaceChildren(make('li', 'empty-note', 'Could not load this yet.')); }
+      if (!workspaceLoaded) for (const id of LISTS) { $(id).replaceChildren(make('li', 'hint', 'Could not load this yet.')); }
       if (showErrors) $('workspace-status').textContent = errorText(error);
       controls();
     }
@@ -1078,33 +1329,79 @@
       $('note-form').reset(); await loadWorkspace(); toast('Note saved');
     } catch (error) { fail(error); } finally { submitter.disabled = false; }
   };
+  /* Batch form: live URL count and validation. */
+  const batchLines = () => $('batch-urls').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  function batchCheck() {
+    const lines = batchLines(), bad = lines.findIndex(line => !core.validateTargetUrl(line).ok), help = $('batch-help');
+    let text = `${countWord(lines.length, 'URL', 'URLs')} · 2–10 https:// pages`, tone = '';
+    if (bad >= 0) { text = `Line ${bad + 1} is not a public https:// address. ${text}`; tone = 'bad'; }
+    else if (lines.length > 10) { text = `Too many pages: ${lines.length}. Use at most 10.`; tone = 'bad'; }
+    help.textContent = text; help.classList.toggle('bad', tone === 'bad');
+    $('batch-urls').setAttribute('aria-invalid', String(tone === 'bad'));
+    return { ok: !tone && lines.length >= 2, lines, text };
+  }
+  $('batch-urls').addEventListener('input', batchCheck);
   $('batch-form').onsubmit = async event => {
-    event.preventDefault(); const submitter = event.submitter; submitter.disabled = true;
+    event.preventDefault(); const submitter = event.submitter, check = batchCheck();
+    if (!check.ok) { toast(check.lines.length < 2 && !$('batch-help').classList.contains('bad') ? 'Add at least two page URLs.' : check.text, { error: true }); return; }
+    submitter.disabled = true;
     try {
-      const urls = $('batch-urls').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-      await api('create_batch', { urls, query: $('batch-query').value });
-      $('batch-form').reset(); await loadWorkspace(); toast('Batch queued');
+      await api('create_batch', { urls: check.lines, query: $('batch-query').value });
+      $('batch-form').reset(); batchCheck(); await loadWorkspace(); toast('Batch queued');
     } catch (error) { fail(error); } finally { submitter.disabled = false; }
   };
-  $('note-file').onchange = async () => {
-    const file = $('note-file').files[0]; if (!file) return;
-    if (!/\.(txt|md)$/i.test(file.name) || file.size > 160000) { toast('Choose a .txt or .md file under 160 KB', { error: true }); $('note-file').value = ''; return; }
-    try {
-      const text = await file.text();
-      if (text.length > 40000 || text.includes('\0')) { toast('Use plain text up to 40,000 characters', { error: true }); $('note-file').value = ''; return; }
-      $('note-body').value = text; if (!$('note-title').value) $('note-title').value = file.name.slice(0, 120);
-    } catch { toast('Could not read that file. Try another one.', { error: true }); $('note-file').value = ''; }
+
+  /* Drop zones: the native file input stays for keyboard and screen readers; the zone adds drag and drop and a file row. */
+  function dropzone(zone, input, row, handle) {
+    const show = file => {
+      row.replaceChildren(); row.hidden = !file; if (!file) return;
+      const remove = make('button', 'link-btn', 'Remove'); remove.type = 'button'; remove.setAttribute('aria-label', `Remove ${file.name}`);
+      remove.onclick = () => { input.value = ''; show(null); handle(null); };
+      row.append(icon('file'), make('span', 'file-name', file.name), make('span', 'file-size', fmtBytes(file.size)), remove);
+    };
+    const accept = file => { const ok = handle(file); show(ok === false ? null : file); if (ok === false) input.value = ''; };
+    input.addEventListener('change', () => accept(input.files[0] || null));
+    for (const type of ['dragenter', 'dragover']) zone.addEventListener(type, event => { event.preventDefault(); zone.classList.add('is-drag'); });
+    zone.addEventListener('dragleave', event => { if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-drag'); });
+    zone.addEventListener('drop', event => {
+      event.preventDefault(); zone.classList.remove('is-drag');
+      const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]; if (!file) return;
+      try { const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files; } catch {}
+      accept(file);
+    });
+    return show;
+  }
+  const counter = (input, out, format, limit) => {
+    const paint = () => { const n = input.value.length; out.textContent = format(n); out.parentElement.classList.toggle('warn', n >= limit * 0.9); };
+    input.addEventListener('input', paint); return paint;
   };
+  const paintTitle = counter($('note-title'), $('note-title-count'), n => `${n} / 120`, 120);
+  const paintBody = counter($('note-body'), $('note-body-count'), n => `${n.toLocaleString('en-US')} / 40,000 characters`, 40000);
+  const showNoteFile = dropzone($('note-drop'), $('note-file'), $('note-file-row'), file => {
+    if (!file) return true;
+    if (!/\.(txt|md)$/i.test(file.name) || file.size > 160000) { toast('Choose a .txt or .md file under 160 KB', { error: true }); return false; }
+    file.text().then(text => {
+      if (text.length > 40000 || text.includes('\0')) { toast('Use plain text up to 40,000 characters', { error: true }); $('note-file').value = ''; showNoteFile(null); return; }
+      $('note-body').value = text; if (!$('note-title').value) $('note-title').value = file.name.slice(0, 120); paintTitle(); paintBody();
+    }).catch(() => { toast('Could not read that file. Try another one.', { error: true }); $('note-file').value = ''; showNoteFile(null); });
+    return true;
+  });
+  $('note-form').addEventListener('reset', () => setTimeout(() => { showNoteFile(null); paintTitle(); paintBody(); }, 0));
+  let documentFile = null;
+  const showDocFile = dropzone($('document-drop'), $('document-file'), $('document-file-row'), file => {
+    if (file && (!/\.(txt|md|docx)$/i.test(file.name) || file.size > 128000)) { toast('Choose a .txt, .md or .docx file under 128 KB', { error: true }); documentFile = null; $('document-submit').disabled = true; return false; }
+    documentFile = file; $('document-submit').disabled = !file; return true;
+  });
   $('document-form').onsubmit = async event => {
-    event.preventDefault(); const file = $('document-file').files[0], submitter = event.submitter;
-    if (!file || !/\.(txt|md|docx)$/i.test(file.name) || file.size > 128000) { toast('Choose a .txt, .md or .docx file under 128 KB', { error: true }); return; }
+    event.preventDefault(); const file = documentFile, submitter = event.submitter;
+    if (!file) { toast('Choose a .txt, .md or .docx file under 128 KB', { error: true }); return; }
     submitter.disabled = true;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer()); let binary = '';
       for (let at = 0; at < bytes.length; at += 8192) binary += String.fromCharCode(...bytes.subarray(at, at + 8192));
       await api('add_document', { filename: file.name, content_base64: btoa(binary) });
-      $('document-form').reset(); await loadWorkspace(); toast('Document imported');
-    } catch (error) { fail(error); } finally { submitter.disabled = false; }
+      $('document-form').reset(); documentFile = null; showDocFile(null); await loadWorkspace(); toast('Document imported');
+    } catch (error) { fail(error); submitter.disabled = false; }
   };
   $('account-email-form').onsubmit = async event => {
     event.preventDefault(); const submitter = event.submitter; submitter.disabled = true;
@@ -1184,15 +1481,16 @@
   const overviewContent = () => $('overview-content');
   function buildOverview() {
     if (overviewBuilt) return; overviewBuilt = true;
-    const body = $('overview-body'), head = make('header', 'view-head');
-    const title = make('div'); title.append(make('h1', '', 'Overview'), make('p', 'hint', 'Computed from your own runs. Nothing here is estimated beyond what each figure says.'));
+    const body = $('overview-body'), head = make('header', 'page-head'), tile = make('span', 'page-ico'), actions = make('div', 'page-actions');
+    tile.setAttribute('aria-hidden', 'true'); tile.append(icon('overview'));
+    const title = make('div', 'page-titles'); title.append(make('h1', '', 'Overview'), make('p', 'page-sub', 'Computed from your own runs. Nothing here is estimated beyond what each figure says.'));
     const range = make('div', 'segmented', ''); range.id = 'stats-range'; range.setAttribute('role', 'group'); range.setAttribute('aria-label', 'Time range');
     for (const days of [7, 30]) {
       const choice = make('button', '', `Last ${days} days`); choice.type = 'button'; choice.dataset.days = String(days);
       choice.onclick = () => { if (statsState.days === days) return; statsState.data = null; statsState.days = days; loadStats(days); };
       range.append(choice);
     }
-    head.append(title, range);
+    actions.append(range); head.append(tile, title, actions);
     const content = make('div', 'overview-content'); content.id = 'overview-content';
     body.append(head, content);
   }
@@ -1403,7 +1701,7 @@
     }
     const runs = (workspaceData.history || []).filter(x => core.isRunId(x.id)).slice(0, 100);
     runs.forEach((item, index) => items.push({ label: item.query, group: 'Library', icon: 'library', meta: core.relativeTime(item.created), rank: -index * 0.01, run: () => openRun(item.id) }));
-    const shown = core.paletteFilter(items, needle, needle ? 12 : 10);
+    const shown = core.paletteFilter(items, needle, 12);
     if (needle) {
       const text = core.truncate(needle, 80);
       shown.push({ label: `Search: ${text}`, group: 'Ask', icon: 'search', run: () => { startMode('standard', needle); form.requestSubmit(); } },
@@ -1415,10 +1713,13 @@
     paletteItems = paletteSource(paletteInput.value.trim());
     paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
     paletteList.replaceChildren();
+    const grouped = !paletteInput.value.trim(); let lastGroup = '';
     paletteItems.forEach((item, index) => {
+      if (grouped && item.group !== lastGroup) { lastGroup = item.group; const head = make('li', 'palette-head', item.group); head.setAttribute('role', 'presentation'); paletteList.append(head); }
       const li = make('li', 'palette-item'); li.id = 'palette-opt-' + index; li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(index === paletteIndex));
-      li.append(icon(item.icon), make('span', 'p-label', item.label), make('span', 'p-group', item.meta ? `${item.group} · ${item.meta}` : item.group));
+      const tile = make('span', 'p-ico'); tile.setAttribute('aria-hidden', 'true'); tile.append(icon(item.icon));
+      li.append(tile, make('span', 'p-label', item.label), make('span', 'p-group', grouped ? item.meta || '' : item.meta ? `${item.group} · ${item.meta}` : item.group));
       li.onmousemove = () => { if (paletteIndex !== index) { paletteIndex = index; markPalette(); } };
       li.onclick = () => runPalette(index);
       paletteList.append(li);
@@ -1491,8 +1792,10 @@
   $('rail-search').onclick = () => { closeRail(); openPalette(); };
   $('rail-toggle').onclick = () => setCollapsed(!collapsed);
   $('menu-btn').onclick = () => setRail(true); $('rail-close').onclick = closeRail; $('scrim').onclick = closeRail;
-  popMenu($('more-btn'), $('more-menu')); popMenu($('more-modes'), $('more-modes-menu'));
+  popMenu($('more-btn'), $('more-menu'));
   $('library-search').addEventListener('input', renderLibrary);
+  $('library-clear').onclick = () => { $('library-search').value = ''; renderLibrary(); $('library-search').focus(); };
+  $('library-new').onclick = () => home({ push: true });
   $('tab-research').onclick = () => { if (surface === 'research') return; if (active) home(); else if (shownId) openRun(shownId); else home({ push: true }); };
   $('tab-overview').onclick = () => goView('overview');
   $('subbar').addEventListener('keydown', event => {
@@ -1536,7 +1839,7 @@
     };
     $('starters').append(starter);
   });
-  setCollapsed(collapsed, false); syncSettings();
+  setCollapsed(collapsed, false); paintRail(); syncSettings(); batchCheck();
   setRail(false); listHistory(); controls(); syncChip();
 
   /* Initialize the session before enabling requests, so parallel first requests do not each mint a cookie. */

@@ -236,6 +236,51 @@
     return scored.slice(0, limit || 30).map(entry => entry.item);
   }
 
+  /* ---------- rail width, target URL, follow-ups, library filter ---------- */
+  const RAIL_MIN = 224, RAIL_DEFAULT = 258;
+  function railMaxWidth(viewport) { return Math.max(RAIL_MIN, Math.floor((Number(viewport) || 0) * 0.2)); }
+  /* Rail width in px: at least 224, at most 20% of the viewport (never below the minimum). Non-numbers give the default. */
+  function clampRailWidth(value, viewport) {
+    const n = Number(value), max = railMaxWidth(viewport);
+    return Math.min(max, Math.max(RAIL_MIN, Number.isFinite(n) ? Math.round(n) : RAIL_DEFAULT));
+  }
+  /* Public HTTPS page only. The server stays authoritative; this only explains the problem early. */
+  function validateTargetUrl(value) {
+    const text = String(value || '').trim();
+    if (!text) return { ok: false, empty: true, reason: '' };
+    if (text.length > 2048) return { ok: false, reason: 'That address is too long.' };
+    let url; try { url = new URL(text); } catch { return { ok: false, reason: 'Enter a full address that starts with https://' }; }
+    if (url.protocol !== 'https:') return { ok: false, reason: 'Only https:// pages can be read.' };
+    if (url.username || url.password) return { ok: false, reason: 'Remove the username and password from the address.' };
+    const host = url.hostname.toLowerCase();
+    if (!host.includes('.') || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('['))
+      return { ok: false, reason: 'Use a public website address, not a local or IP address.' };
+    return { ok: true, reason: '' };
+  }
+  /* Optional backend suggestions (usage.followups): up to 3 short unique strings, otherwise nothing. */
+  function followupSuggestions(usage) {
+    const list = usage && Array.isArray(usage.followups) ? usage.followups : [], out = [];
+    for (const item of list) {
+      if (typeof item !== 'string') continue;
+      const text = item.replace(/\s+/g, ' ').trim();
+      if (!text || text.length > 160 || out.some(x => x.toLowerCase() === text.toLowerCase())) continue;
+      out.push(text); if (out.length === 3) break;
+    }
+    return out;
+  }
+  /* Library filter. Rows without a depth only match the "all" mode filter. */
+  function filterLibrary(items, options = {}) {
+    const needle = String(options.needle || '').trim().toLowerCase(), mode = options.mode || 'all', status = options.status || 'all';
+    return (items || []).filter(item => {
+      if (needle && !String(item.query || '').toLowerCase().includes(needle)) return false;
+      if (mode !== 'all' && item.depth !== mode) return false;
+      if (status === 'running') return ACTIVE.includes(item.status);
+      return status === 'all' || item.status === status;
+    });
+  }
+  /* Whether any row carries a depth, so the UI knows if the mode filter can work. */
+  const hasDepth = items => (items || []).some(item => item && typeof item.depth === 'string' && item.depth);
+
   /* ---------- theme ---------- */
   const THEMES = ['system', 'light', 'dark'];
   function normalizeTheme(value) { return THEMES.includes(value) ? value : 'system'; }
@@ -248,7 +293,7 @@
     return { theme, motion };
   }
 
-  const api = { VIEWS, isRunId, parseRoute, routeHash, viewHash, modeLabel, formatPercent, formatMs, formatCost, toSeconds, relativeTime, statusLabel, statusTone, segments, sparkPoints, barHeights, insights, sortActivity, paletteScore, paletteFilter, normalizeTheme, applyPreferences, readNdjson, backoffDelay, shouldPoll, friendlyStatus, httpError, fetchJson, newRequestId, hostOf, truncate };
+  const api = { VIEWS, isRunId, parseRoute, routeHash, viewHash, modeLabel, formatPercent, formatMs, formatCost, toSeconds, relativeTime, statusLabel, statusTone, segments, sparkPoints, barHeights, insights, sortActivity, paletteScore, paletteFilter, normalizeTheme, applyPreferences, RAIL_MIN, RAIL_DEFAULT, railMaxWidth, clampRailWidth, validateTargetUrl, followupSuggestions, filterLibrary, hasDepth, readNdjson, backoffDelay, shouldPoll, friendlyStatus, httpError, fetchJson, newRequestId, hostOf, truncate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else {
     root.ZearchCore = api;

@@ -58,6 +58,15 @@
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.5 20c.8-4 4-5.5 7.5-5.5s6.7 1.5 7.5 5.5"/></symbol>
     <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 5v14M4.5 15.5L8 19l3.5-3.5M16 19V5M12.5 8.5L16 5l3.5 3.5"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.01"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h14v12l-5 5H5z"/><path d="M14 21v-5h5M8.5 9h7M8.5 13h4"/></symbol>
+    <symbol id="i-steps" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M8 6h4a2 2 0 0 1 2 2v2M8 18h4a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></symbol>
+    <symbol id="i-mark" viewBox="-4 -4 72 72"><g fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"><path d="M32 12C17-1 3 5 3 22V43C3 60 17 65 32 52C48 38 48 26 32 12Z"/><path d="M32 12C17-1 3 5 3 22V43C3 60 17 65 32 52C48 38 48 26 32 12Z" transform="translate(64 0) scale(-1 1)"/></g></symbol>
   </defs></svg>
   <div class="shell" id="shell">
     <!-- left rail -->
@@ -101,6 +110,7 @@
           <span class="account-text rail-label"><strong id="account-name">Guest</strong><small id="account-sub">Private to this browser</small></span>
         </button>
       </div>
+      <div class="rail-resizer" id="rail-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" aria-controls="rail" tabindex="0" aria-valuemin="224" aria-valuemax="256" aria-valuenow="258"></div>
     </aside>
     <div class="scrim" id="scrim"></div>
 
@@ -138,42 +148,82 @@
             <p class="lede">Short answers with cited sources, checked by Jev.</p>
           </div>
           <div id="composer-slot" class="composer-slot">
-          <form class="composer home-composer" id="composer" autocomplete="off">
-            <div class="chip" id="followup" hidden>
-              <span id="followup-text">Continuing from previous answer</span>
-              <button type="button" id="followup-clear" aria-label="Start a new topic instead of continuing"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
-            </div>
-            <div class="mode-row">
-              <div class="mode-chips" id="mode-chips" role="radiogroup" aria-label="Research mode">
-                <button type="button" class="mode-chip" role="radio" data-mode="standard" aria-checked="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><span>Search</span></button>
-                <button type="button" class="mode-chip" role="radio" data-mode="deep" aria-checked="false" tabindex="-1"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-deep"/></svg><span>Deep research</span></button>
-                <button type="button" class="mode-chip" role="radio" data-mode="compare" aria-checked="false" tabindex="-1"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-compare"/></svg><span>Compare</span></button>
-                <button type="button" class="mode-chip" role="radio" data-mode="scrape" aria-checked="false" tabindex="-1"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-scrape"/></svg><span>Scrape</span></button>
-                <button type="button" class="mode-chip" role="radio" data-mode="crawl" aria-checked="false" tabindex="-1"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-crawl"/></svg><span>Crawl</span></button>
-              </div>
-              <div class="menu-wrap">
-                <button type="button" class="mode-chip more-chip" id="more-modes" aria-haspopup="menu" aria-expanded="false" aria-controls="more-modes-menu"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-more"/></svg><span>More</span></button>
-                <div class="menu menu-up" id="more-modes-menu" role="menu" aria-label="More ways to research" hidden>
-                  <a role="menuitem" href="#batches"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-batches"/></svg>Batch pages</a>
-                  <a role="menuitem" href="#monitors"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitors"/></svg>Monitor a site</a>
+          <form class="composer home-composer" id="composer" autocomplete="off" data-mode="standard">
+            <div class="composer-card">
+              <div class="composer-top">
+                <div class="mode-wrap" id="mode-wrap">
+                  <button type="button" class="mode-btn" id="mode-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="mode-list" aria-label="Research mode: Search">
+                    <span class="mode-btn-ico" aria-hidden="true"><svg class="ico" focusable="false"><use id="mode-btn-use" href="#i-search"/></svg></span>
+                    <span class="mode-btn-name" id="mode-btn-name">Search</span>
+                    <svg class="ico mode-btn-chev" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+                  </button>
+                  <div class="mode-panel" id="mode-panel" hidden>
+                    <p class="mode-panel-title" id="mode-panel-title">Research mode</p>
+                    <ul id="mode-list" role="listbox" aria-labelledby="mode-panel-title" tabindex="-1"></ul>
+                    <div class="mode-more">
+                      <a href="#batches"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-batches"/></svg>Batch pages</a>
+                      <a href="#monitors"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitors"/></svg>Monitor a site</a>
+                    </div>
+                  </div>
+                </div>
+                <div class="chip" id="followup" hidden>
+                  <span id="followup-text">Continuing from previous answer</span>
+                  <button type="button" id="followup-clear" aria-label="Start a new topic instead of continuing"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
                 </div>
               </div>
-            </div>
-            <div class="composer-card">
               <label class="sr-only" for="query">Question</label>
               <textarea id="query" rows="1" maxlength="2000" placeholder="Ask a question or compare options…" aria-describedby="mode-help"></textarea>
-              <label class="sr-only" for="target-url">Public page URL</label>
-              <input id="target-url" class="target-url" type="url" inputmode="url" maxlength="2048" placeholder="https://example.com/page" hidden />
+              <div class="bento" id="bento">
+                <div class="tile tile-url" id="tile-url" hidden>
+                  <span class="tile-ico" aria-hidden="true"><svg class="ico" focusable="false"><use href="#i-crawl"/></svg></span>
+                  <div class="tile-main">
+                    <label class="tile-label" for="target-url">Public page URL</label>
+                    <input id="target-url" class="target-url" type="url" inputmode="url" maxlength="2048" placeholder="https://example.com/page" autocapitalize="off" spellcheck="false" aria-describedby="url-hint" />
+                    <p class="tile-hint" id="url-hint" role="status"></p>
+                  </div>
+                </div>
+                <div class="tile tile-compare" id="tile-compare" hidden>
+                  <span class="tile-ico" aria-hidden="true"><svg class="ico" focusable="false"><use href="#i-compare"/></svg></span>
+                  <div class="tile-main">
+                    <p class="tile-title">Name two or more options</p>
+                    <p class="tile-hint">Zearch puts them side by side, with sources for each.</p>
+                  </div>
+                  <button type="button" class="example-chip" id="compare-example" aria-label="Insert the example: X vs Y">X vs Y</button>
+                </div>
+                <div class="tile tile-deep" id="tile-deep" hidden>
+                  <span class="tile-ico" aria-hidden="true"><svg class="ico" focusable="false"><use href="#i-steps"/></svg></span>
+                  <div class="tile-main">
+                    <p class="tile-title">What happens</p>
+                    <ol class="steps">
+                      <li><b>Search</b><span>up to 3 queries</span></li>
+                      <li><b>Gap search</b><span>looks for what is missing</span></li>
+                      <li><b>Verify</b><span>Jev checks each claim</span></li>
+                    </ol>
+                  </div>
+                </div>
+                <div class="tile tile-search" id="tile-search" hidden>
+                  <span class="tile-ico" aria-hidden="true"><svg class="ico" focusable="false"><use href="#i-search"/></svg></span>
+                  <div class="tile-main"><p class="tile-hint tile-hint-solo">One query, cited sources. Enter sends, Shift+Enter adds a line.</p></div>
+                </div>
+                <div class="tile tile-notes" id="tile-notes">
+                  <label class="switch-wrap" for="use-knowledge">
+                    <input type="checkbox" id="use-knowledge" class="switch" aria-describedby="notes-sub" />
+                    <span class="tile-main"><span class="tile-title">Use my notes</span><span class="tile-hint" id="notes-sub">Checking your notes…</span></span>
+                  </label>
+                  <a class="tile-link" id="notes-link" href="#knowledge" hidden>Add notes</a>
+                </div>
+              </div>
               <div class="composer-row">
                 <div class="composer-tools">
                   <select id="depth" class="sr-only" tabindex="-1" aria-hidden="true"><option value="standard">Search</option><option value="deep">Deep research</option><option value="compare">Compare</option><option value="scrape">Scrape page</option><option value="crawl">Crawl site</option></select>
                   <span class="depth-chip" id="depth-hint"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-deep"/></svg><span id="depth-hint-text">1 query</span></span>
-                  <label class="knowledge-toggle"><input type="checkbox" id="use-knowledge" /> Use my notes</label>
                 </div>
                 <div class="composer-end">
-                  <span id="char-count" class="char-count" hidden></span>
+                  <button type="button" class="opts-btn" id="composer-options" aria-expanded="false" aria-controls="bento"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span>Options</span></button>
+                  <span id="char-count" class="char-count" aria-live="off">0 / 2000</span>
+                  <span id="runs-left" class="runs-left" hidden></span>
                   <button type="submit" class="decide" id="decide" aria-label="Search">
-                    <span>Search</span>
+                    <span class="decide-label">Search</span>
                     <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-send"/></svg>
                   </button>
                 </div>
@@ -205,8 +255,16 @@
       <!-- Library -->
       <section class="view" id="view-library" aria-labelledby="library-title" tabindex="-1" hidden>
         <div class="view-inner">
-          <header class="view-head"><div><h1 id="library-title">Library</h1><p class="hint">Your saved answers. Deleting an answer removes it from the server and redacts follow-ups that came from it.</p></div></header>
-          <div class="view-tools"><label class="sr-only" for="library-search">Search saved answers</label><input type="search" id="library-search" placeholder="Search saved answers" autocomplete="off" maxlength="200" /><span class="hint" id="library-count" role="status"></span></div>
+          <header class="page-head"><span class="page-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-library"/></svg></span><div class="page-titles"><h1 id="library-title">Library</h1><p class="page-sub">Your saved answers. Deleting an answer removes it from the server and redacts follow-ups that came from it.</p></div><div class="page-actions"><button type="button" class="solid-btn" id="library-new"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg><span>New research</span></button></div></header>
+          <div class="card lib-toolbar" id="lib-toolbar">
+            <div class="search-field"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><label class="sr-only" for="library-search">Search saved answers</label><input type="search" id="library-search" placeholder="Search saved answers" autocomplete="off" maxlength="200" /><button type="button" class="icon-btn search-clear" id="library-clear" aria-label="Clear search" hidden><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button></div>
+            <div class="filter-row">
+              <div class="chips" id="lib-status" role="group" aria-label="Filter by status"></div>
+              <div class="chips" id="lib-mode" role="group" aria-label="Filter by mode" hidden></div>
+            </div>
+            <div class="lib-meta-row"><label class="check-row"><input type="checkbox" id="lib-all" /> <span>Select all shown</span></label><span class="hint" id="library-count" role="status"></span></div>
+          </div>
+          <div class="bulkbar" id="lib-bulk" role="region" aria-label="Bulk actions" hidden></div>
           <ul id="research-list" class="workspace-list library-list"></ul>
         </div>
       </section>
@@ -214,23 +272,37 @@
       <!-- Knowledge -->
       <section class="view" id="view-knowledge" aria-labelledby="knowledge-title" tabindex="-1" hidden>
         <div class="view-inner">
-          <header class="view-head"><div><h1 id="knowledge-title">Knowledge</h1><p class="hint">Add notes and private .txt, .md or .docx documents. Relevant excerpts are shared with the services that check and write your answer only when “Use my notes” is on. Deleting knowledge redacts saved answers that used it.</p></div></header>
-          <div class="card form-card"><h2 class="card-title">Notes</h2>
-            <form id="note-form"><label for="note-title">Title</label><input id="note-title" maxlength="120" required />
-              <label for="note-body">Text</label><textarea id="note-body" maxlength="40000" rows="5" required></textarea>
-              <label for="note-file">Or import a text file</label><input id="note-file" type="file" accept=".txt,.md,text/plain,text/markdown" />
-              <button class="solid-btn" type="submit">Save note</button>
-            </form><ul id="notes-list" class="workspace-list"></ul></div>
-          <div class="card form-card"><h2 class="card-title">Documents</h2>
-            <form id="document-form"><label for="document-file">Private document</label><input id="document-file" type="file" accept=".txt,.md,.docx" required />
-              <button class="ghost-btn" type="submit">Import document</button></form><ul id="documents-list" class="workspace-list"></ul></div>
+          <header class="page-head"><span class="page-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-knowledge"/></svg></span><div class="page-titles"><h1 id="knowledge-title">Knowledge</h1><p class="page-sub">Add notes and private .txt, .md or .docx documents to search alongside the web.</p></div></header>
+          <p class="callout" role="note"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span>Relevant excerpts are shared with the services that check and write your answer only when “Use my notes” is on. Deleting knowledge redacts saved answers that used it.</span></p>
+          <div class="two-col">
+            <div class="card form-card"><header class="card-head"><div><h2 class="card-title">Notes</h2><p class="hint">Short text Zearch can quote from.</p></div><span class="count-badge" id="notes-count" hidden></span></header>
+              <form id="note-form">
+                <div class="field"><label for="note-title">Title</label><input id="note-title" maxlength="120" required autocomplete="off" aria-describedby="note-title-count" /><p class="field-help"><span id="note-title-count">0 / 120</span></p></div>
+                <div class="field"><label for="note-body">Text</label><textarea id="note-body" maxlength="40000" rows="6" required aria-describedby="note-body-count"></textarea><p class="field-help"><span id="note-body-count">0 / 40,000 characters</span></p></div>
+                <div class="field"><span class="field-label" id="note-file-label">Or import a text file</span>
+                  <label class="dropzone" id="note-drop" for="note-file"><input id="note-file" class="dz-input" type="file" accept=".txt,.md,text/plain,text/markdown" aria-describedby="note-file-help" /><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-upload"/></svg><span class="dz-main"><strong>Choose a file</strong> or drag it here</span><span class="dz-sub" id="note-file-help">.txt or .md, up to 160 KB</span></label>
+                  <p class="file-row" id="note-file-row" hidden></p>
+                </div>
+                <div class="form-actions"><button class="solid-btn" type="submit">Save note</button></div>
+              </form>
+              <ul id="notes-list" class="workspace-list item-list"></ul></div>
+            <div class="card form-card"><header class="card-head"><div><h2 class="card-title">Documents</h2><p class="hint">Private files, read in your browser session.</p></div><span class="count-badge" id="documents-count" hidden></span></header>
+              <form id="document-form" novalidate>
+                <div class="field"><span class="field-label" id="document-file-label">Private document</span>
+                  <label class="dropzone" id="document-drop" for="document-file"><input id="document-file" class="dz-input" type="file" accept=".txt,.md,.docx" aria-describedby="document-file-help" /><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-upload"/></svg><span class="dz-main"><strong>Choose a file</strong> or drag it here</span><span class="dz-sub" id="document-file-help">.txt, .md or .docx, up to 128 KB</span></label>
+                  <p class="file-row" id="document-file-row" hidden></p>
+                </div>
+                <div class="form-actions"><button class="solid-btn" type="submit" id="document-submit" disabled>Import document</button></div>
+              </form>
+              <ul id="documents-list" class="workspace-list item-list"></ul></div>
+          </div>
         </div>
       </section>
 
       <!-- Monitors -->
       <section class="view" id="view-monitors" aria-labelledby="investigations-title" tabindex="-1" hidden>
         <div class="view-inner">
-          <header class="view-head"><div><h1 id="investigations-title">Monitors</h1><p class="hint">Refresh a saved search or a monitored site. Private notes and earlier conversation context are not included. Schedules expire after 29 days.</p></div></header>
+          <header class="page-head"><span class="page-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-monitors"/></svg></span><div class="page-titles"><h1 id="investigations-title">Monitors</h1><p class="page-sub">Refresh a saved search or a monitored site. Private notes and earlier conversation context are not included. Schedules expire after 29 days.</p></div></header>
           <ul id="investigations-list" class="workspace-list card-list"></ul>
         </div>
       </section>
@@ -238,11 +310,13 @@
       <!-- Batches -->
       <section class="view" id="view-batches" aria-labelledby="batches-title" tabindex="-1" hidden>
         <div class="view-inner">
-          <header class="view-head"><div><h1 id="batches-title">Batches</h1><p class="hint">Queue 2–10 public HTTPS pages. Each page is captured in its own run and uses one run from your daily allowance.</p></div></header>
-          <div class="card form-card">
-            <form id="batch-form"><label for="batch-urls">Page URLs, one per line</label><textarea id="batch-urls" rows="4" placeholder="https://example.com/page-one&#10;https://example.com/page-two"></textarea>
-              <label for="batch-query">Question for each page (optional)</label><input id="batch-query" maxlength="2000" placeholder="Summarize and extract key facts" />
-              <button class="ghost-btn" type="submit">Queue batch</button></form><p id="batch-disabled" class="hint" hidden>Batch collection is not enabled on this deployment.</p></div>
+          <header class="page-head"><span class="page-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-batches"/></svg></span><div class="page-titles"><h1 id="batches-title">Batches</h1><p class="page-sub">Queue 2–10 public HTTPS pages. Each page is captured in its own run and uses one run from your daily allowance.</p></div></header>
+          <div class="card form-card"><header class="card-head"><div><h2 class="card-title">New batch</h2><p class="hint">One address per line.</p></div></header>
+            <form id="batch-form" novalidate>
+              <div class="field"><label for="batch-urls">Page URLs, one per line</label><textarea id="batch-urls" rows="4" placeholder="https://example.com/page-one&#10;https://example.com/page-two" aria-describedby="batch-help" autocapitalize="off" spellcheck="false"></textarea><p class="field-help" id="batch-help" role="status">0 URLs · 2–10 https:// pages</p></div>
+              <div class="field"><label for="batch-query">Question for each page (optional)</label><input id="batch-query" maxlength="2000" placeholder="Summarize and extract key facts" autocomplete="off" /></div>
+              <div class="form-actions"><button class="solid-btn" type="submit">Queue batch</button></div>
+            </form><p id="batch-disabled" class="hint" hidden>Batch collection is not enabled on this deployment.</p></div>
           <ul id="batches-list" class="workspace-list card-list"></ul>
         </div>
       </section>
@@ -263,18 +337,18 @@
   <dialog class="sheet" id="settings" aria-labelledby="settings-title">
     <form method="dialog" class="sheet-body" id="settings-form">
       <header><h2 id="settings-title">Settings</h2><button type="submit" class="icon-btn" value="cancel" aria-label="Close settings"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button></header>
-      <fieldset class="setting"><legend>Theme</legend>
-        <div class="segmented" id="theme-choice" role="radiogroup" aria-label="Theme">
-          <label><input type="radio" name="theme" value="system" checked /><span>System</span></label>
-          <label><input type="radio" name="theme" value="light" /><span>Light</span></label>
-          <label><input type="radio" name="theme" value="dark" /><span>Dark</span></label>
+      <div class="setting-card">
+        <div class="setting setting-row" role="group" aria-labelledby="theme-legend"><span class="setting-text" id="theme-legend"><strong>Theme</strong><small>Light is the default.</small></span>
+          <div class="segmented" id="theme-choice" role="radiogroup" aria-label="Theme">
+            <label><input type="radio" name="theme" value="system" checked /><span>System</span></label>
+            <label><input type="radio" name="theme" value="light" /><span>Light</span></label>
+            <label><input type="radio" name="theme" value="dark" /><span>Dark</span></label>
+          </div>
         </div>
-      </fieldset>
-      <label class="setting-check"><input type="checkbox" id="reduce-motion" /> Reduce motion</label>
-      <p class="hint">Follows your system setting unless you turn this on.</p>
-      <p>Your research is private to this browser session. Access expires after 30 days.</p>
-      <p>Where sign-in is available, you can add an email account in Account and data to keep your research across devices.</p>
-      <p>Manage saved notes, answers and investigations from the sidebar. With “Use my notes” on, selected excerpts are shared with the services that check and write your answer.</p>
+        <div class="setting-row"><label class="setting-check" for="reduce-motion"><span class="setting-text"><strong>Reduce motion</strong><small>Follows your system setting unless you turn this on.</small></span><input type="checkbox" id="reduce-motion" class="switch" /></label></div>
+      </div>
+      <div class="callout"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span>Your research is private to this browser session. Access expires after 30 days. Where sign-in is available, add an email account in Account and data to keep your research across devices.</span></div>
+      <p class="hint">Manage saved notes, answers and investigations from the sidebar. With “Use my notes” on, selected excerpts are shared with the services that check and write your answer.</p>
       <footer><button type="button" class="ghost-btn" id="settings-account">Account and data</button><button type="submit" class="solid-btn">Done</button></footer>
       <div class="toast-region" role="status" aria-live="polite"></div>
     </form>
@@ -285,7 +359,12 @@
     <form method="dialog" class="sheet-body thesis">
       <header><h2 id="thesis-title">Search the web. <em>See the reasoning.</em></h2><button type="submit" class="icon-btn" aria-label="Close about"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button></header>
       <p>A space for discovery.</p>
-      <p>Zearch searches the web and reads the pages it finds. Jev, Zearch’s evidence checker, picks the passages that matter and judges whether they can answer your question. A writing model then drafts short, cited paragraphs, and Jev checks each one against its sources before you see it.</p>
+      <ol class="fact-tiles">
+        <li><span class="tile-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></span><b>Search</b><span>Zearch searches the web and reads the pages it finds.</span></li>
+        <li><span class="tile-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-knowledge"/></svg></span><b>Select</b><span>Jev, the evidence checker, picks the passages that matter.</span></li>
+        <li><span class="tile-ico" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check"/></svg></span><b>Check</b><span>Each drafted paragraph is checked against its sources.</span></li>
+      </ol>
+      <p>Jev judges whether the passages can answer your question. A writing model then drafts short, cited paragraphs, and Jev checks each one against its sources before you see it.</p>
       <p>If a draft fails that check, Zearch shows the exact passage Jev selected instead. Open the original sources for context. A citation points to evidence; it does not guarantee the answer is right.</p>
       <div class="toast-region" role="status" aria-live="polite"></div>
     </form>
@@ -297,17 +376,17 @@
       <header><h2 id="workspace-title">Account and data</h2><button type="button" class="icon-btn" id="workspace-close" aria-label="Close account and data"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button></header>
       <p id="workspace-status" class="hint" role="status"></p>
       <p id="workspace-identity" class="hint">Private to this browser session. Sign-in is not available on this deployment.</p>
-      <section id="account-section" aria-labelledby="account-title" hidden><h3 id="account-title">Account</h3><p id="account-status" class="hint" role="status" aria-live="polite"></p>
-        <form id="account-email-form"><label for="account-email">Email</label><input id="account-email" type="email" autocomplete="email" required maxlength="254" />
-          <div class="form-actions"><button class="ghost-btn" type="submit">Send sign-in code</button><button class="link-btn" type="button" id="account-have-code">I already have a code</button></div></form>
-        <form id="account-code-form" hidden><p id="account-sent" class="hint"></p><label for="account-code">Eight-digit code</label><input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" required maxlength="8" />
+      <section id="account-section" class="setting-card pad" aria-labelledby="account-title" hidden><h3 id="account-title">Account</h3><p id="account-status" class="hint" role="status" aria-live="polite"></p>
+        <form id="account-email-form"><div class="field"><label for="account-email">Email</label><input id="account-email" type="email" autocomplete="email" required maxlength="254" /></div>
+          <div class="form-actions"><button class="solid-btn" type="submit">Send sign-in code</button><button class="link-btn" type="button" id="account-have-code">I already have a code</button></div></form>
+        <form id="account-code-form" hidden><p id="account-sent" class="hint"></p><div class="field"><label for="account-code">Eight-digit code</label><input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" required maxlength="8" /></div>
           <div class="form-actions"><button class="solid-btn" type="submit">Sign in</button><button class="link-btn" type="button" id="account-resend">Resend code</button><button class="link-btn" type="button" id="account-change">Use a different email</button></div></form>
         <div class="turn-actions"><button id="claim-workspace" class="ghost-btn" type="button" hidden>Move this browser’s research into account</button>
           <button id="account-signout" class="ghost-btn" type="button" hidden>Sign out</button>
-          <button id="account-delete" class="ghost-btn" type="button" hidden>Delete account</button></div>
+          <button id="account-delete" class="ghost-btn danger" type="button" hidden>Delete account</button></div>
       </section>
-      <section aria-labelledby="data-title"><h3 id="data-title">Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; today’s research allowance stays spent.</p>
-        <div class="turn-actions"><button class="ghost-btn" id="export-workspace" type="button">Download data</button><button class="ghost-btn" id="delete-workspace" type="button">Delete workspace</button></div>
+      <section class="setting-card pad" aria-labelledby="data-title"><h3 id="data-title">Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; today’s research allowance stays spent.</p>
+        <div class="turn-actions"><button class="ghost-btn" id="export-workspace" type="button"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span>Download data</span></button><button class="ghost-btn danger" id="delete-workspace" type="button"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg><span>Delete workspace</span></button></div>
       </section>
       <div class="toast-region" role="status" aria-live="polite"></div>
     </div>

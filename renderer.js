@@ -9,6 +9,8 @@
     const parts = cells(line);
     return parts.length === width && parts.every(c => SEPARATOR.test(c));
   };
+  const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
+  const indentOf = line => line.match(/^\s*/)[0].replace(/\t/g, '    ').length;
   function blocks(text) {
     const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
     const result = [];
@@ -21,6 +23,7 @@
         if (i < lines.length) i++;
         result.push({ type: 'code', language: line.slice(3).trim().replace(/[^a-zA-Z0-9+#.-]/g, '').slice(0, 24), text: content.join('\n') }); continue;
       }
+      if (RULE.test(line)) { result.push({ type: 'rule' }); i++; continue; }
       const heading = line.match(/^(#{1,4})\s+(.+)$/);
       if (heading) { result.push({ type: 'heading', level: heading[1].length, text: heading[2] }); i++; continue; }
       if (/^\s*>/.test(line)) {
@@ -30,21 +33,25 @@
       }
       const first = line.match(LIST_ITEM);
       if (first) {
-        const ordered = /^\s*\d/.test(line), items = [], start = ordered ? Number(line.match(/^\s*(\d+)/)[1]) : 1;
+        const ordered = /^\s*\d/.test(line), items = [], nested = [], base = indentOf(line), start = ordered ? Number(line.match(/^\s*(\d+)/)[1]) : 1;
         const kind = l => { const m = l.match(LIST_ITEM); return m ? (/^\s*\d/.test(l) ? 'ol' : 'ul') : null; };
+        let children = [];
+        const flush = () => { if (children.length) { const inner = blocks(children.join('\n')).filter(b => b.type === 'list'); if (inner.length) nested[items.length - 1] = inner; children = []; } };
         while (i < lines.length) {
           const current = lines[i], m = current.match(LIST_ITEM);
-          if (m && kind(current) === (ordered ? 'ol' : 'ul')) { items.push(m[2]); i++; continue; }
+          if (m && items.length && indentOf(current) >= base + 2) { children.push(current.slice(Math.min(base + 2, current.match(/^\s*/)[0].length))); i++; continue; }
+          if (m && kind(current) === (ordered ? 'ol' : 'ul') && !RULE.test(current)) { flush(); items.push(m[2]); i++; continue; }
           if (!current.trim()) {
             // A blank line does not end a list when the next non-blank line is another item of the same kind.
             let j = i; while (j < lines.length && !lines[j].trim()) j++;
-            if (j < lines.length && kind(lines[j]) === (ordered ? 'ol' : 'ul')) { i = j; continue; }
+            if (j < lines.length && (kind(lines[j]) === (ordered ? 'ol' : 'ul') || (kind(lines[j]) && indentOf(lines[j]) >= base + 2)) && !RULE.test(lines[j])) { i = j; continue; }
             break;
           }
-          if (/^\s{2,}\S/.test(current) && items.length) { items[items.length - 1] += '\n' + current.trim(); i++; continue; }
+          if (/^\s{2,}\S/.test(current) && items.length && !children.length) { items[items.length - 1] += '\n' + current.trim(); i++; continue; }
           break;
         }
-        result.push({ type: 'list', ordered, start, items }); continue;
+        flush();
+        result.push(nested.some(Boolean) ? { type: 'list', ordered, start, items, nested } : { type: 'list', ordered, start, items }); continue;
       }
       if (line.includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1], cells(line).length)) {
         const head = cells(line), rows = []; i += 2;
@@ -54,7 +61,7 @@
         continue;
       }
       const content = [line]; i++;
-      while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*>|\s*([-*]|\d+[.)])\s)/.test(lines[i])) {
+      while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*>|\s*([-*]|\d+[.)])\s)/.test(lines[i]) && !RULE.test(lines[i])) {
         if (lines[i].includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1], cells(lines[i]).length)) break;
         content.push(lines[i++]);
       }
@@ -85,10 +92,20 @@
     }
     return numbers;
   }
-  const INLINE = /(\[\d+(?:\s*[,–-]\s*\d+)*\]|\*\*[^*]+\*\*|`[^`]+`|(?<![*\w])\*[^*\s](?:[^*]*[^*\s])?\*(?!\*)|(?<![\w])_[^_\s](?:[^_]*[^_\s])?_(?![\w]))/g;
+  const INLINE = /(\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|``[^\n]+?``|\[\d+(?:\s*[,–-]\s*\d+)*\]|\*\*[^*]+\*\*|`[^`]+`|(?<![*\w])\*[^*\s](?:[^*]*[^*\s])?\*(?!\*)|(?<![\w])_[^_\s](?:[^_]*[^_\s])?_(?![\w]))/g;
   function inline(node, text, sources) {
     for (const part of text.split(INLINE)) {
       if (!part) continue;
+      const link = part.match(/^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/);
+      if (link) {
+        let url = null; try { url = new URL(link[2]); } catch {}
+        if (!url || !['https:', 'http:'].includes(url.protocol) || url.username || url.password) { node.append(document.createTextNode(part)); continue; }
+        const a = document.createElement('a'); a.className = 'text-link'; a.href = url.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer';
+        inline(a, link[1], []); node.append(a); continue;
+      }
+      if (part.length > 4 && part.startsWith('``') && part.endsWith('``')) {
+        const code = document.createElement('code'); code.textContent = part.slice(2, -2).trim(); node.append(code); continue;
+      }
       if (part.startsWith('[') && part.endsWith(']')) {
         const numbers = citationNumbers(part), found = numbers.map(n => sources.find(s => s.n === n));
         if (numbers.length && found.some(Boolean)) {
@@ -180,6 +197,16 @@
     return Boolean(block && block.type === 'paragraph' && market && typeof market.price === 'string' &&
       /last traded price/i.test(block.text) && block.text.includes(market.price));
   }
+  function makeList(block, sources) {
+    const list = document.createElement(block.ordered ? 'ol' : 'ul');
+    if (block.ordered && block.start !== 1) list.start = block.start;
+    block.items.forEach((text, index) => {
+      const li = document.createElement('li'); inline(li, text, sources);
+      for (const child of (block.nested && block.nested[index]) || []) li.append(makeList(child, sources));
+      list.append(li);
+    });
+    return list;
+  }
   function render(node, text, sources = [], complete = false) {
     node.replaceChildren(); let target = node, tableCount = 0, quote = null;
     if (complete) {
@@ -193,13 +220,16 @@
       if (block.type === 'heading') {
         if (complete && /^details\s*$/i.test(block.text)) {
           const details = document.createElement('details'), summary = document.createElement('summary');
-          details.className = 'answer-details'; summary.textContent = 'Explore the details'; details.append(summary); node.append(details); target = details; continue;
+          details.className = 'answer-details';
+          const title = document.createElement('span'), hint = document.createElement('span');
+          title.className = 'details-title'; title.textContent = 'Explore the details'; hint.className = 'details-hint'; hint.textContent = 'Supporting points and context';
+          summary.append(title, hint); details.append(summary); node.append(details); target = details; continue;
         }
         item = document.createElement('h' + Math.min(4, block.level + 1)); inline(item, block.text, sources);
       } else if (block.type === 'list') {
-        item = document.createElement(block.ordered ? 'ol' : 'ul');
-        if (block.ordered && block.start !== 1) item.start = block.start;
-        for (const text of block.items) { const li = document.createElement('li'); inline(li, text, sources); item.append(li); }
+        item = makeList(block, sources);
+      } else if (block.type === 'rule') {
+        item = document.createElement('hr');
       } else if (block.type === 'quote') {
         item = document.createElement('blockquote'); inline(item, block.text, sources);
       } else if (block.type === 'code') {
