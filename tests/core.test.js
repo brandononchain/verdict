@@ -12,6 +12,14 @@ assert.deepEqual(core.parseRoute('#main'), { type: 'other' });
 assert.deepEqual(core.parseRoute('#r/' + 'A'.repeat(32)), { type: 'other' });
 assert.deepEqual(core.parseRoute('#r/' + ID + '/extra'), { type: 'other' });
 assert.deepEqual(core.parseRoute('#r/short'), { type: 'other' });
+for (const view of ['library', 'knowledge', 'monitors', 'batches', 'overview']) {
+  assert.deepEqual(core.parseRoute('#' + view), { type: 'view', view });
+  assert.equal(core.viewHash(view), '#' + view);
+}
+assert.deepEqual(core.parseRoute('#library/x'), { type: 'other' });
+assert.deepEqual(core.parseRoute('#Library'), { type: 'other' });
+assert.deepEqual(core.parseRoute('library'), { type: 'other' });
+assert.equal(core.viewHash('main'), '');
 assert.equal(core.routeHash(ID), '#r/' + ID);
 assert.equal(core.routeHash('nope'), '');
 assert.equal(core.isRunId(ID), true);
@@ -86,3 +94,98 @@ assert.equal(core.hostOf('https://www.example.com/path'), 'example.com');
 assert.equal(core.hostOf('nope'), '');
 assert.equal(core.truncate('  a   b  ', 10), 'a b');
 assert.equal(core.truncate('abcdefghij', 5), 'abcd…');
+
+// ---- Display helpers ----
+assert.equal(core.formatPercent(0.824), '82%');
+assert.equal(core.formatPercent(null), '—');
+assert.equal(core.formatPercent(1.4), '100%');
+assert.equal(core.formatMs(420), '420 ms');
+assert.equal(core.formatMs(1234), '1.2 s');
+assert.equal(core.formatMs(14200), '14 s');
+assert.equal(core.formatMs(125000), '2 min 5 s');
+assert.equal(core.formatMs(null), '—');
+assert.equal(core.formatCost(0.0012), '$0.0012');
+assert.equal(core.formatCost(1.234), '$1.23');
+assert.equal(core.formatCost(0), '$0.00');
+assert.equal(core.formatCost(undefined), '—');
+const NOW = 1_800_000_000_000;
+assert.equal(core.relativeTime(NOW / 1000 - 10, NOW), 'just now');
+assert.equal(core.relativeTime(NOW / 1000 - 5 * 60, NOW), '5 min ago');
+assert.equal(core.relativeTime(NOW / 1000 - 3 * 3600, NOW), '3 hours ago');
+assert.equal(core.relativeTime(NOW / 1000 - 86400, NOW), 'yesterday');
+assert.equal(core.relativeTime(NOW / 1000 - 5 * 86400, NOW), '5 days ago');
+assert.equal(core.relativeTime(NOW - 3 * 3600 * 1000, NOW), '3 hours ago');   // milliseconds are accepted
+assert.equal(core.relativeTime('nonsense', NOW), '');
+assert.equal(core.modeLabel('deep'), 'Deep research');
+assert.equal(core.modeLabel('???'), 'Search');
+assert.deepEqual(['complete', 'pending', 'streaming', 'interrupted', 'error', 'redacted', 'x'].map(core.statusTone), ['ok', 'run', 'run', 'warn', 'bad', 'idle', 'idle']);
+assert.equal(core.statusLabel('streaming'), 'Running');
+
+// ---- Chart geometry ----
+assert.deepEqual(core.segments({ a: 2, b: 2, c: 0 }, ['a', 'b', 'c']).map(x => x.share), [0.5, 0.5, 0]);
+assert.deepEqual(core.segments({}, ['a']), []);
+assert.deepEqual(core.segments({ a: -3, b: 'x' }, ['a', 'b']), []);
+assert.equal(core.sparkPoints([1], 100, 20), '');
+assert.equal(core.sparkPoints([5, 5, 5], 100, 20, 0), '0.0,10.0 50.0,10.0 100.0,10.0');
+assert.equal(core.sparkPoints([0, 10], 100, 20, 0), '0.0,20.0 100.0,0.0');
+assert.deepEqual(core.barHeights([{ runs: 0 }, { runs: 4 }, { runs: 2 }]), [0, 1, 0.5]);
+assert.deepEqual(core.barHeights([{ runs: 0 }]), [0]);
+assert.deepEqual(core.barHeights(undefined), []);
+
+// ---- Insight sentences: deterministic and only from the stats given ----
+const stats = {
+  days: 30, totals: { runs: 12, complete: 9, interrupted: 1, error: 1, redacted: 1, running: 0 },
+  measured: { latency: 9, cost: 9, tiers: 9, gates: 8 }, verified_rate: 0.75, gates: { answer: 6, review: 1, abstain: 1 },
+  fallback_rate: 0.1111, latency_ms: { p50: 14200, p95: 31000 }, cost_usd: { total: 0.05, average: 0.0055 },
+  source_tiers: { primary: 10, web: 30, private: 0 }, by_mode: { standard: 4, deep: 6, compare: 0, scrape: 0, crawl: 0 }, daily: [], activity: []
+};
+const lines = core.insights(stats);
+assert.equal(lines.length, 3);
+assert.equal(lines[0], '75% of 8 checked answers had direct evidence that passed Jev\u2019s check.');
+assert.equal(lines[1], 'Median research time was 14 s, and 95% of runs finished within 31 s, across 9 timed runs.');
+assert.match(lines[2], /1 answer was withheld/);
+assert.deepEqual(core.insights(stats), lines);                       // deterministic
+assert.equal(core.insights(stats, 10).length, 7);
+assert.match(core.insights(stats, 10).join(' '), /Deep research was your most used mode: 6 of 10 runs/);
+assert.match(core.insights(stats, 10).join(' '), /25% of 40 cited sources/);
+assert.deepEqual(core.insights(null), []);
+assert.deepEqual(core.insights({ totals: { runs: 0 } }), []);
+// Nothing measured: no invented percentages or timings.
+const bare = { totals: { runs: 2, error: 0, interrupted: 0 }, measured: { latency: 0, cost: 0, tiers: 0, gates: 0 }, verified_rate: null, gates: {}, fallback_rate: null,
+  latency_ms: { p50: null, p95: null }, source_tiers: { primary: 0, web: 0, private: 0 }, by_mode: { standard: 2 } };
+assert.deepEqual(core.insights(bare), ['Search was your most used mode: 2 of 2 runs.']);
+assert.match(core.insights({ ...bare, totals: { runs: 3, error: 1, interrupted: 2 } }, 5).join(' '), /3 runs ended in an error or was interrupted/);
+
+// ---- Activity sorting ----
+const rows = [{ id: 1, query: 'b', total_ms: 30, sources: 2, created: 3 }, { id: 2, query: 'A', total_ms: null, sources: 5, created: 1 }, { id: 3, query: 'c', total_ms: 10, sources: 0, created: 2 }];
+assert.deepEqual(core.sortActivity(rows, 'total_ms', 'asc').map(r => r.id), [3, 1, 2]);
+assert.deepEqual(core.sortActivity(rows, 'total_ms', 'desc').map(r => r.id), [1, 3, 2]);   // missing values stay last
+assert.deepEqual(core.sortActivity(rows, 'query', 'asc').map(r => r.id), [2, 1, 3]);
+assert.deepEqual(core.sortActivity(rows, 'created', 'desc').map(r => r.id), [1, 3, 2]);
+assert.deepEqual(core.sortActivity(rows, 'nope', 'asc').map(r => r.id), [1, 2, 3]);
+assert.deepEqual(rows.map(r => r.id), [1, 2, 3]);                                          // input is not mutated
+
+// ---- Command palette matcher ----
+const items = [{ label: 'Library', keywords: 'saved answers history' }, { label: 'Deep research', keywords: 'mode' }, { label: 'Overview', keywords: 'analytics stats' },
+  { label: 'How do heat pumps work?', group: 'Library' }, { label: 'Compare' }];
+assert.deepEqual(core.paletteFilter(items, '').map(i => i.label), items.map(i => i.label));       // empty query keeps order
+assert.equal(core.paletteFilter(items, 'lib')[0].label, 'Library');
+assert.equal(core.paletteFilter(items, 'analytics')[0].label, 'Overview');                       // keyword match
+assert.deepEqual(core.paletteFilter(items, 'heat pump').map(i => i.label), ['How do heat pumps work?']);
+assert.equal(core.paletteFilter(items, 'dpr')[0].label, 'Deep research');                        // in-order letters
+assert.deepEqual(core.paletteFilter(items, 'zzz'), []);
+assert.equal(core.paletteFilter(items, '', 2).length, 2);
+assert.ok(core.paletteScore('Library', 'lib') > core.paletteScore('Public library', 'lib'));
+
+// ---- Theme preferences ----
+const fakeDoc = () => { const attrs = {}; return { attrs, documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; } } }; };
+const store = values => ({ getItem: key => (key in values ? values[key] : null) });
+let doc = fakeDoc();
+assert.deepEqual(core.applyPreferences(doc, store({})), { theme: 'system', motion: 'system' });
+assert.deepEqual(doc.attrs, {});
+doc = fakeDoc(); core.applyPreferences(doc, store({ 'zearch:theme': 'dark', 'zearch:motion': 'reduce' }));
+assert.deepEqual(doc.attrs, { 'data-theme': 'dark', 'data-motion': 'reduce' });
+doc = fakeDoc(); assert.equal(core.applyPreferences(doc, store({ 'zearch:theme': '<script>' })).theme, 'system');
+doc = fakeDoc(); assert.equal(core.applyPreferences(doc, { getItem: () => { throw new Error('blocked'); } }).theme, 'system');   // blocked storage
+assert.equal(core.normalizeTheme('light'), 'light');
+console.log('Core display, insight, sort and palette tests passed');
