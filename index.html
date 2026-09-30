@@ -3,97 +3,115 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
-  <meta name="theme-color" content="#212121" />
-  <meta name="description" content="Zearch — a TypeSafe AI search computer. Explore the web through clear answers and inspectable evidence." />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#212121" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f4f4f4" media="(prefers-color-scheme: light)" />
+  <meta name="description" content="Search the web and get short answers with cited sources you can inspect. A space for discovery." />
   <meta property="og:title" content="Zearch — search with evidence" />
-  <meta property="og:description" content="Evidence-led research. Jev judges, a writer explains, and Jev checks the answer." />
+  <meta property="og:description" content="A space for discovery. Short answers with the sources behind them." />
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Zearch" />
+  <meta property="og:image" content="./assets/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="The Zearch double-loop symbol and wordmark on a charcoal background." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Zearch — search with evidence" />
+  <meta name="twitter:description" content="A space for discovery. Short answers with the sources behind them." />
+  <meta name="twitter:image" content="./assets/og-image.png" />
   <title>Zearch — search with evidence</title>
   <link rel="icon" href="./favicon.svg?v=double-loop" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="preload" href="./assets/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./assets/zearch-horizon.jpg" as="image" fetchpriority="low" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#query" id="skip-link">Skip to question</a>
+  <noscript><p class="noscript">Zearch needs JavaScript to search and to show answers. Please turn it on and reload.</p></noscript>
   <div class="shell" id="shell">
-    <!-- ───────────── left rail ───────────── -->
-    <aside class="rail" id="rail" aria-label="Navigation">
+    <!-- left rail -->
+    <aside class="rail" id="rail" aria-label="Sidebar">
       <div class="rail-head">
-        <a class="brand" href="#" id="brand" aria-label="Zearch home">
-          <img class="brand-mark" src="./zearch-mark.svg?v=double-loop" alt="" aria-hidden="true" />
+        <a class="brand" href="./" id="brand" aria-label="Zearch home">
+          <svg class="brand-mark" viewBox="-4 -4 72 72" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"><path d="M32 12C17-1 3 5 3 22V43C3 60 17 65 32 52C48 38 48 26 32 12Z"/><path d="M32 12C17-1 3 5 3 22V43C3 60 17 65 32 52C48 38 48 26 32 12Z" transform="translate(64 0) scale(-1 1)"/></g></svg>
           <span>zearch</span>
         </a>
-        <button class="icon-btn rail-close" id="rail-close" aria-label="Close menu">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <button type="button" class="icon-btn rail-close" id="rail-close" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
 
-      <button class="new-btn" id="new-btn">
+      <button type="button" class="new-btn" id="new-btn">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span>New search</span>
-        <kbd>Ctrl K</kbd>
+        <kbd id="shortcut" aria-hidden="true">Ctrl K</kbd>
       </button>
 
-      <nav class="rail-section grow">
+      <nav class="rail-section grow" aria-labelledby="history-title">
         <div class="rail-row">
-          <h6>Your searches</h6>
-          <button class="link-btn" id="clear-history" title="Clear local history">clear</button>
+          <p class="rail-title" id="history-title">Your searches</p>
+          <button type="button" class="link-btn" id="clear-history" title="Hide these shortcuts. Saved research stays in Your workspace.">Clear</button>
         </div>
         <ul id="history" class="history"></ul>
       </nav>
 
       <div class="rail-foot">
-        <button class="rail-link" id="btn-workspace">Your workspace</button>
-        <button class="rail-link" id="btn-thesis">
+        <button type="button" class="rail-link" id="btn-workspace">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>Your workspace
+        </button>
+        <button type="button" class="rail-link" id="btn-thesis">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h7"/></svg>About Zearch
         </button>
-        <button class="rail-link" id="btn-settings">
+        <button type="button" class="rail-link" id="btn-settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings
         </button>
       </div>
     </aside>
     <div class="scrim" id="scrim"></div>
 
-    <!-- ───────────── stage ───────────── -->
-    <main class="stage">
+    <!-- stage -->
+    <main class="stage" id="main" tabindex="-1">
       <header class="stage-top">
-        <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">
-          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        <button type="button" class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu" aria-controls="rail" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
         </button>
-        <div class="crumbs" id="crumbs"><span>Zearch</span><em>/</em><b>New search</b></div>
-        <div class="top-actions">
-          <button class="ghost-btn hidden" id="share-btn">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M13 7l5 5-5 5"/></svg>Share
-          </button>
-        </div>
+        <div class="crumbs" id="crumbs"><span>Zearch</span><em aria-hidden="true">/</em><b id="crumb-title">New search</b></div>
+        <h1 class="sr-only" id="thread-title" hidden></h1>
       </header>
 
-      <section class="feed" id="feed">
+      <section class="feed" id="feed" aria-label="Conversation">
         <div class="empty" id="empty">
           <div class="welcome-copy">
             <h1>What would you like to know?</h1>
             <p class="lede">A space for discovery.</p>
           </div>
           <form class="composer home-composer" id="composer" autocomplete="off">
+            <div class="chip" id="followup" hidden>
+              <span id="followup-text">Continuing from previous answer</span>
+              <button type="button" id="followup-clear" aria-label="Start a new topic instead of continuing">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+              </button>
+            </div>
             <label class="sr-only" for="query">Question</label>
-            <textarea id="query" rows="1" maxlength="2000" placeholder="Ask a question or compare options…"></textarea>
+            <textarea id="query" rows="1" maxlength="2000" placeholder="Ask a question or compare options…" aria-describedby="mode-help"></textarea>
             <label class="sr-only" for="target-url">Public page URL</label>
             <input id="target-url" class="target-url" type="url" inputmode="url" maxlength="2048" placeholder="https://example.com/page" hidden />
             <div class="composer-row">
               <div class="composer-tools">
-                <span class="mode-select-wrap"><select id="depth" class="depth-select" aria-label="Research mode" title="Choose how Zearch gathers evidence"><option value="standard">Search</option><option value="deep">Deep research</option><option value="compare">Compare</option><option value="scrape">Scrape page</option><option value="crawl">Crawl site</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
+                <span class="mode-select-wrap"><select id="depth" class="depth-select" aria-label="Research mode"><option value="standard">Search</option><option value="deep">Deep research</option><option value="compare">Compare</option><option value="scrape">Scrape page</option><option value="crawl">Crawl site</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
                 <label class="knowledge-toggle"><input type="checkbox" id="use-knowledge" /> Use my notes</label>
-            </div>
+              </div>
               <button type="submit" class="decide" id="decide" aria-label="Search">
                 <span>Search</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
             </div>
+            <p class="composer-help"><span id="mode-help"></span><span id="allowance"></span><span id="char-count" hidden></span></p>
           </form>
           <p class="fineprint home-fineprint">Zearch can be wrong. Check important sources.</p>
-          <div class="starters" id="starters"></div>
+          <div class="starters" id="starters" role="group" aria-label="Example questions"></div>
         </div>
         <div class="thread" id="thread"></div>
       </section>
@@ -105,40 +123,44 @@
   </div>
 
   <!-- settings -->
-  <dialog class="sheet" id="settings">
+  <dialog class="sheet" id="settings" aria-labelledby="settings-title">
     <form method="dialog" class="sheet-body" id="settings-form">
-      <header><h2>Settings</h2><button class="icon-btn" value="cancel" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <p>Research is private to this browser’s session. Session access expires after 30 days. Signing in and syncing across devices are planned.</p>
-      <p>Manage stored notes, searches and investigations in Your workspace. Clearing local shortcuts does not delete saved research. With “Use my notes” on, selected excerpts are sent to Jev and the writing provider.</p>
-      <footer><button class="solid-btn">Done</button></footer>
+      <header><h2 id="settings-title">Settings</h2><button type="submit" class="icon-btn" value="cancel" aria-label="Close settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p>Your research is private to this browser session. Access expires after 30 days.</p>
+      <p>Where sign-in is available, you can add an email account in Your workspace to keep your research across devices.</p>
+      <p>Manage saved notes, searches and investigations in Your workspace. Hiding your recent searches does not delete saved research. With “Use my notes” on, selected excerpts are shared with the services that check and write your answer.</p>
+      <footer><button type="submit" class="solid-btn">Done</button></footer>
+      <div class="toast-region" role="status" aria-live="polite"></div>
     </form>
   </dialog>
 
   <!-- about -->
-  <dialog class="sheet" id="thesis">
+  <dialog class="sheet" id="thesis" aria-labelledby="thesis-title">
     <form method="dialog" class="sheet-body thesis">
-      <header><h2>Search the web. <em>See the reasoning.</em></h2><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <header><h2 id="thesis-title">Search the web. <em>See the reasoning.</em></h2><button type="submit" class="icon-btn" aria-label="Close about"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
       <p>A space for discovery.</p>
-      <p>Zearch searches the web. Jev selects relevant evidence and judges whether it can answer your question. A writing model composes short cited paragraphs; Jev checks them against the sources before you see them.</p>
-      <p>If a draft fails that check, Zearch shows the exact passage Jev selected. Open the original sources for context; a citation is a trail to evidence, not a guarantee.</p>
+      <p>Zearch searches the web and reads the pages it finds. Jev, Zearch’s evidence checker, picks the passages that matter and judges whether they can answer your question. A writing model then drafts short, cited paragraphs, and Jev checks each one against its sources before you see it.</p>
+      <p>If a draft fails that check, Zearch shows the exact passage Jev selected instead. Open the original sources for context. A citation points to evidence; it does not guarantee the answer is right.</p>
+      <div class="toast-region" role="status" aria-live="polite"></div>
     </form>
   </dialog>
 
-  <dialog class="sheet workspace-sheet" id="workspace">
+  <!-- workspace -->
+  <dialog class="sheet workspace-sheet" id="workspace" aria-labelledby="workspace-title">
     <div class="sheet-body">
-      <header><h2>Your workspace</h2><button class="icon-btn" id="workspace-close" aria-label="Close workspace">×</button></header>
-      <p id="workspace-status" role="status"></p>
-      <p id="workspace-identity" class="hint">Private to this browser session. Account sync is not configured yet.</p>
-      <section id="account-section" hidden><h3>Account</h3><p id="account-status" class="hint"></p>
+      <header><h2 id="workspace-title">Your workspace</h2><button type="button" class="icon-btn" id="workspace-close" aria-label="Close workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p id="workspace-status" class="hint" role="status"></p>
+      <p id="workspace-identity" class="hint">Private to this browser session. Sign-in is not available on this deployment.</p>
+      <section id="account-section" aria-labelledby="account-title" hidden><h3 id="account-title">Account</h3><p id="account-status" class="hint" role="status" aria-live="polite"></p>
         <form id="account-email-form"><label for="account-email">Email</label><input id="account-email" type="email" autocomplete="email" required maxlength="254" />
-          <button class="ghost-btn" type="submit">Send sign-in code</button></form>
-        <form id="account-code-form" hidden><label for="account-code">Eight-digit code</label><input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" required maxlength="8" />
-          <button class="solid-btn" type="submit">Sign in</button></form>
+          <div class="form-actions"><button class="ghost-btn" type="submit">Send sign-in code</button><button class="link-btn" type="button" id="account-have-code">I already have a code</button></div></form>
+        <form id="account-code-form" hidden><p id="account-sent" class="hint"></p><label for="account-code">Eight-digit code</label><input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" required maxlength="8" />
+          <div class="form-actions"><button class="solid-btn" type="submit">Sign in</button><button class="link-btn" type="button" id="account-resend">Resend code</button><button class="link-btn" type="button" id="account-change">Use a different email</button></div></form>
         <div class="turn-actions"><button id="claim-workspace" class="ghost-btn" type="button" hidden>Move this browser’s research into account</button>
           <button id="account-signout" class="ghost-btn" type="button" hidden>Sign out</button>
           <button id="account-delete" class="ghost-btn" type="button" hidden>Delete account</button></div>
       </section>
-      <section><h3>Knowledge</h3><p class="hint">Add notes and private .txt, .md or .docx documents. Relevant excerpts go to Jev and the writing provider only when “Use my notes” is on. Deleting knowledge redacts retained answers that used it.</p>
+      <section aria-labelledby="knowledge-title"><h3 id="knowledge-title">Knowledge</h3><p class="hint">Add notes and private .txt, .md or .docx documents. Relevant excerpts are shared with the services that check and write your answer only when “Use my notes” is on. Deleting knowledge redacts saved answers that used it.</p>
         <form id="note-form"><label for="note-title">Title</label><input id="note-title" maxlength="120" required />
           <label for="note-body">Text</label><textarea id="note-body" maxlength="40000" rows="5" required></textarea>
           <label for="note-file">Or import a text file</label><input id="note-file" type="file" accept=".txt,.md,text/plain,text/markdown" />
@@ -147,19 +169,24 @@
         <form id="document-form"><label for="document-file">Private document</label><input id="document-file" type="file" accept=".txt,.md,.docx" required />
           <button class="ghost-btn" type="submit">Import document</button></form><ul id="documents-list" class="workspace-list"></ul>
       </section>
-      <section><h3>Investigations</h3><p class="hint">Refresh the saved search or monitored site. Private notes and previous conversation context are not included. Schedules expire after 29 days.</p><ul id="investigations-list" class="workspace-list"></ul></section>
-      <section><h3>Collection batches</h3><p class="hint">Queue 2–10 public HTTPS pages. The Railway worker captures one page per run and each page uses your research allowance.</p>
+      <section aria-labelledby="investigations-title"><h3 id="investigations-title">Investigations</h3><p class="hint">Refresh a saved search or a monitored site. Private notes and earlier conversation context are not included. Schedules expire after 29 days.</p><ul id="investigations-list" class="workspace-list"></ul></section>
+      <section aria-labelledby="batches-title"><h3 id="batches-title">Collection batches</h3><p class="hint">Queue 2–10 public HTTPS pages. Each page is captured in its own run and uses one run from your daily allowance.</p>
         <form id="batch-form"><label for="batch-urls">Page URLs, one per line</label><textarea id="batch-urls" rows="4" placeholder="https://example.com/page-one&#10;https://example.com/page-two"></textarea>
           <label for="batch-query">Question for each page (optional)</label><input id="batch-query" maxlength="2000" placeholder="Summarize and extract key facts" />
-          <button class="ghost-btn" type="submit">Queue batch</button></form><p id="batch-disabled" class="hint" hidden>Batch processing becomes available when the Railway discovery worker is enabled.</p><ul id="batches-list" class="workspace-list"></ul></section>
-      <section><h3>Saved research</h3><p class="hint">Delete removes an answer from the server and redacts follow-ups derived from it.</p><ul id="research-list" class="workspace-list"></ul></section>
-      <section><h3>Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; research allowance remains spent for today.</p>
+          <button class="ghost-btn" type="submit">Queue batch</button></form><p id="batch-disabled" class="hint" hidden>Batch collection is not enabled on this deployment.</p><ul id="batches-list" class="workspace-list"></ul></section>
+      <section aria-labelledby="research-title"><h3 id="research-title">Saved research</h3><p class="hint">Deleting an answer removes it from the server and redacts follow-ups that came from it.</p><ul id="research-list" class="workspace-list"></ul></section>
+      <section aria-labelledby="data-title"><h3 id="data-title">Your data</h3><p class="hint">Download notes, investigations, answers and captured evidence. Deleting this workspace clears those records for the active identity; today’s research allowance stays spent.</p>
         <div class="turn-actions"><button class="ghost-btn" id="export-workspace" type="button">Download data</button><button class="ghost-btn" id="delete-workspace" type="button">Delete workspace</button></div>
       </section>
+      <div class="toast-region" role="status" aria-live="polite"></div>
     </div>
   </dialog>
-  <div class="toast" id="toast" role="status"></div>
+
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite"></div>
+  <div class="cite-pop" id="cite-pop" role="tooltip" hidden></div>
   <script src="./renderer.js"></script>
+  <script src="./zearch-core.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

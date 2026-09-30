@@ -1,8 +1,16 @@
 /* Deliberately small Markdown subset. All untrusted text uses text nodes. */
 (function (root) {
   'use strict';
+  const LIST_ITEM = /^\s*([-*]|\d+[.)])\s+(.*)$/;
+  const SEPARATOR = /^:?-+:?$/;
+  const cells = row => row.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(s => s.trim().replace(/\\\|/g, '|'));
+  const isSeparator = (line, width) => {
+    if (!line || !line.includes('|')) return false;
+    const parts = cells(line);
+    return parts.length === width && parts.every(c => SEPARATOR.test(c));
+  };
   function blocks(text) {
-    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
     const result = [];
     for (let i = 0; i < lines.length;) {
       const line = lines[i];
@@ -15,14 +23,30 @@
       }
       const heading = line.match(/^(#{1,4})\s+(.+)$/);
       if (heading) { result.push({ type: 'heading', level: heading[1].length, text: heading[2] }); i++; continue; }
-      if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
-        const ordered = /^\s*\d+\./.test(line), items = [];
-        const pattern = ordered ? /^\s*\d+\.\s+(.+)$/ : /^\s*[-*]\s+(.+)$/;
-        while (i < lines.length && pattern.test(lines[i])) items.push(lines[i++].replace(pattern, '$1'));
-        result.push({ type: 'list', ordered, items }); continue;
+      if (/^\s*>/.test(line)) {
+        const quote = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ''));
+        result.push({ type: 'quote', text: quote.join('\n') }); continue;
       }
-      const cells = row => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(s => s.trim());
-      if (line.includes('|') && i + 1 < lines.length && cells(lines[i + 1]).every(c => /^:?-{3,}:?$/.test(c))) {
+      const first = line.match(LIST_ITEM);
+      if (first) {
+        const ordered = /^\s*\d/.test(line), items = [], start = ordered ? Number(line.match(/^\s*(\d+)/)[1]) : 1;
+        const kind = l => { const m = l.match(LIST_ITEM); return m ? (/^\s*\d/.test(l) ? 'ol' : 'ul') : null; };
+        while (i < lines.length) {
+          const current = lines[i], m = current.match(LIST_ITEM);
+          if (m && kind(current) === (ordered ? 'ol' : 'ul')) { items.push(m[2]); i++; continue; }
+          if (!current.trim()) {
+            // A blank line does not end a list when the next non-blank line is another item of the same kind.
+            let j = i; while (j < lines.length && !lines[j].trim()) j++;
+            if (j < lines.length && kind(lines[j]) === (ordered ? 'ol' : 'ul')) { i = j; continue; }
+            break;
+          }
+          if (/^\s{2,}\S/.test(current) && items.length) { items[items.length - 1] += '\n' + current.trim(); i++; continue; }
+          break;
+        }
+        result.push({ type: 'list', ordered, start, items }); continue;
+      }
+      if (line.includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1], cells(line).length)) {
         const head = cells(line), rows = []; i += 2;
         while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(cells(lines[i++]));
         if (head.length <= 8 && rows.length <= 30 && rows.every(r => r.length === head.length)) result.push({ type: 'table', head, rows });
@@ -30,8 +54,8 @@
         continue;
       }
       const content = [line]; i++;
-      while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
-        if (lines[i].includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{3}/.test(lines[i + 1])) break;
+      while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*>|\s*([-*]|\d+[.)])\s)/.test(lines[i])) {
+        if (lines[i].includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1], cells(lines[i]).length)) break;
         content.push(lines[i++]);
       }
       result.push({ type: 'paragraph', text: content.join('\n') });
@@ -40,23 +64,51 @@
   }
   function sourceLink(source, text) {
     let url;
-    try { url = new URL(source.url); } catch { return document.createTextNode(text); }
+    try { url = new URL(source && source.url); } catch { return document.createTextNode(text); }
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return document.createTextNode(text);
     const a = document.createElement('a'); a.className = 'citation'; a.textContent = text;
-    a.href = url.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = source.title;
+    a.href = url.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.referrerPolicy = 'no-referrer';
+    if (source.title) a.title = source.title;
     return a;
   }
+  /* "[1]", "[1, 2]" and "[1-3]" all become one button per source number. */
+  function citationNumbers(marker) {
+    const numbers = [];
+    for (const part of marker.slice(1, -1).split(',')) {
+      const range = part.trim().match(/^(\d+)\s*[–-]\s*(\d+)$/);
+      if (range) {
+        const from = Number(range[1]), to = Number(range[2]);
+        if (to >= from && to - from < 20) for (let n = from; n <= to; n++) numbers.push(n);
+        else return [];
+      } else if (/^\d+$/.test(part.trim())) numbers.push(Number(part.trim()));
+      else return [];
+    }
+    return numbers;
+  }
+  const INLINE = /(\[\d+(?:\s*[,–-]\s*\d+)*\]|\*\*[^*]+\*\*|`[^`]+`|(?<![*\w])\*[^*\s](?:[^*]*[^*\s])?\*(?!\*)|(?<![\w])_[^_\s](?:[^_]*[^_\s])?_(?![\w]))/g;
   function inline(node, text, sources) {
-    for (const part of text.split(/(\[\d+\]|\*\*[^*]+\*\*|`[^`]+`)/g)) {
-      const marker = part.match(/^\[(\d+)\]$/), source = marker && sources.find(s => s.n === Number(marker[1]));
-      if (source) {
-        const citation = document.createElement('button'); citation.type = 'button'; citation.className = 'citation citation-button';
-        citation.textContent = part; citation.title = 'Open captured evidence';
-        citation.setAttribute('data-citation-id', String(source.n)); node.append(citation);
-      } else if (/^\*\*.+\*\*$/.test(part)) {
-        const strong = document.createElement('strong'); strong.textContent = part.slice(2, -2); node.append(strong);
+    for (const part of text.split(INLINE)) {
+      if (!part) continue;
+      if (part.startsWith('[') && part.endsWith(']')) {
+        const numbers = citationNumbers(part), found = numbers.map(n => sources.find(s => s.n === n));
+        if (numbers.length && found.some(Boolean)) {
+          numbers.forEach((n, index) => {
+            const source = found[index];
+            if (!source) { node.append(document.createTextNode(`[${n}]`)); return; }
+            const citation = document.createElement('button'); citation.type = 'button'; citation.className = 'citation citation-button';
+            citation.textContent = `[${n}]`; citation.title = 'Show source ' + n;
+            citation.setAttribute('aria-label', `Source ${n}${source.title ? ': ' + source.title : ''}`);
+            citation.setAttribute('data-citation-id', String(n)); node.append(citation);
+          });
+          continue;
+        }
+      }
+      if (/^\*\*.+\*\*$/.test(part)) {
+        const strong = document.createElement('strong'); inline(strong, part.slice(2, -2), sources); node.append(strong);
       } else if (/^`.+`$/.test(part)) {
         const code = document.createElement('code'); code.textContent = part.slice(1, -1); node.append(code);
+      } else if (/^\*[^*].*\*$/.test(part) || /^_[^_].*_$/.test(part)) {
+        const em = document.createElement('em'); inline(em, part.slice(1, -1), sources); node.append(em);
       } else node.append(document.createTextNode(part));
     }
   }
@@ -64,7 +116,7 @@
     if (block.head.length !== 2 || block.rows.length < 2 || block.rows.length > 20) return null;
     const allowed = new Set(sources.map(s => s.n));
     const rows = block.rows.map(row => {
-      const match = row[1].match(/^([+-]?(?:\d+(?:,\d{3})*|\d+)(?:\.\d+)?)\s*(%|[a-zA-Z]{0,6})?\s*\[(\d+)\]$/);
+      const match = typeof row[1] === 'string' && row[1].match(/^([+-]?(?:\d+(?:,\d{3})*|\d+)(?:\.\d+)?)\s*(%|[a-zA-Z]{0,6})?\s*\[(\d+)\]$/);
       if (!match || !allowed.has(Number(match[3])) || row[0].length > 80) return null;
       const value = Number(match[1].replaceAll(',', ''));
       if (!Number.isFinite(value) || value < 0 || value > 1e12) return null;
@@ -123,18 +175,20 @@
     foot.append(sourceLink(source, 'Open price source')); card.append(foot);
     return card;
   }
+  /* The server-rendered quote card replaces the model's own restatement of the same quote. */
+  function isQuoteParagraph(block, market) {
+    return Boolean(block && block.type === 'paragraph' && market && typeof market.price === 'string' &&
+      /last traded price/i.test(block.text) && block.text.includes(market.price));
+  }
   function render(node, text, sources = [], complete = false) {
-    node.replaceChildren(); let target = node;
-    let skipQuoteParagraph = false;
+    node.replaceChildren(); let target = node, tableCount = 0, quote = null;
     if (complete) {
       const market = sources.find(s => s.content_type === 'market_ticker');
-      if (market) { const card = marketCard(market); if (card) {
-        node.append(card);
-        skipQuoteParagraph = /^.{1,80}last traded price on Coinbase Exchange was \*\*\$/.test(text);
-      } else { const visual = marketChart(market); if (visual) node.append(visual); } }
+      if (market) { const card = marketCard(market); if (card) { node.append(card); quote = market.market; }
+        else { const visual = marketChart(market); if (visual) node.append(visual); } }
     }
     for (const [index, block] of blocks(text).entries()) {
-      if (index === 0 && skipQuoteParagraph && block.type === 'paragraph') continue;
+      if (index === 0 && quote && isQuoteParagraph(block, quote)) continue;
       let item;
       if (block.type === 'heading') {
         if (complete && /^details\s*$/i.test(block.text)) {
@@ -144,14 +198,19 @@
         item = document.createElement('h' + Math.min(4, block.level + 1)); inline(item, block.text, sources);
       } else if (block.type === 'list') {
         item = document.createElement(block.ordered ? 'ol' : 'ul');
+        if (block.ordered && block.start !== 1) item.start = block.start;
         for (const text of block.items) { const li = document.createElement('li'); inline(li, text, sources); item.append(li); }
+      } else if (block.type === 'quote') {
+        item = document.createElement('blockquote'); inline(item, block.text, sources);
       } else if (block.type === 'code') {
         item = document.createElement('div'); item.className = 'answer-code';
         const label = document.createElement('span'); label.className = 'answer-code-language'; label.textContent = block.language || 'Code';
         const pre = document.createElement('pre'), code = document.createElement('code');
         code.textContent = block.text; pre.append(code); item.append(label, pre);
       } else if (block.type === 'table') {
-        item = document.createElement('div'); item.className = 'answer-table'; item.tabIndex = 0; item.setAttribute('role', 'region'); item.setAttribute('aria-label', 'Comparison table');
+        tableCount++;
+        item = document.createElement('div'); item.className = 'answer-table'; item.tabIndex = 0; item.setAttribute('role', 'region');
+        item.setAttribute('aria-label', `Table ${tableCount}: ${block.head.join(', ').slice(0, 80)}`);
         const table = document.createElement('table'), head = document.createElement('thead'), body = document.createElement('tbody');
         const tr = document.createElement('tr'); for (const text of block.head) { const th = document.createElement('th'); th.scope = 'col'; inline(th, text, sources); tr.append(th); } head.append(tr);
         for (const row of block.rows) { const tr = document.createElement('tr'); for (const text of row) { const td = document.createElement('td'); inline(td, text, sources); tr.append(td); } body.append(tr); }
@@ -160,19 +219,23 @@
           const data = chartData(block, sources);
           if (data) {
             const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'chart-toggle'; toggle.textContent = 'View chart';
+            toggle.setAttribute('aria-pressed', 'false');
             const chart = document.createElement('div'); chart.className = 'answer-chart'; chart.hidden = true;
-            chart.setAttribute('role', 'img'); chart.setAttribute('aria-label', `${block.head[1]} by ${block.head[0]}`);
+            chart.setAttribute('role', 'group'); chart.setAttribute('aria-label', `${block.head[1]} by ${block.head[0]}`);
             const maximum = Math.max(...data.map(row => row.value), 1);
             for (const row of data) {
               const bar = document.createElement('div'); bar.className = 'chart-row';
               const name = document.createElement('span'); name.textContent = row.label;
-              const track = document.createElement('div'); track.className = 'chart-track';
+              const track = document.createElement('div'); track.className = 'chart-track'; track.setAttribute('aria-hidden', 'true');
               const fill = document.createElement('div'); fill.className = 'chart-fill'; fill.style.width = `${row.value / maximum * 100}%`;
               track.append(fill);
               const value = document.createElement('span'); inline(value, row.display, sources);
               bar.append(name, track, value); chart.append(bar);
             }
-            toggle.onclick = () => { chart.hidden = !chart.hidden; table.hidden = !table.hidden; toggle.textContent = chart.hidden ? 'View chart' : 'View table'; };
+            toggle.onclick = () => {
+              chart.hidden = !chart.hidden; table.hidden = !table.hidden;
+              toggle.setAttribute('aria-pressed', String(!chart.hidden));
+            };
             item.prepend(toggle); item.append(chart);
           }
         }

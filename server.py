@@ -15,7 +15,10 @@ ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "8765"))
 
 STATIC_ALLOWED = {"/", "/index.html", "/styles.css", "/app.js", "/renderer.js", "/favicon.svg",
-                  "/zearch-mark.svg", "/assets/zearch-horizon.jpg"}
+                  "/zearch-mark.svg", "/assets/zearch-horizon.jpg", "/zearch-core.js",
+                  "/manifest.webmanifest", "/assets/fonts/Geist-Variable.woff2",
+                  "/assets/fonts/GeistMono-Variable.woff2", "/assets/apple-touch-icon.png",
+                  "/assets/icon-192.png", "/assets/icon-512.png", "/assets/og-image.png"}
 
 
 class Handler(SimpleHTTPRequestHandler):
